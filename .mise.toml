@@ -1,0 +1,140 @@
+# Mise configuration for unison-flow
+# https://mise.jdx.dev/
+
+[tools]
+# Rust toolchain
+rust = "1.91"
+
+[env]
+# Rustのデフォルト設定
+CARGO_TERM_COLOR = "always"
+RUST_BACKTRACE = "1"
+CARGO_INCREMENTAL = "1"
+
+# ========================================
+# セットアップ・環境構築
+# ========================================
+
+[tasks.setup]
+description = "開発環境のセットアップ"
+run = [
+    "rustup component add rustfmt clippy",
+    "cargo update",
+    "cargo fetch",
+]
+
+# ========================================
+# フォーマット関連
+# ========================================
+
+[tasks.fmt]
+description = "コードフォーマットを適用"
+run = "cargo fmt --all"
+
+[tasks.fmt-check]
+alias = "fc"
+description = "フォーマットをチェック（変更なし）"
+run = "cargo fmt --all -- --check"
+
+# ========================================
+# リント・チェック
+# ========================================
+
+[tasks.clippy]
+alias = "clip"
+description = "Clippyでリント"
+run = "cargo clippy --all-targets --all-features -- -D warnings"
+
+# ========================================
+# テスト
+# ========================================
+
+[tasks.test]
+alias = "t"
+description = "テストを実行"
+run = "cargo test --all-features"
+
+[tasks.test-watch]
+alias = "tw"
+description = "watchモードでテスト"
+run = "cargo watch -x test"
+
+# ========================================
+# ビルド
+# ========================================
+
+[tasks.build]
+alias = "b"
+description = "ビルド"
+run = "cargo build --all-features"
+
+[tasks.build-release]
+alias = "br"
+description = "リリースビルド"
+run = "cargo build --release --all-features"
+
+# ========================================
+# CI/CD関連
+# ========================================
+
+[tasks.ci]
+description = "すべてのCIチェックを実行"
+depends = ["fmt-check", "clippy", "test", "build"]
+run = "echo '✅ すべてのチェックが完了しました'"
+
+[tasks.pre-pr]
+alias = "pr"
+description = "プルリク前のチェック"
+depends = ["fmt", "ci"]
+run = "echo '✨ プルリクエストの準備が完了しました'"
+
+[tasks.pre-commit]
+alias = "pc"
+description = "コミット前のチェック"
+depends = ["fmt", "clippy"]
+
+# ========================================
+# ドキュメント・監査
+# ========================================
+
+[tasks.doc]
+description = "ドキュメントを生成して開く"
+run = "cargo doc --all-features --no-deps --open"
+
+[tasks.audit]
+description = "セキュリティ監査"
+run = "cargo audit"
+
+[tasks.tree]
+description = "依存関係ツリーを表示"
+run = "cargo tree"
+
+[tasks.udeps]
+description = "未使用の依存関係をチェック"
+run = "cargo +nightly udeps --all-targets"
+
+# ========================================
+# クリーンアップ
+# ========================================
+
+[tasks.clean]
+description = "ビルドアーティファクトを削除"
+run = "cargo clean"
+
+# ========================================
+# 開発用
+# ========================================
+
+[tasks.dev]
+alias = "d"
+description = "開発モードで実行"
+run = "cargo run"
+
+[tasks.watch]
+alias = "w"
+description = "watchモードで実行"
+run = "cargo watch -x run"
+
+[tasks.bench]
+description = "ベンチマーク実行"
+run = "cargo bench"
