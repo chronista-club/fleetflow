@@ -16,7 +16,7 @@ repository = "https://github.com/chronista-club/unison-flow"
 
 [workspace.dependencies]
 # CLI
-clap = { version = "4.4", features = ["derive"] }
+clap = { version = "4.4", features = ["derive", "env"] }
 colored = "2.1"
 
 # TUI

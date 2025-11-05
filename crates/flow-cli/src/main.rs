@@ -17,13 +17,15 @@ enum Commands {
     /// ステージを起動
     Up {
         /// ステージ名を指定 (local, dev, stg, prd)
-        #[arg(short, long)]
+        /// 環境変数 FLOW_STAGE からも読み込み可能
+        #[arg(short, long, env = "FLOW_STAGE")]
         stage: Option<String>,
     },
     /// ステージを停止
     Down {
         /// ステージ名を指定 (local, dev, stg, prd)
-        #[arg(short, long)]
+        /// 環境変数 FLOW_STAGE からも読み込み可能
+        #[arg(short, long, env = "FLOW_STAGE")]
         stage: Option<String>,
     },
     /// 設定を検証
