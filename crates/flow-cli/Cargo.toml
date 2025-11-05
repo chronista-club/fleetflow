@@ -8,7 +8,7 @@ repository.workspace = true
 description = "CLI for Unison Flow"
 
 [[bin]]
-name = "unison"
+name = "flow"
 path = "src/main.rs"
 
 [dependencies]

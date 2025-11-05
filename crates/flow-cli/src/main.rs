@@ -5,7 +5,7 @@ use colored::Colorize;
 use std::path::PathBuf;
 
 #[derive(Parser)]
-#[command(name = "unison")]
+#[command(name = "flow")]
 #[command(about = "Docker Composeよりシンプル。KDLで書く、次世代の環境構築ツール。", long_about = None)]
 struct Cli {
     #[command(subcommand)]
@@ -77,7 +77,7 @@ async fn main() -> anyhow::Result<()> {
                     println!("  {}", config_path.display().to_string().cyan());
                     println!();
                     println!("{}", "次のコマンドで環境を起動できます:".bold());
-                    println!("  {} up", "unison".cyan());
+                    println!("  {} up", "flow".cyan());
 
                     return Ok(());
                 }
