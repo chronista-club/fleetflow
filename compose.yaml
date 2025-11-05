@@ -1,0 +1,31 @@
+name: flow
+
+networks:
+  default:
+    name: flow_default
+
+services:
+  surrealdb:
+    image: surrealdb/surrealdb:latest
+    command: start --user root --pass root --bind [::]:8000 rocksdb:///mydata/database.db
+    user: "0:0"
+    ports:
+      - "18000:8000"
+    volumes:
+      - surreal_data:/mydata
+    restart: unless-stopped
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "16333:6333"
+      - "16334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    restart: unless-stopped
+
+volumes:
+  surreal_data:
+    driver: local
+  qdrant_data:
+    driver: local

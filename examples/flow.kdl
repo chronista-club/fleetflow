@@ -1,0 +1,51 @@
+// Flowのサンプル設定ファイル
+// PostgreSQL + Redis + Webアプリケーション環境
+
+stage "local" {
+    service "postgres"
+    service "redis"
+    service "app"
+    variables {
+        APP_ENV "development"
+        DEBUG "true"
+    }
+}
+
+stage "production" {
+    service "postgres"
+    service "redis"
+    variables {
+        APP_ENV "production"
+        DEBUG "false"
+    }
+}
+
+service "postgres" {
+    version "16"
+    port 5432:5432
+    environment {
+        POSTGRES_USER "flowuser"
+        POSTGRES_PASSWORD "flowpass"
+        POSTGRES_DB "flowdb"
+    }
+    volume "./data/postgres:/var/lib/postgresql/data"
+}
+
+service "redis" {
+    version "7"
+    port 6379:6379
+    volume "./data/redis:/data"
+}
+
+service "app" {
+    image "myapp"
+    version "latest"
+    port 8080:8080
+    environment {
+        DATABASE_URL "postgresql://flowuser:flowpass@postgres:5432/flowdb"
+        REDIS_URL "redis://redis:6379"
+        APP_ENV "development"
+    }
+    depends_on "postgres"
+    depends_on "redis"
+}

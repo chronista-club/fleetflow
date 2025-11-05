@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -6,8 +5,14 @@ pub enum ConfigError {
     #[error("設定ディレクトリが見つかりません")]
     ConfigDirNotFound,
 
-    #[error("unison.kdl が見つかりません: {0}")]
-    UnisonFileNotFound(PathBuf),
+    #[error(
+        "設定ファイルが見つかりません。以下の場所を確認してください:\n\
+        - カレントディレクトリ: flow.kdl, flow.local.kdl, .flow.kdl, .flow.local.kdl\n\
+        - ./.flow/ ディレクトリ\n\
+        - ~/.config/flow/flow.kdl\n\
+        または FLOW_CONFIG_PATH 環境変数で直接指定できます"
+    )]
+    FlowFileNotFound,
 
     #[error("IO エラー: {0}")]
     Io(#[from] std::io::Error),

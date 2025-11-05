@@ -5,15 +5,17 @@ use std::path::PathBuf;
 /// Flow設定のルート
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FlowConfig {
-    pub environments: HashMap<String, Environment>,
+    pub stages: HashMap<String, Stage>,
     pub services: HashMap<String, Service>,
 }
 
-/// 環境定義
+/// ステージ定義
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct Environment {
+pub struct Stage {
+    /// このステージで起動するサービスのリスト
     #[serde(default)]
     pub services: Vec<String>,
+    /// ステージ固有の環境変数
     #[serde(default)]
     pub variables: HashMap<String, String>,
 }
@@ -23,6 +25,7 @@ pub struct Environment {
 pub struct Service {
     pub image: Option<String>,
     pub version: Option<String>,
+    pub command: Option<String>,
     #[serde(default)]
     pub ports: Vec<Port>,
     #[serde(default)]
