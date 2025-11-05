@@ -1,17 +1,28 @@
 # Rust
-/target/
+/target
 Cargo.lock
+**/*.rs.bk
+*.pdb
 
 # IDE
 .idea/
 .vscode/
 *.swp
 *.swo
-
-# OS
+*~
 .DS_Store
-Thumbs.db
 
-# Config
+# Testing
+.coverage
+*.profraw
+
+# Documentation
+/doc
+
+# Local configuration
 .env
 .env.local
+
+# Build artifacts
+*.tar.gz
+*.zip

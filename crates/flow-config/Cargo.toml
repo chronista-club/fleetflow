@@ -1,0 +1,15 @@
+[package]
+name = "flow-config"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Configuration management for Unison Flow"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+dirs.workspace = true
+thiserror.workspace = true

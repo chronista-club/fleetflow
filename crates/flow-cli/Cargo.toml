@@ -1,0 +1,26 @@
+[package]
+name = "flow-cli"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "CLI for Unison Flow"
+
+[[bin]]
+name = "unison"
+path = "src/main.rs"
+
+[dependencies]
+# Workspace crates
+flow-atom = { path = "../flow-atom" }
+flow-container = { path = "../flow-container" }
+flow-config = { path = "../flow-config" }
+
+# External dependencies
+clap.workspace = true
+colored.workspace = true
+tokio.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true

@@ -1,75 +1,290 @@
-# unison-flow
+# Unison Flow
 
-Claude code/Linear統合を中心とした、モダンな開発ワークフロー管理ツール
-イシュー駆動開発をベースとし、シンプルで効率的なワークフローを実現します。
-
-## 特徴
-
-- **Linear First**: すべての作業はLinear issueから始まる
-- **自動化**: ブランチ作成からPRまで、繰り返し作業を自動化
-- **シンプル**: 必要最小限のコマンドで完結
-- **追跡可能**: すべての変更がissueに紐付けられる
+> Docker Composeよりシンプル。KDLで書く、次世代の環境構築ツール。
 
 ## コンセプト
 
-### Single Source of Truth
-- Linear Issue IDが全ての起点
-- ブランチ名、PR、コミットメッセージが自動的に整合
+**「宣言だけで、開発も本番も」**
 
-### Workflow as Code
-- 設定ファイルでチームのワークフローを定義
-- プロジェクトごとにカスタマイズ可能
+Unison Flowは、KDL（KDL Document Language）をベースにした、革新的で超シンプルなデプロイ・環境構築ツールです。
+Docker Composeの手軽さはそのままに、より少ない記述で、より強力な設定管理を実現します。
 
-### Developer Experience
-- 直感的なCLI
-- エラーメッセージが親切
-- 状態の可視化
+### なぜUnison Flow？
 
-## インストール
+- **超シンプル**: Docker Composeと同等かそれ以下の記述量
+- **可読性**: YAMLよりも読みやすいKDL構文
+- **モジュール化**: include機能で設定を分割・再利用
+- **統一管理**: 開発環境から本番環境まで同じツールで
+
+## クイックスタート
+
+### インストール
 
 ```bash
 cargo install unison-flow
 ```
 
-## 基本的な使い方
+### 基本的な使い方
 
-```bash
-# 新しいタスクを開始
-unison-flow start UNI-123
+```kdl
+// unison.kdl
+environment "development" {
+  service "web" {
+    image "node:20-alpine"
+    port 3000
+    env {
+      NODE_ENV "development"
+    }
+  }
 
-# 現在の状態を確認
-unison-flow status
-
-# PRを作成
-unison-flow pr
-
-# タスクを完了
-unison-flow finish
+  service "db" {
+    image "postgres:16"
+    port 5432
+    volume "./data:/var/lib/postgresql/data"
+  }
+}
 ```
 
-## アーキテクチャ
+```bash
+# 環境を起動
+unison up
 
-unison-flowは以下のコンポーネントで構成されています：
+# 環境を停止
+unison down
 
-1. **CLI**: ユーザーインターフェース
-2. **Linear Client**: Linear APIとの通信
-3. **Git Manager**: Git操作の抽象化
-4. **Config Manager**: 設定とカスタマイズ
-5. **State Machine**: ワークフローの状態管理
+# 設定を検証
+unison validate
+```
 
-## 開発
+## 特徴
+
+### 1. KDLベースの直感的な記述
+
+YAMLの冗長さから解放され、読みやすく書きやすい設定ファイルを実現。
+
+```kdl
+service "api" {
+  image "myapp:latest"
+  port 8080
+  env {
+    DATABASE_URL "postgresql://localhost/mydb"
+    REDIS_URL "redis://localhost:6379"
+  }
+}
+```
+
+### 2. 強力なinclude機能
+
+設定を分割して管理。共通設定を再利用できます。
+
+```kdl
+// unison.kdl
+include "common/database.kdl"
+include "common/redis.kdl"
+include "services/api.kdl"
+include "services/worker.kdl"
+
+environment "development" {
+  // includeした設定が自動的に利用される
+}
+```
+
+プロジェクト構造例：
+
+```
+project/
+├── unison.kdl              # メイン設定
+├── common/
+│   ├── database.kdl       # DB共通設定
+│   └── redis.kdl          # Redis共通設定
+├── environments/
+│   ├── dev.kdl            # 開発環境
+│   ├── staging.kdl        # ステージング
+│   └── prod.kdl           # 本番環境
+└── services/
+    ├── api.kdl
+    ├── worker.kdl
+    └── frontend.kdl
+```
+
+### 3. 環境間の継承
+
+開発環境と本番環境の差分だけを記述。
+
+```kdl
+environment "development" {
+  service "api" {
+    image "node:20-alpine"
+    port 3000
+    env {
+      NODE_ENV "development"
+    }
+  }
+}
+
+environment "production" {
+  include-from "development"
+
+  service "api" {
+    replicas 3  // 本番環境では3台に
+    env {
+      NODE_ENV "production"
+    }
+  }
+}
+```
+
+### 4. 変数とテンプレート
+
+繰り返しを減らし、保守性を向上。
+
+```kdl
+vars {
+  app-version "1.0.0"
+  registry "ghcr.io/myorg"
+  node-image "node:20-alpine"
+}
+
+service "api" {
+  image "{registry}/api:{app-version}"
+  base-image "{node-image}"
+}
+```
+
+## 拡張機能
+
+### include
+
+ファイル全体をインクルード。
+
+```kdl
+include "path/to/config.kdl"
+include "services/*.kdl"  // グロブパターン対応（予定）
+```
+
+### 環境変数参照
+
+```kdl
+service "api" {
+  env {
+    DATABASE_URL from-env "DATABASE_URL"
+    API_KEY from-secret "api-key"
+  }
+}
+```
+
+### 条件分岐（予定）
+
+```kdl
+service "api" {
+  if env "production" {
+    replicas 3
+  } else {
+    replicas 1
+  }
+}
+```
+
+## コマンド
 
 ```bash
-# 開発環境のセットアップ
+# 環境を起動
+unison up [-e <environment>]
+
+# 環境を停止
+unison down [-e <environment>]
+
+# 環境を再起動
+unison restart [-e <environment>]
+
+# 設定を検証
+unison validate
+
+# 環境間の差分を表示
+unison diff <env1> <env2>
+
+# 設定をDocker Composeに変換
+unison export docker-compose
+
+# ログを表示
+unison logs [service-name]
+
+# サービス一覧を表示
+unison ps
+```
+
+## ロードマップ
+
+### Phase 1: MVP (現在の目標)
+
+- [x] プロジェクト初期化
+- [ ] KDLパーサーの実装
+- [ ] 基本的なservice定義のパース
+- [ ] include機能の実装
+- [ ] Docker Compose形式への変換
+- [ ] 基本的なCLIコマンド（up/down/validate）
+
+### Phase 2: 拡張機能
+
+- [ ] 環境変数の参照
+- [ ] 変数定義と展開
+- [ ] 環境継承（include-from）
+- [ ] グロブパターンによるinclude
+- [ ] 設定の検証とエラーメッセージ改善
+
+### Phase 3: 独自実行エンジン
+
+- [ ] Docker API直接利用
+- [ ] パフォーマンス最適化
+- [ ] リアルタイムログストリーミング
+- [ ] ヘルスチェック機能
+
+### Phase 4: エコシステム拡張
+
+- [ ] Kubernetes manifestへの変換
+- [ ] Terraform/Pulumiとの統合
+- [ ] Web UI
+- [ ] プラグインシステム
+- [ ] CI/CDパイプライン統合
+
+## 技術スタック
+
+- **言語**: Rust
+- **パーサー**: `kdl` crate
+- **コンテナ**: Docker API / bollard
+- **CLI**: clap
+- **設定検証**: serde + custom validation
+
+## 開発に参加する
+
+Issue、Pull Requestは大歓迎です！
+
+### 開発環境のセットアップ
+
+```bash
+git clone https://github.com/yourusername/unison-flow.git
+cd unison-flow
 cargo build
-
-# テストの実行
 cargo test
+```
 
-# CLIの実行
-cargo run -- <command>
+### テスト
+
+```bash
+cargo test
+cargo clippy
+cargo fmt
 ```
 
 ## ライセンス
 
-Proprietary - All Rights Reserved
+MIT
+
+## 関連リンク
+
+- [KDL - The KDL Document Language](https://kdl.dev/)
+- [kdl-rs](https://github.com/kdl-org/kdl-rs)
+
+---
+
+**Unison Flow** - シンプルに、統一的に、環境を構築する。
