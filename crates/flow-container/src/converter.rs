@@ -1,7 +1,7 @@
 //! FlowConfig から Docker API パラメータへの変換
 
-use bollard::container::{Config, CreateContainerOptions, HostConfig};
-use bollard::models::{HostConfigPortBindings, PortBinding, PortMap};
+use bollard::container::{Config, CreateContainerOptions};
+use bollard::models::{HostConfig, PortBinding};
 use flow_atom::{FlowConfig, Service};
 use std::collections::HashMap;
 
@@ -58,7 +58,15 @@ pub fn service_to_container_config(
         .iter()
         .map(|v| {
             let mode = if v.read_only { "ro" } else { "rw" };
-            format!("{}:{}:{}", v.host.display(), v.container.display(), mode)
+            // 相対パスの場合は絶対パスに変換
+            let host_path = if v.host.is_relative() {
+                std::env::current_dir()
+                    .unwrap_or_else(|_| v.host.clone())
+                    .join(&v.host)
+            } else {
+                v.host.clone()
+            };
+            format!("{}:{}:{}", host_path.display(), v.container.display(), mode)
         })
         .collect();
 

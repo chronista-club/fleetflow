@@ -9,7 +9,9 @@ stage "local" {
 
 service "postgres" {
     version "16"
-    port 5432:5432
+    ports {
+        port host=11432 container=5432
+    }
     environment {
         POSTGRES_PASSWORD "postgres"
     }

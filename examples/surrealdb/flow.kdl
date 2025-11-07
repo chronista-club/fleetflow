@@ -11,9 +11,13 @@ stage "local" {
 service "surrealdb" {
     image "surrealdb/surrealdb"
     version "latest"
-    port 18000:8000
+    ports {
+        port host=11800 container=8000
+    }
     command "start --user root --pass root --bind [::]:8000 rocksdb://database.db"
-    volume "./.flow/surrealdb:/data"
+    volumes {
+        volume "./.flow/surrealdb" "/data"
+    }
     environment {
         SURREAL_PATH "/data/database.db"
     }
@@ -22,7 +26,11 @@ service "surrealdb" {
 service "qdrant" {
     image "qdrant/qdrant"
     version "latest"
-    port 16333:6333
-    port 16334:6334
-    volume "./.flow/qdrant:/qdrant/storage"
+    ports {
+        port host=11633 container=6333
+        port host=11634 container=6334
+    }
+    volumes {
+        volume "./.flow/qdrant" "/qdrant/storage"
+    }
 }

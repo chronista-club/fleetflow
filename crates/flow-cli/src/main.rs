@@ -92,15 +92,94 @@ async fn main() -> anyhow::Result<()> {
         Err(e) => return Err(e.into()),
     };
 
+    // 設定ファイルをパース
+    let config = flow_atom::parse_kdl_file(&config_path)?;
+
     // ここから既存のコマンド処理
     match cli.command {
         Commands::Up { stage } => {
             println!("{}", "ステージを起動中...".green());
             println!("設定ファイル: {}", config_path.display().to_string().cyan());
-            if let Some(stage_name) = stage {
-                println!("ステージ: {}", stage_name.cyan());
+
+            // ステージ名の決定
+            let stage_name = stage.ok_or_else(|| {
+                anyhow::anyhow!(
+                    "ステージ名を指定してください: --stage=local または FLOW_STAGE=local"
+                )
+            })?;
+
+            println!("ステージ: {}", stage_name.cyan());
+
+            // ステージの取得
+            let stage_config = config
+                .stages
+                .get(&stage_name)
+                .ok_or_else(|| anyhow::anyhow!("ステージ '{}' が見つかりません", stage_name))?;
+
+            println!();
+            println!(
+                "{}",
+                format!("サービス一覧 ({} 個):", stage_config.services.len()).bold()
+            );
+            for service_name in &stage_config.services {
+                println!("  • {}", service_name.cyan());
             }
-            // TODO: 実装
+
+            // Docker接続
+            println!();
+            println!("{}", "Dockerに接続中...".blue());
+            let docker = bollard::Docker::connect_with_local_defaults()?;
+
+            // 各サービスを起動
+            for service_name in &stage_config.services {
+                let service = config.services.get(service_name).ok_or_else(|| {
+                    anyhow::anyhow!("サービス '{}' の定義が見つかりません", service_name)
+                })?;
+
+                println!();
+                println!(
+                    "{}",
+                    format!("▶ {} を起動中...", service_name).green().bold()
+                );
+
+                // サービスをコンテナ設定に変換
+                let (container_config, create_options) =
+                    flow_container::service_to_container_config(service_name, service);
+
+                // コンテナ作成
+                match docker
+                    .create_container(Some(create_options.clone()), container_config.clone())
+                    .await
+                {
+                    Ok(response) => {
+                        println!("  ✓ コンテナ作成: {}", response.id);
+
+                        // コンテナ起動
+                        docker.start_container::<String>(&response.id, None).await?;
+                        println!("  ✓ 起動完了");
+                    }
+                    Err(bollard::errors::Error::DockerResponseServerError {
+                        status_code: 409,
+                        ..
+                    }) => {
+                        // コンテナが既に存在する場合
+                        println!("  ℹ コンテナは既に存在します");
+                        let container_name = &create_options.name;
+
+                        // 既存コンテナを起動
+                        match docker.start_container::<String>(container_name, None).await {
+                            Ok(_) => println!("  ✓ 既存コンテナを起動"),
+                            Err(e) => println!("  ⚠ 起動エラー: {}", e),
+                        }
+                    }
+                    Err(e) => {
+                        return Err(anyhow::anyhow!("コンテナ作成エラー: {}", e));
+                    }
+                }
+            }
+
+            println!();
+            println!("{}", "✓ すべてのサービスが起動しました！".green().bold());
         }
         Commands::Down { stage } => {
             println!("{}", "ステージを停止中...".yellow());
