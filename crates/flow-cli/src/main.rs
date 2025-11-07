@@ -528,38 +528,91 @@ async fn main() -> anyhow::Result<()> {
             };
 
             println!();
-            for service_name in target_services {
-                let container_name = format!("flow-{}", service_name);
 
-                println!(
-                    "{}",
-                    format!("=== {} のログ ===", service_name).bold().cyan()
-                );
+            // 複数サービスの場合は色を割り当て
+            let colors = vec![
+                colored::Color::Cyan,
+                colored::Color::Green,
+                colored::Color::Yellow,
+                colored::Color::Magenta,
+                colored::Color::Blue,
+            ];
+
+            for (idx, service_name) in target_services.iter().enumerate() {
+                let container_name = format!("flow-{}", service_name);
+                let service_color = colors[idx % colors.len()];
+
+                if !follow {
+                    println!(
+                        "{}",
+                        format!("=== {} のログ ===", service_name)
+                            .bold()
+                            .color(service_color)
+                    );
+                }
 
                 let options = bollard::container::LogsOptions::<String> {
                     follow,
                     stdout: true,
                     stderr: true,
                     tail: lines.to_string(),
+                    timestamps: true,
                     ..Default::default()
                 };
 
+                use bollard::container::LogOutput;
                 use futures_util::stream::StreamExt;
+
                 let mut log_stream = docker.logs(&container_name, Some(options));
 
                 while let Some(log) = log_stream.next().await {
                     match log {
                         Ok(output) => {
-                            print!("{}", output);
+                            let prefix = format!("[{}]", service_name).color(service_color);
+
+                            match output {
+                                LogOutput::StdOut { message } => {
+                                    let msg = String::from_utf8_lossy(&message);
+                                    for line in msg.lines() {
+                                        if !line.is_empty() {
+                                            println!("{} {}", prefix, line);
+                                        }
+                                    }
+                                }
+                                LogOutput::StdErr { message } => {
+                                    let msg = String::from_utf8_lossy(&message);
+                                    for line in msg.lines() {
+                                        if !line.is_empty() {
+                                            println!("{} {} {}", prefix, "stderr:".red(), line);
+                                        }
+                                    }
+                                }
+                                LogOutput::Console { message } => {
+                                    let msg = String::from_utf8_lossy(&message);
+                                    for line in msg.lines() {
+                                        if !line.is_empty() {
+                                            println!("{} {}", prefix, line);
+                                        }
+                                    }
+                                }
+                                LogOutput::StdIn { .. } => {}
+                            }
                         }
                         Err(e) => {
-                            println!("  ⚠ ログ取得エラー: {}", e);
+                            eprintln!("  ⚠ ログ取得エラー ({}): {}", service_name, e);
                             break;
                         }
                     }
                 }
 
+                if !follow {
+                    println!();
+                }
+            }
+
+            if follow {
                 println!();
+                println!("{}", "Ctrl+C でログ追跡を終了".dimmed());
             }
         }
         Commands::Validate => {
