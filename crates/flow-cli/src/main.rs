@@ -170,12 +170,24 @@ async fn main() -> anyhow::Result<()> {
             println!("{}", "ステージを起動中...".green());
             println!("設定ファイル: {}", config_path.display().to_string().cyan());
 
-            // ステージ名の決定
-            let stage_name = stage.ok_or_else(|| {
-                anyhow::anyhow!(
-                    "ステージ名を指定してください: --stage=local または FLOW_STAGE=local"
-                )
-            })?;
+            // ステージ名の決定（デフォルトステージをサポート）
+            let stage_name = if let Some(s) = stage {
+                s
+            } else if config.stages.contains_key("default") {
+                "default".to_string()
+            } else if config.stages.len() == 1 {
+                config.stages.keys().next().unwrap().clone()
+            } else {
+                return Err(anyhow::anyhow!(
+                    "ステージ名を指定してください: --stage=<stage> または FLOW_STAGE=<stage>\n利用可能なステージ: {}",
+                    config
+                        .stages
+                        .keys()
+                        .map(|s| s.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ));
+            };
 
             println!("ステージ: {}", stage_name.cyan());
 
@@ -309,12 +321,24 @@ async fn main() -> anyhow::Result<()> {
             println!("{}", "ステージを停止中...".yellow());
             println!("設定ファイル: {}", config_path.display().to_string().cyan());
 
-            // ステージ名の決定
-            let stage_name = stage.ok_or_else(|| {
-                anyhow::anyhow!(
-                    "ステージ名を指定してください: --stage=local または FLOW_STAGE=local"
-                )
-            })?;
+            // ステージ名の決定（デフォルトステージをサポート）
+            let stage_name = if let Some(s) = stage {
+                s
+            } else if config.stages.contains_key("default") {
+                "default".to_string()
+            } else if config.stages.len() == 1 {
+                config.stages.keys().next().unwrap().clone()
+            } else {
+                return Err(anyhow::anyhow!(
+                    "ステージ名を指定してください: --stage=<stage> または FLOW_STAGE=<stage>\n利用可能なステージ: {}",
+                    config
+                        .stages
+                        .keys()
+                        .map(|s| s.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ));
+            };
 
             println!("ステージ: {}", stage_name.cyan());
 
