@@ -336,9 +336,11 @@ Stageは以下を統合的に管理します：
 
 ### ビジョン
 
-Unison Flowは、**設定ファイルを書く喜び**を提供します。
+FleetFlowは、**設定ファイルを書く喜び**を提供します。
 
 Docker Composeの手軽さを保ちつつ、KDLの美しさと可読性により、開発者が直感的に理解できる環境構築ツールを目指します。「設定より規約」の哲学により、最小限の記述で最大限の機能を実現します。
+
+**自動インポート機能**により、`include` 文すら不要。ファイルを配置するだけで設定が完了します。
 
 ### 哲学・設計原則
 
@@ -407,22 +409,102 @@ environment "production" {
 
 ### 他との違い
 
-| 観点             | Docker Compose | Unison Flow      |
-| ---------------- | -------------- | ---------------- |
-| **記述言語**     | YAML           | KDL              |
-| **可読性**       | 中             | 高               |
-| **規約**         | 少ない         | 多い（自動推測） |
-| **モジュール化** | 限定的         | include/変数展開 |
-| **学習曲線**     | 緩やか         | より緩やか       |
+| 観点             | Docker Compose | FleetFlow           |
+| ---------------- | -------------- | ------------------- |
+| **記述言語**     | YAML           | KDL                 |
+| **可読性**       | 中             | 高                  |
+| **規約**         | 少ない         | 多い（自動推測）    |
+| **モジュール化** | 限定的         | 自動インポート      |
+| **学習曲線**     | 緩やか         | より緩やか          |
+| **設定の分割**   | 手動include    | ディレクトリベース  |
 
 **独自性**:
 
 - KDLによる美しい構文
 - サービス名からのイメージ自動推測
-- 階層的なincludeシステム（計画中）
+- **規約ベースの自動インポート**（`include` 文不要）
+- ディレクトリベースのモジュール化
 - 変数展開とテンプレート（計画中）
 
 ## 仕様
+
+### 基本ルール
+
+#### BR-001: 名前空間の分離
+
+**原則**: Stage と Service は異なる名前空間に属する
+
+**詳細**:
+
+- Stageの名前とServiceの名前は独立して管理される
+- 同じ名前のStageとServiceが共存可能
+- この設計により、柔軟な命名が可能
+
+**例**:
+
+```kdl
+// ✅ 許可: 同じ名前 "api" を使用
+service "api" {
+    image "myapp:1.0.0"
+}
+
+stage "api" {  // API開発専用ステージ
+    service "api"
+    service "postgres"
+}
+
+// ✅ 許可: 異なる名前を使用
+service "backend" {
+    image "myapp:1.0.0"
+}
+
+stage "local" {
+    service "backend"
+}
+```
+
+**理由**:
+
+1. **異なる概念**: StageとServiceは異なる役割を持つ
+   - Stage: 実行環境の定義（どこで、何を起動するか）
+   - Service: コンテナの定義（何が、どう動くか）
+
+2. **実用性**: 開発者が自然に感じる命名を妨げない
+   - "api" という名前は、サービス名としてもステージ名としても一般的
+
+3. **拡張性**: 将来的に他の概念（network, volumeなど）を追加しても混乱しない
+
+#### BR-002: 一意性制約
+
+**原則**: 同じ名前空間内では、名前は一意である
+
+**詳細**:
+
+- 同じ名前のServiceを複数定義することはできない
+- 同じ名前のStageを複数定義することはできない
+- 異なる名前空間であれば、同じ名前を使用できる（BR-001参照）
+
+**例**:
+
+```kdl
+// ❌ エラー: 同じ名前のServiceを複数定義
+service "postgres" {
+    version "15"
+}
+
+service "postgres" {  // ← パースエラー
+    version "16"
+}
+
+// ❌ エラー: 同じ名前のStageを複数定義
+stage "local" {
+    service "api"
+}
+
+stage "local" {  // ← パースエラー
+    service "db"
+}
+```
 
 ### 機能仕様
 
@@ -457,15 +539,18 @@ service "api" {
 - サービス名は一意
 - 依存関係に循環参照は不可
 
-#### FS-002: Environment定義
+#### FS-002: Stage定義
 
-**目的**: 環境（dev/staging/prod等）ごとの設定を管理
+**目的**: ステージ（local/dev/stg/prd等）ごとの設定を管理
 
 **入力**:
 
 ```kdl
-environment "production" {
-    services "api" "worker" "db"
+stage "production" {
+    service "api"
+    service "worker"
+    service "db"
+    
     variables {
         DEBUG "false"
         LOG_LEVEL "info"
@@ -473,13 +558,20 @@ environment "production" {
 }
 ```
 
-**出力**: 内部の`Environment`構造体
+**出力**: 内部の`Stage`構造体
 
 **振る舞い**:
 
-1. 環境名を識別子として使用
-2. 使用するサービスのリストを管理
-3. 環境変数を定義
+1. ステージ名を識別子として使用
+2. このステージで起動するサービスのリストを管理
+3. ステージ固有の環境変数を定義
+4. サービス定義は別途グローバルに定義される
+
+**制約**:
+
+- ステージ名は一意である必要がある
+- 参照されるサービスは事前に定義されている必要がある
+- ステージ名とサービス名は異なる名前空間であり、同じ名前を使用できる
 
 #### FS-003: イメージ名の自動推測
 
@@ -488,14 +580,48 @@ environment "production" {
 **ロジック**:
 
 ```
-サービス名 + ":" + (version OR "latest")
+if image が指定されている:
+    → image をそのまま使用
+else:
+    → サービス名 + ":" + (version OR "latest")
 ```
+
+**優先順位**:
+
+1. **明示的な image 指定**: `image` フィールドが指定されている場合は、それを優先
+2. **自動推測**: `image` が未指定の場合、サービス名と `version` から推測
 
 **例**:
 
-- `service "postgres"` → `postgres:latest`
-- `service "postgres" { version "16" }` → `postgres:16`
-- `service "redis" { version "7-alpine" }` → `redis:7-alpine`
+```kdl
+// パターン1: 最小構成（自動推測）
+service "postgres" {}
+// → image: "postgres:latest"
+
+// パターン2: version指定（自動推測）
+service "postgres" {
+    version "16"
+}
+// → image: "postgres:16"
+
+// パターン3: 明示的なimage指定（自動推測なし）
+service "api" {
+    image "myorg/myapp:1.0.0"
+}
+// → image: "myorg/myapp:1.0.0"
+
+// パターン4: imageとversionの両方指定（imageを優先）
+service "api" {
+    image "myorg/myapp:1.0.0"
+    version "2.0.0"  // このversionは無視される
+}
+// → image: "myorg/myapp:1.0.0"
+```
+
+**注意事項**:
+
+- `image` と `version` の両方が指定されている場合、`image` が優先され、`version` は無視される
+- `version` フィールドは、`image` が未指定の場合のみ効果を持つ
 
 #### FS-004: Port定義
 
@@ -557,11 +683,12 @@ service "api" {
 }
 
 service "db" {
-    version "16"  // postgres:16
+    version "16"  // → image: "db:16" として推測される
 }
 
-environment "production" {
-    services "api" "db"
+stage "production" {
+    service "api"
+    service "db"
 }
 ```
 
@@ -590,6 +717,98 @@ service "api" {
     depends_on "db" "redis"
 }
 ```
+
+### 実用例: 名前空間の活用
+
+#### 例1: 同じ名前を使用するケース
+
+```kdl
+// サービス定義: "api" という名前のWebアプリケーション
+service "api" {
+    image "mycompany/api:1.0.0"
+    ports {
+        port 8080 3000
+    }
+    depends_on "postgres"
+}
+
+service "postgres" {
+    version "16"
+}
+
+// ステージ定義: "api" という名前のAPI開発専用環境
+stage "api" {
+    service "api"      // 上記のapiサービスを参照
+    service "postgres"
+    
+    variables {
+        DEBUG "true"
+        API_ENV "development"
+    }
+}
+
+// ステージ定義: "local" という名前のローカル開発環境
+stage "local" {
+    service "api"      // 同じapiサービスを参照
+    service "postgres"
+    
+    variables {
+        DEBUG "true"
+        API_ENV "local"
+    }
+}
+```
+
+**説明**:
+- `service "api"` と `stage "api"` は別の名前空間なので共存可能
+- `stage "api"` は「API開発専用」という意味で命名
+- 両方のステージが同じ `service "api"` を参照可能
+
+#### 例2: 複数サービスを持つステージ
+
+```kdl
+service "frontend" {
+    image "myapp/frontend:latest"
+    ports {
+        port 3000 80
+    }
+}
+
+service "backend" {
+    image "myapp/backend:latest"
+    ports {
+        port 8080 8080
+    }
+    depends_on "postgres" "redis"
+}
+
+service "postgres" {
+    version "16"
+}
+
+service "redis" {
+    version "7"
+}
+
+// フルスタック開発環境
+stage "fullstack" {
+    service "frontend"
+    service "backend"
+    service "postgres"
+    service "redis"
+}
+
+// バックエンド開発のみ
+stage "backend-only" {
+    service "backend"
+    service "postgres"
+    service "redis"
+}
+```
+
+**説明**:
+- 各サービスは一度だけ定義
+- ステージによって異なるサービスの組み合わせを起動
 
 ### 非機能仕様
 

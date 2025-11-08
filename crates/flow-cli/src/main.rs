@@ -617,8 +617,57 @@ async fn main() -> anyhow::Result<()> {
         }
         Commands::Validate => {
             println!("{}", "設定を検証中...".blue());
-            println!("設定ファイル: {}", config_path.display().to_string().cyan());
-            // TODO: 実装
+
+            // プロジェクトルートを検出
+            match flow_atom::find_project_root() {
+                Ok(project_root) => {
+                    println!(
+                        "プロジェクトルート: {}",
+                        project_root.display().to_string().cyan()
+                    );
+
+                    // デバッグモードでロード
+                    match flow_atom::load_project_with_debug(&project_root) {
+                        Ok(config) => {
+                            println!("{}", "✓ 設定ファイルは正常です！".green().bold());
+                            println!();
+                            println!("サマリー:");
+                            println!("  サービス: {}個", config.services.len());
+                            for (name, service) in &config.services {
+                                let image = service
+                                    .image
+                                    .as_ref()
+                                    .or(service.version.as_ref())
+                                    .map(|s| s.as_str())
+                                    .unwrap_or("(未設定)");
+                                println!("    - {} ({})", name.cyan(), image);
+                            }
+                            println!("  ステージ: {}個", config.stages.len());
+                            for (name, stage) in &config.stages {
+                                println!(
+                                    "    - {} ({}個のサービス)",
+                                    name.cyan(),
+                                    stage.services.len()
+                                );
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!();
+                            eprintln!("{}", "✗ 設定エラー".red().bold());
+                            eprintln!("  {}", e);
+                            std::process::exit(1);
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!();
+                    eprintln!("{}", "✗ プロジェクトルートが見つかりません".red().bold());
+                    eprintln!("  {}", e);
+                    eprintln!();
+                    eprintln!("flow.kdl が存在するディレクトリで実行してください");
+                    std::process::exit(1);
+                }
+            }
         }
         Commands::Version => {
             // すでに上で処理済み

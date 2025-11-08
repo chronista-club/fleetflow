@@ -12,7 +12,7 @@ version = "0.1.0"
 edition = "2024"
 authors = ["Mito <mito@chronista.club>"]
 license = "MIT"
-repository = "https://github.com/chronista-club/unison-flow"
+repository = "https://github.com/chronista-club/fleetflow"
 
 [workspace.dependencies]
 # CLI
@@ -34,6 +34,9 @@ serde_yaml = "0.9"
 
 # KDL parser
 kdl = "4.7"
+
+# Template engine
+tera = "1.19"
 
 # Error handling
 anyhow = "1.0"

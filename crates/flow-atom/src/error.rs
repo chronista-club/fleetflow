@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -8,8 +9,29 @@ pub enum FlowError {
     #[error("ファイル読み込みエラー: {0}")]
     Io(#[from] std::io::Error),
 
+    #[error("IO エラー: {path}\n理由: {message}")]
+    IoError { path: PathBuf, message: String },
+
     #[error("無効な設定: {0}")]
     InvalidConfig(String),
+
+    #[error("テンプレートエラー: {file}\n理由: {message}")]
+    TemplateError {
+        file: PathBuf,
+        line: Option<usize>,
+        message: String,
+    },
+
+    #[error("テンプレート展開エラー: {0}")]
+    TemplateRenderError(String),
+
+    #[error("ファイル発見エラー: {path}\n理由: {message}")]
+    DiscoveryError { path: PathBuf, message: String },
+
+    #[error(
+        "プロジェクトルートが見つかりません\n探索開始位置: {0}\nヒント: flow.kdl ファイルを含むディレクトリで実行してください"
+    )]
+    ProjectRootNotFound(PathBuf),
 
     #[error("サービスが見つかりません: {0}")]
     ServiceNotFound(String),

@@ -4,11 +4,11 @@ pub use error::*;
 
 use std::path::PathBuf;
 
-/// Unison Flowの設定ファイルパスを取得
+/// FleetFlowの設定ファイルパスを取得
 pub fn get_config_dir() -> Result<PathBuf> {
     let config_dir = dirs::config_dir()
         .ok_or(ConfigError::ConfigDirNotFound)?
-        .join("unison-flow");
+        .join("fleetflow");
 
     if !config_dir.exists() {
         std::fs::create_dir_all(&config_dir)?;

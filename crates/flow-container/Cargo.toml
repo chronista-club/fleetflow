@@ -5,7 +5,7 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Container runtime integration for Unison Flow"
+description = "Container runtime integration for FleetFlow"
 
 [dependencies]
 flow-atom = { path = "../flow-atom" }
