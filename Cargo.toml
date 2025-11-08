@@ -56,6 +56,9 @@ tracing-subscriber = "0.3"
 # Utils
 chrono = "0.4"
 
+# Testing
+tempfile = "3.8"
+
 [profile.release]
 opt-level = 3
 lto = true
