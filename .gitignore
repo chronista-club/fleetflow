@@ -21,9 +21,8 @@ Cargo.lock
 
 # Local configuration
 .env
-.env.local
-flow.local.kdl
-.flow.local.kdl
+*.local.*
+.*.local.*
 
 # Build artifacts
 *.tar.gz
