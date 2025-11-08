@@ -1,0 +1,37 @@
+// Hello World Example
+// 2種類のコンテナパターンをテスト
+
+// 一度実行して終了するコンテナ（ワンショット）
+service "hello-oneshot" {
+    image "alpine"
+    version "latest"
+    command "echo 'Hello World from FleetFlow!'"
+}
+
+// 継続して起動するコンテナ（常駐サービス）
+service "hello-nginx" {
+    image "nginx"
+    version "alpine"
+    ports {
+        port 8080 80
+    }
+    volumes {
+        volume "." "/usr/share/nginx/html" read_only=true
+    }
+}
+
+// ワンショット実行のみ
+stage "oneshot" {
+    service "hello-oneshot"
+}
+
+// Nginx起動のみ
+stage "nginx" {
+    service "hello-nginx"
+}
+
+// 両方同時実行（デフォルト）
+stage "default" {
+    service "hello-oneshot"
+    service "hello-nginx"
+}
