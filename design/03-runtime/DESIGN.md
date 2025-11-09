@@ -2,7 +2,7 @@
 
 ## 基本方針
 
-unison-flowは**コンテナランタイム + Image**を基本とした抽象化レイヤーを提供します。
+FleetFlowは**コンテナランタイム + Image**を基本とした抽象化レイヤーを提供します。
 
 ## 環境ごとのランタイム
 
@@ -56,7 +56,7 @@ flow up --stage=prd    # 本番環境
 
 ### Flow → Container Image
 
-unison-flowは環境に関わらず**コンテナイメージ**を基本単位として扱います：
+FleetFlowは環境に関わらず**コンテナイメージ**を基本単位として扱います：
 
 ```kdl
 service "api" {

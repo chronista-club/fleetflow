@@ -207,7 +207,7 @@ RUST_BACKTRACE=1 cargo run
 ## ディレクトリ構造
 
 ```
-unison-flow/
+fleetflow/
 ├── crates/
 │   ├── flow-atom/      # Atom定義とパーサー
 │   ├── flow-cli/       # CLIツール
