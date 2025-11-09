@@ -1,10 +1,10 @@
 [workspace]
 resolver = "2"
 members = [
-  "crates/flow-cli",
-  "crates/flow-atom",
-  "crates/flow-container",
-  "crates/flow-config",
+  "crates/fleetflow-cli",
+  "crates/fleetflow-atom",
+  "crates/fleetflow-container",
+  "crates/fleetflow-config",
 ]
 
 [workspace.package]

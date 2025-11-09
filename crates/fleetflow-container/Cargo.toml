@@ -11,7 +11,7 @@ keywords.workspace = true
 categories.workspace = true
 
 [dependencies]
-fleetflow-atom = { version = "0.1.0", path = "../flow-atom" }
+fleetflow-atom = { version = "0.1.0", path = "../fleetflow-atom" }
 
 bollard.workspace = true
 tokio.workspace = true
