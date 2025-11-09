@@ -10,11 +10,24 @@ pub fn service_to_container_config(
     service_name: &str,
     service: &Service,
 ) -> (Config<String>, CreateContainerOptions<String>) {
-    let image = service
-        .image
-        .as_ref()
-        .cloned()
-        .unwrap_or_else(|| format!("{}:latest", service_name));
+    // イメージ名の決定
+    // 1. imageとversionの両方が指定されている場合は "image:version"
+    // 2. imageのみでタグが含まれている場合（":"を含む）はそのまま使用
+    // 3. imageのみでタグがない場合は "image:latest"
+    // 4. versionのみの場合は "service_name:version"
+    // 5. どちらもない場合は "service_name:latest"
+    let image = match (&service.image, &service.version) {
+        (Some(img), Some(ver)) => format!("{}:{}", img, ver),
+        (Some(img), None) => {
+            if img.contains(':') {
+                img.clone()
+            } else {
+                format!("{}:latest", img)
+            }
+        }
+        (None, Some(ver)) => format!("{}:{}", service_name, ver),
+        (None, None) => format!("{}:latest", service_name),
+    };
 
     // 環境変数の設定
     let env: Vec<String> = service
