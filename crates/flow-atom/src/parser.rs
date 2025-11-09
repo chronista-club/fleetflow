@@ -182,11 +182,29 @@ fn parse_service(node: &KdlNode) -> Result<(String, Service)> {
 }
 
 /// port ノードをパース
+///
+/// サポートされる形式:
+/// - 名前付き引数: port host=8080 container=3000
+/// - 位置引数（後方互換）: port 8080 3000
 fn parse_port(node: &KdlNode) -> Option<Port> {
-    let entries: Vec<_> = node.entries().iter().collect();
+    // 名前付き引数を優先
+    let host = node
+        .get("host")
+        .and_then(|e| e.value().as_i64())
+        .map(|v| v as u16)
+        .or_else(|| {
+            // フォールバック: 位置引数
+            node.entries().get(0)?.value().as_i64().map(|v| v as u16)
+        })?;
 
-    let host = entries.get(0)?.value().as_i64()? as u16;
-    let container = entries.get(1)?.value().as_i64()? as u16;
+    let container = node
+        .get("container")
+        .and_then(|e| e.value().as_i64())
+        .map(|v| v as u16)
+        .or_else(|| {
+            // フォールバック: 位置引数
+            node.entries().get(1)?.value().as_i64().map(|v| v as u16)
+        })?;
 
     let protocol = node
         .get("protocol")

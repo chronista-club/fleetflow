@@ -5,7 +5,7 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Configuration management for Unison Flow"
+description = "Configuration management for FleetFlow"
 
 [dependencies]
 serde.workspace = true
@@ -13,3 +13,6 @@ serde_json.workspace = true
 serde_yaml.workspace = true
 dirs.workspace = true
 thiserror.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

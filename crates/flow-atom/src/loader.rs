@@ -1,0 +1,389 @@
+//! 統合ローダー
+//!
+//! ファイル発見、テンプレート展開、パースを統合
+
+use crate::discovery::{DiscoveredFiles, discover_files, find_project_root};
+use crate::error::{FlowError, Result};
+use crate::model::FlowConfig;
+use crate::parser::parse_kdl_string;
+use crate::template::{TemplateProcessor, Variables, extract_variables};
+use std::path::Path;
+use tracing::{debug, info, instrument};
+
+/// ファイルあたりの推定バイト数（容量事前確保用）
+const ESTIMATED_BYTES_PER_FILE: usize = 500;
+
+/// プロジェクト全体をロードしてFlowConfigを生成
+///
+/// 以下の処理を実行:
+/// 1. プロジェクトルートの検出
+/// 2. ファイルの自動発見
+/// 3. 変数の収集
+/// 4. テンプレート展開
+/// 5. KDLパース
+#[instrument]
+pub fn load_project() -> Result<FlowConfig> {
+    info!("Starting project load");
+    let project_root = find_project_root()?;
+    load_project_from_root(&project_root)
+}
+
+/// 指定されたルートディレクトリからプロジェクトをロード
+#[instrument(skip(project_root), fields(project_root = %project_root.display()))]
+pub fn load_project_from_root(project_root: &Path) -> Result<FlowConfig> {
+    // 1. ファイル発見
+    debug!("Step 1: Discovering files");
+    let discovered = discover_files(project_root)?;
+
+    // 2. 変数収集とテンプレート準備
+    debug!("Step 2: Preparing template processor");
+    let mut processor = prepare_template_processor(&discovered)?;
+
+    // 3. テンプレート展開
+    debug!("Step 3: Expanding templates");
+    let expanded_content = expand_all_files(&discovered, &mut processor)?;
+    info!(
+        content_size = expanded_content.len(),
+        "Template expansion complete"
+    );
+
+    // 4. KDLパース
+    debug!("Step 4: Parsing KDL");
+    let config = parse_kdl_string(&expanded_content)?;
+    info!(
+        services = config.services.len(),
+        stages = config.stages.len(),
+        "Project loaded successfully"
+    );
+
+    Ok(config)
+}
+
+/// テンプレートプロセッサを準備
+fn prepare_template_processor(discovered: &DiscoveredFiles) -> Result<TemplateProcessor> {
+    let mut processor = TemplateProcessor::new();
+    let mut all_variables = Variables::new();
+
+    // 1. グローバル変数（flow.kdl）
+    if let Some(root_file) = &discovered.root {
+        let content = std::fs::read_to_string(root_file).map_err(|e| FlowError::IoError {
+            path: root_file.clone(),
+            message: e.to_string(),
+        })?;
+        let vars = extract_variables(&content)?;
+        all_variables.extend(vars);
+    }
+
+    // 2. variables/**/*.kdl
+    for var_file in &discovered.variables {
+        let content = std::fs::read_to_string(var_file).map_err(|e| FlowError::IoError {
+            path: var_file.clone(),
+            message: e.to_string(),
+        })?;
+        let vars = extract_variables(&content)?;
+        all_variables.extend(vars);
+    }
+
+    // 3. 環境変数を追加
+    processor.add_env_variables();
+
+    // 4. 収集した変数を追加
+    processor.add_variables(all_variables);
+
+    Ok(processor)
+}
+
+/// 全ファイルをテンプレート展開して結合
+fn expand_all_files(
+    discovered: &DiscoveredFiles,
+    processor: &mut TemplateProcessor,
+) -> Result<String> {
+    // ファイル数から概算容量を計算
+    let file_count = discovered.services.len()
+        + discovered.stages.len()
+        + if discovered.root.is_some() { 1 } else { 0 }
+        + if discovered.local_override.is_some() {
+            1
+        } else {
+            0
+        };
+    let estimated_capacity = file_count * ESTIMATED_BYTES_PER_FILE;
+
+    let mut expanded = String::with_capacity(estimated_capacity);
+
+    // 読み込み順序:
+    // 1. flow.kdl（グローバル設定）
+    // 2. services/**/*.kdl
+    // 3. stages/**/*.kdl
+    // 4. flow.local.kdl（オーバーライド）
+
+    // 1. flow.kdl
+    if let Some(root_file) = &discovered.root {
+        let rendered = processor.render_file(root_file)?;
+        expanded.push_str(&rendered);
+        expanded.push('\n');
+    }
+
+    // 2. services/**/*.kdl
+    for service_file in &discovered.services {
+        let rendered = processor.render_file(service_file)?;
+        expanded.push_str(&rendered);
+        expanded.push('\n');
+    }
+
+    // 3. stages/**/*.kdl
+    for stage_file in &discovered.stages {
+        let rendered = processor.render_file(stage_file)?;
+        expanded.push_str(&rendered);
+        expanded.push('\n');
+    }
+
+    // 4. flow.local.kdl（オーバーライド）
+    if let Some(local_file) = &discovered.local_override {
+        let rendered = processor.render_file(local_file)?;
+        expanded.push_str(&rendered);
+        expanded.push('\n');
+    }
+
+    Ok(expanded)
+}
+
+/// デバッグ情報を表示しながらロード
+pub fn load_project_with_debug(project_root: &Path) -> Result<FlowConfig> {
+    println!("🔍 プロジェクト検出");
+    println!("  ルート: {}", project_root.display());
+
+    // ファイル発見
+    let discovered = discover_files(project_root)?;
+
+    if discovered.root.is_some() {
+        println!("  flow.kdl: ✓ 検出");
+    } else {
+        println!("  flow.kdl: ✗ 未検出");
+    }
+
+    println!("\n🔍 ディレクトリスキャン");
+    println!(
+        "  services/: {}",
+        if discovered.services.is_empty() {
+            "未検出"
+        } else {
+            "✓ 検出"
+        }
+    );
+    println!(
+        "  stages/: {}",
+        if discovered.stages.is_empty() {
+            "未検出"
+        } else {
+            "✓ 検出"
+        }
+    );
+    println!(
+        "  variables/: {}",
+        if discovered.variables.is_empty() {
+            "未検出"
+        } else {
+            "✓ 検出"
+        }
+    );
+
+    if !discovered.services.is_empty() {
+        println!("\n📂 ファイル発見 (services/)");
+        for service in &discovered.services {
+            println!("  ✓ {}", service.display());
+        }
+    }
+
+    if !discovered.stages.is_empty() {
+        println!("\n📂 ファイル発見 (stages/)");
+        for stage in &discovered.stages {
+            println!("  ✓ {}", stage.display());
+        }
+    }
+
+    if !discovered.variables.is_empty() {
+        println!("\n📂 ファイル発見 (variables/)");
+        for var in &discovered.variables {
+            println!("  ✓ {}", var.display());
+        }
+    }
+
+    println!("\n📖 変数収集");
+    let mut processor = prepare_template_processor(&discovered)?;
+    println!("  ✓ 完了");
+
+    println!("\n📝 テンプレート展開");
+    let expanded = expand_all_files(&discovered, &mut processor)?;
+    println!("  ✓ 完了 ({}バイト)", expanded.len());
+
+    println!("\n⚙️  KDLパース");
+    let config = parse_kdl_string(&expanded)?;
+    println!("  サービス: {}個", config.services.len());
+    println!("  ステージ: {}個", config.stages.len());
+
+    println!("\n✅ ロード完了\n");
+
+    Ok(config)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    fn create_test_project(base: &Path) -> Result<()> {
+        // flow.kdl
+        fs::write(
+            base.join("flow.kdl"),
+            r#"
+variables {
+    app_version "1.0.0"
+    registry "ghcr.io/myorg"
+}
+"#,
+        )?;
+
+        // services/api.kdl
+        fs::create_dir_all(base.join("services"))?;
+        fs::write(
+            base.join("services/api.kdl"),
+            r#"
+service "api" {
+    image "{{ registry }}/api:{{ app_version }}"
+}
+"#,
+        )?;
+
+        // services/postgres.kdl
+        fs::write(
+            base.join("services/postgres.kdl"),
+            r#"
+service "postgres" {
+    version "16"
+}
+"#,
+        )?;
+
+        // stages/local.kdl
+        fs::create_dir_all(base.join("stages"))?;
+        fs::write(
+            base.join("stages/local.kdl"),
+            r#"
+stage "local" {
+    service "api"
+    service "postgres"
+}
+"#,
+        )?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_load_project_basic() -> Result<()> {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let project_root = temp_dir.path();
+
+        create_test_project(project_root)?;
+
+        let config = load_project_from_root(project_root)?;
+
+        // サービス
+        assert_eq!(config.services.len(), 2);
+        assert!(config.services.contains_key("api"));
+        assert!(config.services.contains_key("postgres"));
+
+        // テンプレート展開の確認
+        let api = &config.services["api"];
+        assert_eq!(api.image.as_ref().unwrap(), "ghcr.io/myorg/api:1.0.0");
+
+        // ステージ
+        assert_eq!(config.stages.len(), 1);
+        assert!(config.stages.contains_key("local"));
+
+        let local = &config.stages["local"];
+        assert_eq!(local.services.len(), 2);
+        assert!(local.services.contains(&"api".to_string()));
+        assert!(local.services.contains(&"postgres".to_string()));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_load_project_with_variables_dir() -> Result<()> {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let project_root = temp_dir.path();
+
+        // flow.kdl
+        fs::write(project_root.join("flow.kdl"), "")?;
+
+        // variables/common.kdl
+        fs::create_dir_all(project_root.join("variables"))?;
+        fs::write(
+            project_root.join("variables/common.kdl"),
+            r#"
+variables {
+    image_registry "myregistry"
+    version "2.0.0"
+}
+"#,
+        )?;
+
+        // services/api.kdl
+        fs::create_dir_all(project_root.join("services"))?;
+        fs::write(
+            project_root.join("services/api.kdl"),
+            r#"
+service "api" {
+    image "{{ image_registry }}/api:{{ version }}"
+}
+"#,
+        )?;
+
+        let config = load_project_from_root(project_root)?;
+
+        let api = &config.services["api"];
+        assert_eq!(api.image.as_ref().unwrap(), "myregistry/api:2.0.0");
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_load_project_with_local_override() -> Result<()> {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let project_root = temp_dir.path();
+
+        // flow.kdl
+        fs::write(project_root.join("flow.kdl"), "")?;
+
+        // services/api.kdl
+        fs::create_dir_all(project_root.join("services"))?;
+        fs::write(
+            project_root.join("services/api.kdl"),
+            r#"
+service "api" {
+    version "15"
+}
+"#,
+        )?;
+
+        // flow.local.kdl（オーバーライド）
+        fs::write(
+            project_root.join("flow.local.kdl"),
+            r#"
+service "api" {
+    version "16"
+}
+"#,
+        )?;
+
+        let config = load_project_from_root(project_root)?;
+
+        // flow.local.kdl の定義が優先される
+        let api = &config.services["api"];
+        assert_eq!(api.version.as_ref().unwrap(), "16");
+
+        Ok(())
+    }
+}

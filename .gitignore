@@ -21,8 +21,12 @@ Cargo.lock
 
 # Local configuration
 .env
-.env.local
+*.local.*
+.*.local.*
 
 # Build artifacts
 *.tar.gz
 *.zip
+
+# Vantage development database
+.vantage/

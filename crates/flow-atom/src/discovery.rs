@@ -1,0 +1,289 @@
+//! ファイル自動発見機能
+//!
+//! 規約ベースのディレクトリ構造からKDLファイルを自動的に発見します。
+
+use crate::error::{FlowError, Result};
+use std::collections::HashSet;
+use std::path::{Path, PathBuf};
+use tracing::{debug, info, warn};
+
+/// 発見されたファイル群
+#[derive(Debug, Clone, Default)]
+pub struct DiscoveredFiles {
+    /// ルートファイル (flow.kdl)
+    pub root: Option<PathBuf>,
+    /// サービス定義ファイル (services/**/*.kdl)
+    pub services: Vec<PathBuf>,
+    /// ステージ定義ファイル (stages/**/*.kdl)
+    pub stages: Vec<PathBuf>,
+    /// 変数定義ファイル (variables/**/*.kdl)
+    pub variables: Vec<PathBuf>,
+    /// ローカルオーバーライドファイル (flow.local.kdl)
+    pub local_override: Option<PathBuf>,
+}
+
+/// プロジェクトルートを検出
+///
+/// 以下の優先順位で検索:
+/// 1. 環境変数 FLOW_PROJECT_ROOT
+/// 2. カレントディレクトリから上に向かって flow.kdl を探す
+#[tracing::instrument]
+pub fn find_project_root() -> Result<PathBuf> {
+    // 1. 環境変数
+    if let Ok(root) = std::env::var("FLOW_PROJECT_ROOT") {
+        let path = PathBuf::from(&root);
+        debug!(env_root = %root, "Checking FLOW_PROJECT_ROOT");
+        if path.join("flow.kdl").exists() {
+            info!(project_root = %path.display(), "Found project root from environment variable");
+            return Ok(path);
+        }
+    }
+
+    // 2. カレントディレクトリから上に向かって探す
+    let start_dir = std::env::current_dir()?;
+    let mut current = start_dir.clone();
+    debug!(start_dir = %start_dir.display(), "Searching for project root");
+
+    loop {
+        let flow_file = current.join("flow.kdl");
+        debug!(checking = %current.display(), "Looking for flow.kdl");
+        if flow_file.exists() {
+            info!(project_root = %current.display(), "Found project root");
+            return Ok(current);
+        }
+
+        // 親ディレクトリへ
+        if !current.pop() {
+            break;
+        }
+    }
+
+    warn!(start_dir = %start_dir.display(), "Project root not found");
+    Err(FlowError::ProjectRootNotFound(start_dir))
+}
+
+/// プロジェクトルートからファイルを自動発見
+#[tracing::instrument(skip(project_root), fields(project_root = %project_root.display()))]
+pub fn discover_files(project_root: &Path) -> Result<DiscoveredFiles> {
+    debug!("Starting file discovery");
+    let mut discovered = DiscoveredFiles::default();
+
+    // flow.kdl
+    let root_file = project_root.join("flow.kdl");
+    if root_file.exists() {
+        debug!(file = %root_file.display(), "Found root file");
+        discovered.root = Some(root_file);
+    }
+
+    // services/**/*.kdl
+    let services_dir = project_root.join("services");
+    if services_dir.is_dir() {
+        discovered.services = discover_kdl_files(&services_dir)?;
+        info!(
+            service_count = discovered.services.len(),
+            "Discovered service files"
+        );
+    }
+
+    // stages/**/*.kdl
+    let stages_dir = project_root.join("stages");
+    if stages_dir.is_dir() {
+        discovered.stages = discover_kdl_files(&stages_dir)?;
+        info!(
+            stage_count = discovered.stages.len(),
+            "Discovered stage files"
+        );
+    }
+
+    // variables/**/*.kdl
+    let variables_dir = project_root.join("variables");
+    if variables_dir.is_dir() {
+        discovered.variables = discover_kdl_files(&variables_dir)?;
+        info!(
+            variable_count = discovered.variables.len(),
+            "Discovered variable files"
+        );
+    }
+
+    // flow.local.kdl
+    let local_override = project_root.join("flow.local.kdl");
+    if local_override.exists() {
+        discovered.local_override = Some(local_override);
+    }
+
+    Ok(discovered)
+}
+
+/// ディレクトリ配下の .kdl ファイルを再帰的に発見
+///
+/// アルファベット順にソートして返す
+fn discover_kdl_files(dir: &Path) -> Result<Vec<PathBuf>> {
+    let mut files = Vec::new();
+    let mut visited = HashSet::new();
+
+    visit_dir(dir, &mut files, &mut visited)?;
+
+    // アルファベット順にソート
+    files.sort();
+
+    Ok(files)
+}
+
+/// ディレクトリを再帰的に走査
+fn visit_dir(dir: &Path, files: &mut Vec<PathBuf>, visited: &mut HashSet<PathBuf>) -> Result<()> {
+    if !dir.is_dir() {
+        return Ok(());
+    }
+
+    // 正規化されたパスを取得してループを検出
+    let canonical_dir = dir.canonicalize().map_err(|e| FlowError::DiscoveryError {
+        path: dir.to_path_buf(),
+        message: format!("パスの正規化に失敗: {}", e),
+    })?;
+
+    // ループ検出: 既に訪問済みなら終了
+    if visited.contains(&canonical_dir) {
+        warn!(dir = %canonical_dir.display(), "Symlink loop detected, skipping");
+        return Ok(());
+    }
+
+    // 訪問済みとしてマーク
+    visited.insert(canonical_dir.clone());
+
+    let entries = std::fs::read_dir(dir).map_err(|e| FlowError::DiscoveryError {
+        path: dir.to_path_buf(),
+        message: format!("ディレクトリの読み込みに失敗: {}", e),
+    })?;
+
+    for entry in entries {
+        let entry = entry.map_err(|e| FlowError::DiscoveryError {
+            path: dir.to_path_buf(),
+            message: format!("ディレクトリエントリの読み込みに失敗: {}", e),
+        })?;
+        let path = entry.path();
+
+        if path.is_dir() {
+            // 再帰的に探索
+            visit_dir(&path, files, visited)?;
+        } else if path.extension().and_then(|s| s.to_str()) == Some("kdl") {
+            files.push(path);
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    fn create_test_project(base: &Path) -> Result<()> {
+        // flow.kdl
+        fs::write(base.join("flow.kdl"), "// root")?;
+
+        // services/
+        fs::create_dir_all(base.join("services"))?;
+        fs::write(base.join("services/api.kdl"), "service \"api\" {}")?;
+        fs::write(
+            base.join("services/postgres.kdl"),
+            "service \"postgres\" {}",
+        )?;
+
+        // services/backend/
+        fs::create_dir_all(base.join("services/backend"))?;
+        fs::write(
+            base.join("services/backend/worker.kdl"),
+            "service \"worker\" {}",
+        )?;
+
+        // stages/
+        fs::create_dir_all(base.join("stages"))?;
+        fs::write(base.join("stages/local.kdl"), "stage \"local\" {}")?;
+        fs::write(base.join("stages/prod.kdl"), "stage \"prod\" {}")?;
+
+        // variables/
+        fs::create_dir_all(base.join("variables"))?;
+        fs::write(base.join("variables/common.kdl"), "variables {}")?;
+
+        // flow.local.kdl
+        fs::write(base.join("flow.local.kdl"), "// local override")?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_discover_files() -> Result<()> {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let project_root = temp_dir.path();
+
+        create_test_project(project_root)?;
+
+        let discovered = discover_files(project_root)?;
+
+        // flow.kdl
+        assert!(discovered.root.is_some());
+
+        // services
+        assert_eq!(discovered.services.len(), 3);
+        assert!(discovered.services[0].ends_with("services/api.kdl"));
+        assert!(discovered.services[1].ends_with("services/backend/worker.kdl"));
+        assert!(discovered.services[2].ends_with("services/postgres.kdl"));
+
+        // stages
+        assert_eq!(discovered.stages.len(), 2);
+        assert!(discovered.stages[0].ends_with("stages/local.kdl"));
+        assert!(discovered.stages[1].ends_with("stages/prod.kdl"));
+
+        // variables
+        assert_eq!(discovered.variables.len(), 1);
+        assert!(discovered.variables[0].ends_with("variables/common.kdl"));
+
+        // flow.local.kdl
+        assert!(discovered.local_override.is_some());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_discover_files_minimal() -> Result<()> {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let project_root = temp_dir.path();
+
+        // 最小構成: flow.kdl のみ
+        fs::write(project_root.join("flow.kdl"), "// root")?;
+
+        let discovered = discover_files(project_root)?;
+
+        assert!(discovered.root.is_some());
+        assert_eq!(discovered.services.len(), 0);
+        assert_eq!(discovered.stages.len(), 0);
+        assert_eq!(discovered.variables.len(), 0);
+        assert!(discovered.local_override.is_none());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_alphabetical_order() -> Result<()> {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let project_root = temp_dir.path();
+
+        fs::write(project_root.join("flow.kdl"), "// root")?;
+        fs::create_dir_all(project_root.join("services"))?;
+
+        // アルファベット順ではない順序で作成
+        fs::write(project_root.join("services/zebra.kdl"), "")?;
+        fs::write(project_root.join("services/alpha.kdl"), "")?;
+        fs::write(project_root.join("services/beta.kdl"), "")?;
+
+        let discovered = discover_files(project_root)?;
+
+        // アルファベット順にソートされていることを確認
+        assert!(discovered.services[0].ends_with("services/alpha.kdl"));
+        assert!(discovered.services[1].ends_with("services/beta.kdl"));
+        assert!(discovered.services[2].ends_with("services/zebra.kdl"));
+
+        Ok(())
+    }
+}

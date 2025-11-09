@@ -1,4 +1,4 @@
-# Unison Flow
+# FleetFlow
 
 > Docker Composeよりシンプル。KDLで書く、次世代の環境構築ツール。
 
@@ -6,10 +6,10 @@
 
 **「宣言だけで、開発も本番も」**
 
-Unison Flowは、KDL（KDL Document Language）をベースにした、革新的で超シンプルなデプロイ・環境構築ツールです。
+FleetFlowは、KDL（KDL Document Language）をベースにした、革新的で超シンプルなデプロイ・環境構築ツールです。
 Docker Composeの手軽さはそのままに、より少ない記述で、より強力な設定管理を実現します。
 
-### なぜUnison Flow？
+### なぜFleetFlow？
 
 - **超シンプル**: Docker Composeと同等かそれ以下の記述量
 - **可読性**: YAMLよりも読みやすいKDL構文
@@ -21,7 +21,7 @@ Docker Composeの手軽さはそのままに、より少ない記述で、より
 ### インストール
 
 ```bash
-cargo install unison-flow
+cargo install fleetflow
 ```
 
 ### 基本的な使い方
@@ -47,13 +47,13 @@ environment "development" {
 
 ```bash
 # 環境を起動
-unison up
+flow up
 
 # 環境を停止
-unison down
+flow down
 
 # 設定を検証
-unison validate
+flow validate
 ```
 
 ## 特徴
@@ -78,13 +78,13 @@ service "api" {
 設定を分割して管理。共通設定を再利用できます。
 
 ```kdl
-// unison.kdl
+// flow.kdl
 include "common/database.kdl"
 include "common/redis.kdl"
 include "services/api.kdl"
 include "services/worker.kdl"
 
-environment "development" {
+stage "development" {
   // includeした設定が自動的に利用される
 }
 ```
@@ -93,7 +93,7 @@ environment "development" {
 
 ```
 project/
-├── unison.kdl              # メイン設定
+├── flow.kdl                # メイン設定
 ├── common/
 │   ├── database.kdl       # DB共通設定
 │   └── redis.kdl          # Redis共通設定
@@ -189,28 +189,28 @@ service "api" {
 
 ```bash
 # 環境を起動
-unison up [-e <environment>]
+flow up [--stage <stage>]
 
 # 環境を停止
-unison down [-e <environment>]
+flow down [--stage <stage>]
 
 # 環境を再起動
-unison restart [-e <environment>]
+flow restart [--stage <stage>]
 
 # 設定を検証
-unison validate
+flow validate
 
-# 環境間の差分を表示
-unison diff <env1> <env2>
+# ステージ間の差分を表示
+flow diff <stage1> <stage2>
 
 # 設定をDocker Composeに変換
-unison export docker-compose
+flow export docker-compose
 
 # ログを表示
-unison logs [service-name]
+flow logs [service-name]
 
 # サービス一覧を表示
-unison ps
+flow ps
 ```
 
 ## ロードマップ
@@ -262,8 +262,8 @@ Issue、Pull Requestは大歓迎です！
 ### 開発環境のセットアップ
 
 ```bash
-git clone https://github.com/yourusername/unison-flow.git
-cd unison-flow
+git clone https://github.com/chronista-club/fleetflow.git
+cd fleetflow
 cargo build
 cargo test
 ```
@@ -287,4 +287,4 @@ MIT
 
 ---
 
-**Unison Flow** - シンプルに、統一的に、環境を構築する。
+**FleetFlow** - シンプルに、統一的に、環境を構築する。
