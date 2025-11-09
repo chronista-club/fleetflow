@@ -116,9 +116,9 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // 設定ファイルを検索
-    let config_path = match flow_config::find_flow_file() {
+    let config_path = match fleetflow_config::find_flow_file() {
         Ok(path) => path,
-        Err(flow_config::ConfigError::FlowFileNotFound) => {
+        Err(fleetflow_config::ConfigError::FlowFileNotFound) => {
             // 設定ファイルが見つからない場合は初期化ウィザードを起動
             println!("{}", "設定ファイルが見つかりません。".yellow());
             println!("{}", "初期化ウィザードを起動します...".cyan());
@@ -162,7 +162,7 @@ async fn main() -> anyhow::Result<()> {
     };
 
     // 設定ファイルをパース
-    let config = flow_atom::parse_kdl_file(&config_path)?;
+    let config = fleetflow_atom::parse_kdl_file(&config_path)?;
 
     // ここから既存のコマンド処理
     match cli.command {
@@ -225,7 +225,7 @@ async fn main() -> anyhow::Result<()> {
 
                 // サービスをコンテナ設定に変換
                 let (container_config, create_options) =
-                    flow_container::service_to_container_config(service_name, service);
+                    fleetflow_container::service_to_container_config(service_name, service);
 
                 // コンテナ作成
                 match docker
@@ -643,7 +643,7 @@ async fn main() -> anyhow::Result<()> {
             println!("{}", "設定を検証中...".blue());
 
             // プロジェクトルートを検出
-            match flow_atom::find_project_root() {
+            match fleetflow_atom::find_project_root() {
                 Ok(project_root) => {
                     println!(
                         "プロジェクトルート: {}",
@@ -651,7 +651,7 @@ async fn main() -> anyhow::Result<()> {
                     );
 
                     // デバッグモードでロード
-                    match flow_atom::load_project_with_debug(&project_root) {
+                    match fleetflow_atom::load_project_with_debug(&project_root) {
                         Ok(config) => {
                             println!("{}", "✓ 設定ファイルは正常です！".green().bold());
                             println!();

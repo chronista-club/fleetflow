@@ -1,5 +1,5 @@
 [package]
-name = "flow-container"
+name = "fleetflow-container"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -11,7 +11,7 @@ keywords.workspace = true
 categories.workspace = true
 
 [dependencies]
-flow-atom = { version = "0.1.0", path = "../flow-atom" }
+fleetflow-atom = { version = "0.1.0", path = "../flow-atom" }
 
 bollard.workspace = true
 tokio.workspace = true

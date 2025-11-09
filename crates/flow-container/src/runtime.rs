@@ -1,5 +1,5 @@
 use anyhow::Result;
-use flow_atom::FlowConfig;
+use fleetflow_atom::FlowConfig;
 
 /// コンテナランタイムのトレイト
 #[allow(async_fn_in_trait)]

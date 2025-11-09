@@ -2,7 +2,7 @@
 
 use bollard::container::{Config, CreateContainerOptions};
 use bollard::models::{HostConfig, PortBinding};
-use flow_atom::{FlowConfig, Service};
+use fleetflow_atom::{FlowConfig, Service};
 use std::collections::HashMap;
 
 /// FlowConfigのServiceをDockerのコンテナ設定に変換
@@ -31,7 +31,7 @@ pub fn service_to_container_config(
         let container_port = format!(
             "{}/{}",
             port.container,
-            if port.protocol == flow_atom::Protocol::Udp {
+            if port.protocol == fleetflow_atom::Protocol::Udp {
                 "udp"
             } else {
                 "tcp"
@@ -110,7 +110,7 @@ pub fn get_stage_services(config: &FlowConfig, stage_name: &str) -> Result<Vec<S
 #[cfg(test)]
 mod tests {
     use super::*;
-    use flow_atom::{Port, Protocol, Service, Stage, Volume};
+    use fleetflow_atom::{Port, Protocol, Service, Stage, Volume};
     use std::collections::HashMap;
     use std::path::PathBuf;
 

@@ -1,5 +1,5 @@
 [package]
-name = "flow-config"
+name = "fleetflow-config"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true

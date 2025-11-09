@@ -16,9 +16,9 @@ path = "src/main.rs"
 
 [dependencies]
 # Workspace crates
-flow-atom = { version = "0.1.0", path = "../flow-atom" }
-flow-container = { version = "0.1.0", path = "../flow-container" }
-flow-config = { version = "0.1.0", path = "../flow-config" }
+fleetflow-atom = { version = "0.1.0", path = "../flow-atom" }
+fleetflow-container = { version = "0.1.0", path = "../flow-container" }
+fleetflow-config = { version = "0.1.0", path = "../flow-config" }
 
 # External dependencies
 clap.workspace = true
