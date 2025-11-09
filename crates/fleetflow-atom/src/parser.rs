@@ -5,30 +5,35 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// KDLファイルをパースしてFlowConfigを生成
-pub fn parse_kdl_file<P: AsRef<Path>>(path: P) -> Result<FlowConfig> {
+/// KDLファイルをパースしてFlowを生成
+pub fn parse_kdl_file<P: AsRef<Path>>(path: P) -> Result<Flow> {
     let content = fs::read_to_string(path.as_ref())?;
-    parse_kdl_string(&content)
+    let name = path
+        .as_ref()
+        .parent()
+        .and_then(|p| p.file_name())
+        .and_then(|n| n.to_str())
+        .unwrap_or("unnamed")
+        .to_string();
+    parse_kdl_string(&content, name)
 }
 
 /// KDL文字列をパース
-pub fn parse_kdl_string(content: &str) -> Result<FlowConfig> {
+pub fn parse_kdl_string(content: &str, name: String) -> Result<Flow> {
     let doc: KdlDocument = content.parse()?;
 
-    let mut config = FlowConfig {
-        stages: HashMap::new(),
-        services: HashMap::new(),
-    };
+    let mut stages = HashMap::new();
+    let mut services = HashMap::new();
 
     for node in doc.nodes() {
         match node.name().value() {
             "stage" => {
-                let (name, stage) = parse_stage(node)?;
-                config.stages.insert(name, stage);
+                let (stage_name, stage) = parse_stage(node)?;
+                stages.insert(stage_name, stage);
             }
             "service" => {
-                let (name, service) = parse_service(node)?;
-                config.services.insert(name, service);
+                let (service_name, service) = parse_service(node)?;
+                services.insert(service_name, service);
             }
             "include" => {
                 // TODO: include機能の実装
@@ -43,7 +48,11 @@ pub fn parse_kdl_string(content: &str) -> Result<FlowConfig> {
         }
     }
 
-    Ok(config)
+    Ok(Flow {
+        name,
+        stages,
+        services,
+    })
 }
 
 /// stage ノードをパース

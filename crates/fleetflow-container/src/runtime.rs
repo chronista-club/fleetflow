@@ -1,11 +1,11 @@
 use anyhow::Result;
-use fleetflow_atom::FlowConfig;
+use fleetflow_atom::Flow;
 
 /// コンテナランタイムのトレイト
 #[allow(async_fn_in_trait)]
 pub trait ContainerRuntime {
-    async fn start(&self, config: &FlowConfig) -> Result<()>;
-    async fn stop(&self, config: &FlowConfig) -> Result<()>;
+    async fn start(&self, flow: &Flow) -> Result<()>;
+    async fn stop(&self, flow: &Flow) -> Result<()>;
     async fn status(&self) -> Result<Vec<ContainerStatus>>;
 }
 

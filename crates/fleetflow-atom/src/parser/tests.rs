@@ -9,11 +9,11 @@ fn test_parse_simple_service() {
         }
     "#;
 
-    let config = parse_kdl_string(kdl).unwrap();
-    assert_eq!(config.services.len(), 1);
-    assert!(config.services.contains_key("postgres"));
+    let flow = parse_kdl_string(kdl, "test".to_string()).unwrap();
+    assert_eq!(flow.services.len(), 1);
+    assert!(flow.services.contains_key("postgres"));
 
-    let service = &config.services["postgres"];
+    let service = &flow.services["postgres"];
     assert_eq!(service.image, Some("postgres:16".to_string()));
     assert_eq!(service.version, Some("16".to_string()));
 }
@@ -24,8 +24,8 @@ fn test_parse_service_without_version() {
         service "redis" {}
     "#;
 
-    let config = parse_kdl_string(kdl).unwrap();
-    let service = &config.services["redis"];
+    let flow = parse_kdl_string(kdl, "test".to_string()).unwrap();
+    let service = &flow.services["redis"];
 
     // バージョン未指定 → image は redis:latest
     assert_eq!(service.image, Some("redis:latest".to_string()));
@@ -40,8 +40,8 @@ fn test_parse_service_with_explicit_image() {
         }
     "#;
 
-    let config = parse_kdl_string(kdl).unwrap();
-    let service = &config.services["api"];
+    let flow = parse_kdl_string(kdl, "test".to_string()).unwrap();
+    let service = &flow.services["api"];
 
     // 明示的なimageが優先
     assert_eq!(service.image, Some("myapp:1.0.0".to_string()));
@@ -58,8 +58,8 @@ fn test_parse_service_with_ports() {
         }
     "#;
 
-    let config = parse_kdl_string(kdl).unwrap();
-    let service = &config.services["web"];
+    let flow = parse_kdl_string(kdl, "test".to_string()).unwrap();
+    let service = &flow.services["web"];
 
     assert_eq!(service.ports.len(), 2);
 
@@ -84,8 +84,8 @@ fn test_parse_service_with_environment() {
         }
     "#;
 
-    let config = parse_kdl_string(kdl).unwrap();
-    let service = &config.services["api"];
+    let flow = parse_kdl_string(kdl, "test".to_string()).unwrap();
+    let service = &flow.services["api"];
 
     assert_eq!(service.environment.len(), 2);
     assert_eq!(service.environment["NODE_ENV"], "production");
@@ -106,8 +106,8 @@ fn test_parse_service_with_volumes() {
         }
     "#;
 
-    let config = parse_kdl_string(kdl).unwrap();
-    let service = &config.services["db"];
+    let flow = parse_kdl_string(kdl, "test".to_string()).unwrap();
+    let service = &flow.services["db"];
 
     assert_eq!(service.volumes.len(), 2);
 
@@ -128,8 +128,8 @@ fn test_parse_service_with_depends_on() {
         }
     "#;
 
-    let config = parse_kdl_string(kdl).unwrap();
-    let service = &config.services["api"];
+    let flow = parse_kdl_string(kdl, "test".to_string()).unwrap();
+    let service = &flow.services["api"];
 
     assert_eq!(service.depends_on.len(), 2);
     assert!(service.depends_on.contains(&"db".to_string()));
@@ -150,10 +150,10 @@ fn test_parse_stage() {
         }
     "#;
 
-    let config = parse_kdl_string(kdl).unwrap();
-    assert_eq!(config.stages.len(), 1);
+    let flow = parse_kdl_string(kdl, "test".to_string()).unwrap();
+    assert_eq!(flow.stages.len(), 1);
 
-    let stage = &config.stages["production"];
+    let stage = &flow.stages["production"];
     assert_eq!(stage.services.len(), 3);
     assert!(stage.services.contains(&"api".to_string()));
 
@@ -184,9 +184,9 @@ fn test_parse_multiple_services_and_stages() {
         }
     "#;
 
-    let config = parse_kdl_string(kdl).unwrap();
-    assert_eq!(config.services.len(), 2);
-    assert_eq!(config.stages.len(), 2);
+    let flow = parse_kdl_string(kdl, "test".to_string()).unwrap();
+    assert_eq!(flow.services.len(), 2);
+    assert_eq!(flow.stages.len(), 2);
 }
 
 #[test]
@@ -210,8 +210,8 @@ fn test_parse_port_with_host_ip() {
         }
     "#;
 
-    let config = parse_kdl_string(kdl).unwrap();
-    let service = &config.services["web"];
+    let flow = parse_kdl_string(kdl, "test".to_string()).unwrap();
+    let service = &flow.services["web"];
     let port = &service.ports[0];
 
     assert_eq!(port.host_ip, Some("127.0.0.1".to_string()));
@@ -223,8 +223,8 @@ fn test_parse_empty_service() {
         service "minimal" {}
     "#;
 
-    let config = parse_kdl_string(kdl).unwrap();
-    let service = &config.services["minimal"];
+    let flow = parse_kdl_string(kdl, "test".to_string()).unwrap();
+    let service = &flow.services["minimal"];
 
     // デフォルト値の確認
     assert_eq!(service.image, Some("minimal:latest".to_string()));
@@ -243,7 +243,7 @@ fn test_invalid_service_no_name() {
     "#;
 
     // サービス名がない → エラー
-    assert!(parse_kdl_string(kdl).is_err());
+    assert!(parse_kdl_string(kdl, "test".to_string()).is_err());
 }
 
 #[test]
@@ -255,7 +255,7 @@ fn test_invalid_stage_no_name() {
     "#;
 
     // ステージ名がない → エラー
-    assert!(parse_kdl_string(kdl).is_err());
+    assert!(parse_kdl_string(kdl, "test".to_string()).is_err());
 }
 
 #[test]
@@ -268,8 +268,8 @@ fn test_parse_service_with_command() {
         }
     "#;
 
-    let config = parse_kdl_string(kdl).unwrap();
-    let service = &config.services["surrealdb"];
+    let flow = parse_kdl_string(kdl, "test".to_string()).unwrap();
+    let service = &flow.services["surrealdb"];
 
     // 明示的なimageが設定されている場合は、そのまま使われる
     assert_eq!(service.image, Some("surrealdb/surrealdb".to_string()));
@@ -288,8 +288,8 @@ fn test_parse_service_without_command() {
         }
     "#;
 
-    let config = parse_kdl_string(kdl).unwrap();
-    let service = &config.services["postgres"];
+    let flow = parse_kdl_string(kdl, "test".to_string()).unwrap();
+    let service = &flow.services["postgres"];
 
     assert_eq!(service.command, None);
 }
