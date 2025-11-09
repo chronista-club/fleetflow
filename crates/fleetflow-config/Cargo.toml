@@ -9,6 +9,7 @@ description = "Configuration management for FleetFlow"
 homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true
+readme = "README.md"
 
 [dependencies]
 serde.workspace = true

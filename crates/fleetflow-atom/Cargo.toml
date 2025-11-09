@@ -9,6 +9,7 @@ description = "Core functionality for FleetFlow"
 homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true
+readme = "README.md"
 
 [dependencies]
 kdl.workspace = true
