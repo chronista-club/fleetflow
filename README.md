@@ -47,13 +47,13 @@ environment "development" {
 
 ```bash
 # 環境を起動
-flow up
+fleetflow up
 
 # 環境を停止
-flow down
+fleetflow down
 
 # 設定を検証
-flow validate
+fleetflow validate
 ```
 
 ## 特徴
@@ -189,28 +189,28 @@ service "api" {
 
 ```bash
 # 環境を起動
-flow up [--stage <stage>]
+fleetflow up [--stage <stage>]
 
 # 環境を停止
-flow down [--stage <stage>]
+fleetflow down [--stage <stage>]
 
 # 環境を再起動
-flow restart [--stage <stage>]
+fleetflow restart [--stage <stage>]
 
 # 設定を検証
-flow validate
+fleetflow validate
 
 # ステージ間の差分を表示
-flow diff <stage1> <stage2>
+fleetflow diff <stage1> <stage2>
 
 # 設定をDocker Composeに変換
-flow export docker-compose
+fleetflow export docker-compose
 
 # ログを表示
-flow logs [service-name]
+fleetflow logs [service-name]
 
 # サービス一覧を表示
-flow ps
+fleetflow ps
 ```
 
 ## ロードマップ
@@ -278,7 +278,18 @@ cargo fmt
 
 ## ライセンス
 
-MIT
+Licensed under either of
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+- MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+
+at your option.
+
+### Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
+dual licensed as above, without any additional terms or conditions.
 
 ## 関連リンク
 
