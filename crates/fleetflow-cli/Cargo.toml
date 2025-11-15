@@ -1,21 +1,25 @@
 [package]
-name = "flow-cli"
+name = "fleetflow"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "CLI for FleetFlow"
+description = "A beautiful container orchestration tool using KDL configuration"
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+readme = "README.md"
 
 [[bin]]
-name = "flow"
+name = "fleetflow"
 path = "src/main.rs"
 
 [dependencies]
 # Workspace crates
-flow-atom = { path = "../flow-atom" }
-flow-container = { path = "../flow-container" }
-flow-config = { path = "../flow-config" }
+fleetflow-atom = { version = "0.1.1", path = "../fleetflow-atom" }
+fleetflow-container = { version = "0.1.1", path = "../fleetflow-container" }
+fleetflow-config = { version = "0.1.1", path = "../fleetflow-config" }
 
 # External dependencies
 clap.workspace = true

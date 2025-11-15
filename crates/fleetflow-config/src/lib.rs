@@ -22,8 +22,8 @@ pub fn get_config_dir() -> Result<PathBuf> {
 /// 以下の優先順位で設定ファイルを検索:
 /// 1. 環境変数 FLOW_CONFIG_PATH (直接パス指定)
 /// 2. カレントディレクトリ: flow.local.kdl, .flow.local.kdl, flow.kdl, .flow.kdl
-/// 3. ./.flow/ ディレクトリ内: 同様の順序
-/// 4. ~/.config/flow/flow.kdl (グローバル設定)
+/// 3. ./.fleetflow/ ディレクトリ内: 同様の順序
+/// 4. ~/.config/fleetflow/flow.kdl (グローバル設定)
 pub fn find_flow_file() -> Result<PathBuf> {
     // 1. 環境変数で直接指定
     if let Ok(config_path) = std::env::var("FLOW_CONFIG_PATH") {
@@ -44,8 +44,8 @@ pub fn find_flow_file() -> Result<PathBuf> {
         }
     }
 
-    // 3. ./.flow/ ディレクトリで検索
-    let flow_dir = current_dir.join(".flow");
+    // 3. ./.fleetflow/ ディレクトリで検索
+    let flow_dir = current_dir.join(".fleetflow");
     if flow_dir.is_dir() {
         for filename in &candidates {
             let path = flow_dir.join(filename);
@@ -55,9 +55,9 @@ pub fn find_flow_file() -> Result<PathBuf> {
         }
     }
 
-    // 4. グローバル設定ファイル (~/.config/flow/flow.kdl)
+    // 4. グローバル設定ファイル (~/.config/fleetflow/flow.kdl)
     if let Some(config_dir) = dirs::config_dir() {
-        let global_config = config_dir.join("flow").join("flow.kdl");
+        let global_config = config_dir.join("fleetflow").join("flow.kdl");
         if global_config.exists() {
             return Ok(global_config);
         }
@@ -127,15 +127,15 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let original_dir = std::env::current_dir().unwrap();
 
-        // .flow/ ディレクトリを作成
-        let flow_dir = temp_dir.path().join(".flow");
+        // .fleetflow/ ディレクトリを作成
+        let flow_dir = temp_dir.path().join(".fleetflow");
         fs::create_dir(&flow_dir).unwrap();
         fs::write(flow_dir.join("flow.kdl"), "// in flow dir").unwrap();
 
         std::env::set_current_dir(&temp_dir).unwrap();
 
         let result = find_flow_file().unwrap();
-        assert!(result.ends_with(".flow/flow.kdl"));
+        assert!(result.ends_with(".fleetflow/flow.kdl"));
 
         std::env::set_current_dir(original_dir).unwrap();
     }

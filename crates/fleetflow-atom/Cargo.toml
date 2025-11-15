@@ -1,11 +1,15 @@
 [package]
-name = "flow-atom"
+name = "fleetflow-atom"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Core functionality for FleetFlow"
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+readme = "README.md"
 
 [dependencies]
 kdl.workspace = true

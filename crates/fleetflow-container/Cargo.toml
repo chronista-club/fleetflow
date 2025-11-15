@@ -1,14 +1,18 @@
 [package]
-name = "flow-container"
+name = "fleetflow-container"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Container runtime integration for FleetFlow"
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+readme = "README.md"
 
 [dependencies]
-flow-atom = { path = "../flow-atom" }
+fleetflow-atom = { version = "0.1.1", path = "../fleetflow-atom" }
 
 bollard.workspace = true
 tokio.workspace = true

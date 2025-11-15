@@ -2,7 +2,7 @@
 
 use bollard::container::{Config, CreateContainerOptions};
 use bollard::models::{HostConfig, PortBinding};
-use flow_atom::{FlowConfig, Service};
+use fleetflow_atom::{Flow, Service};
 use std::collections::HashMap;
 
 /// FlowConfigのServiceをDockerのコンテナ設定に変換
@@ -31,7 +31,7 @@ pub fn service_to_container_config(
         let container_port = format!(
             "{}/{}",
             port.container,
-            if port.protocol == flow_atom::Protocol::Udp {
+            if port.protocol == fleetflow_atom::Protocol::Udp {
                 "udp"
             } else {
                 "tcp"
@@ -99,9 +99,8 @@ pub fn service_to_container_config(
 }
 
 /// ステージに含まれるサービスのリストを取得
-pub fn get_stage_services(config: &FlowConfig, stage_name: &str) -> Result<Vec<String>, String> {
-    config
-        .stages
+pub fn get_stage_services(flow: &Flow, stage_name: &str) -> Result<Vec<String>, String> {
+    flow.stages
         .get(stage_name)
         .map(|stage| stage.services.clone())
         .ok_or_else(|| format!("Stage '{}' not found", stage_name))
@@ -110,7 +109,7 @@ pub fn get_stage_services(config: &FlowConfig, stage_name: &str) -> Result<Vec<S
 #[cfg(test)]
 mod tests {
     use super::*;
-    use flow_atom::{Port, Protocol, Service, Stage, Volume};
+    use fleetflow_atom::{Port, Protocol, Service, Stage, Volume};
     use std::collections::HashMap;
     use std::path::PathBuf;
 
@@ -276,9 +275,13 @@ mod tests {
             },
         );
 
-        let config = FlowConfig { services, stages };
+        let flow = Flow {
+            name: "test".to_string(),
+            services,
+            stages,
+        };
 
-        let result = get_stage_services(&config, "local").unwrap();
+        let result = get_stage_services(&flow, "local").unwrap();
         assert_eq!(result.len(), 2);
         assert!(result.contains(&"api".to_string()));
         assert!(result.contains(&"db".to_string()));
@@ -286,12 +289,13 @@ mod tests {
 
     #[test]
     fn test_get_stage_services_not_found() {
-        let config = FlowConfig {
+        let flow = Flow {
+            name: "test".to_string(),
             services: HashMap::new(),
             stages: HashMap::new(),
         };
 
-        let result = get_stage_services(&config, "prod");
+        let result = get_stage_services(&flow, "prod");
         assert!(result.is_err());
         assert_eq!(result.unwrap_err(), "Stage 'prod' not found");
     }

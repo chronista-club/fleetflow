@@ -196,19 +196,19 @@ flow down
 
 ```bash
 # 基本的な使用方法
-flow up --stage=local
-flow down --stage=local
-flow logs --stage=local
-flow ps --stage=local
+fleetflow up --stage=local
+fleetflow down --stage=local
+fleetflow logs --stage=local
+fleetflow ps --stage=local
 
 # 環境変数を使用
 export FLOW_STAGE=local
-flow up
-flow logs --follow
-flow down --remove
+fleetflow up
+fleetflow logs --follow
+fleetflow down --remove
 
 # サービス指定
-flow logs --service=postgres --lines=1000
+fleetflow logs --service=postgres --lines=1000
 ```
 
 ### 非機能仕様
@@ -261,7 +261,7 @@ Flowは「本当に必要な機能」だけを提供することで、学習コ�
 #### 初めて使う人
 
 ```bash
-$ flow up
+$ fleetflow up
 ✗ ステージ名を指定してください: --stage=local または FLOW_STAGE=local
 ```
 
@@ -271,10 +271,10 @@ $ flow up
 
 ```bash
 $ export FLOW_STAGE=local
-$ flow up
-$ flow logs -f
+$ fleetflow up
+$ fleetflow logs -f
 # 開発作業
-$ flow down
+$ fleetflow down
 ```
 
 わずか4つのコマンドで開発サイクルが回る。
@@ -282,11 +282,11 @@ $ flow down
 #### トラブルシューティング
 
 ```bash
-$ flow up
+$ fleetflow up
 ✗ ポートが既に使用されています
 
 解決方法:
-  • 既存のコンテナを停止: flow down --stage=local
+  • 既存のコンテナを停止: fleetflow down --stage=local
 ```
 
 次に何をすればいいかが明確。

@@ -4,7 +4,7 @@
 
 use crate::discovery::{DiscoveredFiles, discover_files, find_project_root};
 use crate::error::{FlowError, Result};
-use crate::model::FlowConfig;
+use crate::model::Flow;
 use crate::parser::parse_kdl_string;
 use crate::template::{TemplateProcessor, Variables, extract_variables};
 use std::path::Path;
@@ -13,7 +13,7 @@ use tracing::{debug, info, instrument};
 /// ファイルあたりの推定バイト数（容量事前確保用）
 const ESTIMATED_BYTES_PER_FILE: usize = 500;
 
-/// プロジェクト全体をロードしてFlowConfigを生成
+/// プロジェクト全体をロードしてFlowを生成
 ///
 /// 以下の処理を実行:
 /// 1. プロジェクトルートの検出
@@ -22,7 +22,7 @@ const ESTIMATED_BYTES_PER_FILE: usize = 500;
 /// 4. テンプレート展開
 /// 5. KDLパース
 #[instrument]
-pub fn load_project() -> Result<FlowConfig> {
+pub fn load_project() -> Result<Flow> {
     info!("Starting project load");
     let project_root = find_project_root()?;
     load_project_from_root(&project_root)
@@ -30,7 +30,7 @@ pub fn load_project() -> Result<FlowConfig> {
 
 /// 指定されたルートディレクトリからプロジェクトをロード
 #[instrument(skip(project_root), fields(project_root = %project_root.display()))]
-pub fn load_project_from_root(project_root: &Path) -> Result<FlowConfig> {
+pub fn load_project_from_root(project_root: &Path) -> Result<Flow> {
     // 1. ファイル発見
     debug!("Step 1: Discovering files");
     let discovered = discover_files(project_root)?;
@@ -49,14 +49,19 @@ pub fn load_project_from_root(project_root: &Path) -> Result<FlowConfig> {
 
     // 4. KDLパース
     debug!("Step 4: Parsing KDL");
-    let config = parse_kdl_string(&expanded_content)?;
+    let name = project_root
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("unnamed")
+        .to_string();
+    let flow = parse_kdl_string(&expanded_content, name)?;
     info!(
-        services = config.services.len(),
-        stages = config.stages.len(),
+        services = flow.services.len(),
+        stages = flow.stages.len(),
         "Project loaded successfully"
     );
 
-    Ok(config)
+    Ok(flow)
 }
 
 /// テンプレートプロセッサを準備
@@ -149,7 +154,7 @@ fn expand_all_files(
 }
 
 /// デバッグ情報を表示しながらロード
-pub fn load_project_with_debug(project_root: &Path) -> Result<FlowConfig> {
+pub fn load_project_with_debug(project_root: &Path) -> Result<Flow> {
     println!("🔍 プロジェクト検出");
     println!("  ルート: {}", project_root.display());
 
@@ -218,13 +223,18 @@ pub fn load_project_with_debug(project_root: &Path) -> Result<FlowConfig> {
     println!("  ✓ 完了 ({}バイト)", expanded.len());
 
     println!("\n⚙️  KDLパース");
-    let config = parse_kdl_string(&expanded)?;
-    println!("  サービス: {}個", config.services.len());
-    println!("  ステージ: {}個", config.stages.len());
+    let name = project_root
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("unnamed")
+        .to_string();
+    let flow = parse_kdl_string(&expanded, name)?;
+    println!("  サービス: {}個", flow.services.len());
+    println!("  ステージ: {}個", flow.stages.len());
 
     println!("\n✅ ロード完了\n");
 
-    Ok(config)
+    Ok(flow)
 }
 
 #[cfg(test)]

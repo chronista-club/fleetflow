@@ -1,11 +1,15 @@
 [package]
-name = "flow-config"
+name = "fleetflow-config"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Configuration management for FleetFlow"
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+readme = "README.md"
 
 [dependencies]
 serde.workspace = true
