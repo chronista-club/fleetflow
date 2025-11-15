@@ -30,3 +30,14 @@ Cargo.lock
 
 # Vantage development database
 .vantage/
+
+# Skills - ホワイトリスト形式
+.claude/skills/*
+!.claude/skills/dev-essentials/
+!.claude/skills/mcp-builder/
+!.claude/skills/github/
+!.claude/skills/mako-flow/
+!.claude/skills/spec-design-guide/
+!.claude/skills/surrealdb/
+!.claude/skills/qdrant/
+!.claude/skills/sycamore/
