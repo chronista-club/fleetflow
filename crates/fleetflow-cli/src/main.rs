@@ -111,7 +111,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Versionコマンドは設定ファイル不要
     if matches!(cli.command, Commands::Version) {
-        println!("unison {}", env!("CARGO_PKG_VERSION"));
+        println!("fleetflow {}", env!("CARGO_PKG_VERSION"));
         return Ok(());
     }
 
