@@ -1,8 +1,8 @@
-# Core Concept - Unison Flow仕様
+# Core Concept - Fleetflow仕様
 
 ## 概要
 
-Unison Flowは、KDL（KDL Document Language）をベースにした、シンプルで強力な環境構築・デプロイツールです。
+Fleetflowは、KDL（KDL Document Language）をベースにした、シンプルで強力な環境構築・デプロイツールです。
 Docker Composeの手軽さを保ちつつ、より少ない記述で、より強力な設定管理を実現します。
 
 ## 設計原則
@@ -20,7 +20,7 @@ service "postgres" {
 
 ### 2. 宣言的な記述
 
-状態を宣言するだけで、Unison Flowが適切に処理します。
+状態を宣言するだけで、Fleetflowが適切に処理します。
 
 ```kdl
 environment "production" {
@@ -171,7 +171,7 @@ service "redis" {
 
 ```
 project/
-├── unison.kdl              # メイン設定ファイル
+├── fleetflow.kdl              # メイン設定ファイル
 ├── common/                 # 共通設定
 │   ├── database.kdl
 │   └── redis.kdl
@@ -188,7 +188,7 @@ project/
 ## 完全な例
 
 ```kdl
-// unison.kdl
+// fleetflow.kdl
 
 // 共通設定をインクルード
 include "common/database.kdl"

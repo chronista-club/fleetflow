@@ -27,7 +27,7 @@ cargo install fleetflow
 ### 基本的な使い方
 
 ```kdl
-// unison.kdl
+// fleetflow.kdl
 environment "development" {
   service "web" {
     image "node:20-alpine"

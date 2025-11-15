@@ -84,6 +84,7 @@ HashMap<String, Service>
 ```
 
 **利点**:
+
 - データの重複なし
 - 不整合の可能性ゼロ
 - メモリ効率的
@@ -146,7 +147,7 @@ pub host: PathBuf,  // String ではなく PathBuf
 ### データフロー
 
 ```
-unison.kdl (ファイル)
+fleetflow.kdl (ファイル)
     ↓ [flow-config]
 設定ファイルパス解決
     ↓ [flow-atom::parser]
@@ -176,6 +177,7 @@ pub struct Service {
 ```
 
 **理由**:
+
 - デフォルト値の明示化
 - `Service::default()` で空の構造体生成
 - Serdeの `#[serde(default)]` と連携
@@ -204,6 +206,7 @@ pub struct FlowConfig {
 ```
 
 **理由**:
+
 - 予測可能な振る舞い
 - デバッグが容易
 - 並行処理で安全
@@ -246,7 +249,7 @@ FlowError (flow-atom)
 
 ConfigError (flow-config)
 ├── ConfigDirNotFound
-├── UnisonFileNotFound(PathBuf)
+├── FleetflowFileNotFound(PathBuf)
 └── Io(std::io::Error)
 ```
 
@@ -255,6 +258,7 @@ ConfigError (flow-config)
 ### レベル1: 構文バリデーション
 
 KDLパーサーが自動実行:
+
 - 括弧の対応
 - 引用符の閉じ忘れ
 

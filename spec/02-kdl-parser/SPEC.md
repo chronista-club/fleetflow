@@ -2,7 +2,7 @@
 
 ## 概要
 
-KDL（KDL Document Language）形式の設定ファイルをパースし、Unison Flowの内部データモデル（`FlowConfig`）に変換する機能を提供します。
+KDL（KDL Document Language）形式の設定ファイルをパースし、Fleetflowの内部データモデル（`FlowConfig`）に変換する機能を提供します。
 
 ## 目標
 
@@ -23,7 +23,7 @@ KDL（KDL Document Language）形式の設定ファイルをパースし、Uniso
 KDLファイルを読み込み、`FlowConfig` に変換できること。
 
 ```rust
-let config = parse_kdl_file("unison.kdl")?;
+let config = parse_kdl_file("fleetflow.kdl")?;
 ```
 
 #### FR-002: KDL文字列のパース
@@ -132,10 +132,10 @@ service "postgres" {
 **アクター**: 開発者
 
 **前提条件**:
-- 有効なunison.kdlファイルが存在
+- 有効なfleetflow.kdlファイルが存在
 
 **フロー**:
-1. 開発者が `parse_kdl_file("unison.kdl")` を呼び出す
+1. 開発者が `parse_kdl_file("fleetflow.kdl")` を呼び出す
 2. パーサーがファイルを読み込み
 3. KDL構文を解析
 4. `FlowConfig` 構造体を生成

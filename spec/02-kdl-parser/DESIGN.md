@@ -2,7 +2,7 @@
 
 ## アーキテクチャ概要
 
-KDL Parserは、`kdl` crateを使用してKDL形式のテキストをパースし、Unison Flow内部のデータモデルに変換する役割を担います。
+KDL Parserは、`kdl` crateを使用してKDL形式のテキストをパースし、Fleetflow内部のデータモデルに変換する役割を担います。
 
 ```
 Input (KDL File/String)
@@ -54,7 +54,7 @@ fn infer_image_name(service_name: &str, version: Option<&str>) -> String
 ### 1. ファイル読み込み
 
 ```rust
-parse_kdl_file("unison.kdl")
+parse_kdl_file("fleetflow.kdl")
     ↓
 fs::read_to_string()  // ファイル → String
     ↓
@@ -262,12 +262,12 @@ fn test_parse_simple_service() {
 
 ### 統合テスト
 
-#### シナリオ1: 実際のunison.kdlファイル
+#### シナリオ1: 実際のfleetflow.kdlファイル
 
 ```rust
 #[test]
 fn test_parse_real_config() {
-    let config = parse_kdl_file("tests/fixtures/unison.kdl").unwrap();
+    let config = parse_kdl_file("tests/fixtures/fleetflow.kdl").unwrap();
     // 期待される構造を検証
 }
 ```

@@ -31,7 +31,7 @@ sequenceDiagram
     participant Docker
     participant OS
 
-    User->>Flow: unison up --stage=local
+    User->>Flow: fleetflow up --stage=local
     Flow->>Flow: flow.kdl を解析
     Flow->>Docker: コンテナ作成リクエスト
     Docker->>OS: プロセス起動
@@ -46,7 +46,7 @@ sequenceDiagram
 
 #### 抽象化レイヤー
 
-Unison Flowは、プロセス管理を段階的に抽象化します：
+Fleetflowは、プロセス管理を段階的に抽象化します：
 
 ```mermaid
 graph TD
@@ -78,19 +78,19 @@ graph TD
 ```mermaid
 stateDiagram-v2
     [*] --> 定義: flow.kdlに記述
-    定義 --> 解析: unison up
+    定義 --> 解析: fleetflow up
     解析 --> イメージPull: Dockerイメージ取得
     イメージPull --> コンテナ作成: docker create
     コンテナ作成 --> プロセス起動: docker start
     プロセス起動 --> 実行中: プロセスが動作
 
-    実行中 --> 停止中: unison down
-    停止中 --> プロセス起動: unison up
+    実行中 --> 停止中: fleetflow down
+    停止中 --> プロセス起動: fleetflow up
 
     実行中 --> 異常終了: クラッシュ
     異常終了 --> プロセス起動: 再起動
 
-    停止中 --> 削除: unison down --remove
+    停止中 --> 削除: fleetflow down --remove
     削除 --> [*]
 
     note right of 実行中
@@ -101,11 +101,11 @@ stateDiagram-v2
 
 ### 基本概念の定義
 
-Unison Flowでは2つの基本概念を使用します：
+Fleetflowでは2つの基本概念を使用します：
 
 #### サービス（Service）
 
-**サービス**とは、Unison Flowにおける最小単位の実行可能なコンポーネントです。
+**サービス**とは、Fleetflowにおける最小単位の実行可能なコンポーネントです。
 
 サービスは以下の特性を持ちます：
 
@@ -284,16 +284,16 @@ service "worker" {
 
 ```bash
 # ローカル開発
-unison up --stage=local
+fleetflow up --stage=local
 
 # クラウド開発環境
-unison up --stage=dev
+fleetflow up --stage=dev
 
 # ステージング検証
-unison up --stage=stg
+fleetflow up --stage=stg
 
 # 本番デプロイ
-unison up --stage=prd
+fleetflow up --stage=prd
 ```
 
 ##### ステージの責務
