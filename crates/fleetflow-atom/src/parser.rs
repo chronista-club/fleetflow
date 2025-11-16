@@ -30,9 +30,9 @@ pub fn parse_kdl_string(content: &str, default_name: String) -> Result<Flow> {
         match node.name().value() {
             "project" => {
                 // projectノードから名前を取得
-                if let Some(project_name) = node.entries()
-                    .first()
-                    .and_then(|e| e.value().as_string()) {
+                if let Some(project_name) =
+                    node.entries().first().and_then(|e| e.value().as_string())
+                {
                     name = project_name.to_string();
                 }
             }
@@ -207,25 +207,33 @@ fn parse_port(node: &KdlNode) -> Option<Port> {
     // 名前付き引数を優先
     let host = node
         .get("host")
-        .and_then(|e| e.value().as_i64())
+        .and_then(|e| e.as_integer())
         .map(|v| v as u16)
         .or_else(|| {
             // フォールバック: 位置引数
-            node.entries().get(0)?.value().as_i64().map(|v| v as u16)
+            node.entries()
+                .get(0)?
+                .value()
+                .as_integer()
+                .map(|v| v as u16)
         })?;
 
     let container = node
         .get("container")
-        .and_then(|e| e.value().as_i64())
+        .and_then(|e| e.as_integer())
         .map(|v| v as u16)
         .or_else(|| {
             // フォールバック: 位置引数
-            node.entries().get(1)?.value().as_i64().map(|v| v as u16)
+            node.entries()
+                .get(1)?
+                .value()
+                .as_integer()
+                .map(|v| v as u16)
         })?;
 
     let protocol = node
         .get("protocol")
-        .and_then(|e| e.value().as_string())
+        .and_then(|e| e.as_string())
         .and_then(|s| match s {
             "tcp" => Some(Protocol::Tcp),
             "udp" => Some(Protocol::Udp),
@@ -235,7 +243,7 @@ fn parse_port(node: &KdlNode) -> Option<Port> {
 
     let host_ip = node
         .get("host_ip")
-        .and_then(|e| e.value().as_string())
+        .and_then(|e| e.as_string())
         .map(|s| s.to_string());
 
     Some(Port {
@@ -255,7 +263,7 @@ fn parse_volume(node: &KdlNode) -> Option<Volume> {
 
     let read_only = node
         .get("read_only")
-        .and_then(|e| e.value().as_bool())
+        .and_then(|e| e.as_bool())
         .unwrap_or(false);
 
     Some(Volume {

@@ -172,9 +172,10 @@ pub fn extract_variables(kdl_content: &str) -> Result<Variables> {
 fn kdl_value_to_json(value: &kdl::KdlValue) -> serde_json::Value {
     if let Some(s) = value.as_string() {
         serde_json::Value::String(s.to_string())
-    } else if let Some(i) = value.as_i64() {
-        serde_json::Value::Number(i.into())
-    } else if let Some(f) = value.as_f64() {
+    } else if let Some(i) = value.as_integer() {
+        // i128をi64に変換してからJSONに変換
+        serde_json::Value::Number((i as i64).into())
+    } else if let Some(f) = value.as_float() {
         serde_json::Number::from_f64(f)
             .map(serde_json::Value::Number)
             .unwrap_or(serde_json::Value::Null)

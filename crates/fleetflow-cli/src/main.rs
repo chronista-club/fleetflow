@@ -225,7 +225,12 @@ async fn main() -> anyhow::Result<()> {
 
                 // サービスをコンテナ設定に変換
                 let (container_config, create_options) =
-                    fleetflow_container::service_to_container_config(service_name, service, &stage_name, &config.name);
+                    fleetflow_container::service_to_container_config(
+                        service_name,
+                        service,
+                        &stage_name,
+                        &config.name,
+                    );
 
                 // コンテナ作成
                 match docker
@@ -236,7 +241,13 @@ async fn main() -> anyhow::Result<()> {
                         println!("  ✓ コンテナ作成: {}", response.id);
 
                         // コンテナ起動
-                        match docker.start_container::<String>(&response.id, None).await {
+                        match docker
+                            .start_container(
+                                &response.id,
+                                None::<bollard::query_parameters::StartContainerOptions>,
+                            )
+                            .await
+                        {
                             Ok(_) => println!("  ✓ 起動完了"),
                             Err(e) => {
                                 eprintln!("  ✗ 起動エラー: {}", e);
@@ -253,7 +264,13 @@ async fn main() -> anyhow::Result<()> {
                         let container_name = &create_options.name;
 
                         // 既存コンテナを起動
-                        match docker.start_container::<String>(container_name, None).await {
+                        match docker
+                            .start_container(
+                                container_name,
+                                None::<bollard::query_parameters::StartContainerOptions>,
+                            )
+                            .await
+                        {
                             Ok(_) => println!("  ✓ 既存コンテナを起動"),
                             Err(bollard::errors::Error::DockerResponseServerError {
                                 status_code: 304,
@@ -373,13 +390,13 @@ async fn main() -> anyhow::Result<()> {
                 let container_name = format!("flow-{}", service_name);
 
                 // コンテナを停止
-                match docker.stop_container(&container_name, None).await {
+                match docker.stop_container(&container_name, None::<bollard::query_parameters::StopContainerOptions>).await {
                     Ok(_) => {
                         println!("  ✓ 停止完了");
 
                         // --remove フラグが指定されている場合は削除
                         if remove {
-                            match docker.remove_container(&container_name, None).await {
+                            match docker.remove_container(&container_name, None::<bollard::query_parameters::RemoveContainerOptions>).await {
                                 Ok(_) => println!("  ✓ 削除完了"),
                                 Err(e) => println!("  ⚠ 削除エラー: {}", e),
                             }
@@ -393,7 +410,7 @@ async fn main() -> anyhow::Result<()> {
 
                         // --remove フラグが指定されている場合は削除
                         if remove {
-                            match docker.remove_container(&container_name, None).await {
+                            match docker.remove_container(&container_name, None::<bollard::query_parameters::RemoveContainerOptions>).await {
                                 Ok(_) => println!("  ✓ 削除完了"),
                                 Err(e) => println!("  ⚠ 削除エラー: {}", e),
                             }

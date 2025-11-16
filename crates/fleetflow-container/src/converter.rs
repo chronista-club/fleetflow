@@ -92,12 +92,27 @@ pub fn service_to_container_config(
         ..Default::default()
     });
 
+    // ラベル設定（OrbStackグループ化対応）
+    let mut labels = HashMap::new();
+    labels.insert(
+        "com.docker.compose.project".to_string(),
+        format!("{}-{}", project_name, stage_name),
+    );
+    labels.insert(
+        "com.docker.compose.service".to_string(),
+        service_name.to_string(),
+    );
+    labels.insert("fleetflow.project".to_string(), project_name.to_string());
+    labels.insert("fleetflow.stage".to_string(), stage_name.to_string());
+    labels.insert("fleetflow.service".to_string(), service_name.to_string());
+
     // コンテナ設定
     let config = Config {
         image: Some(image),
         env: Some(env),
         exposed_ports: Some(exposed_ports),
         host_config,
+        labels: Some(labels),
         cmd: service.command.as_ref().map(|c| {
             // コマンドをスペースで分割
             c.split_whitespace().map(String::from).collect()
