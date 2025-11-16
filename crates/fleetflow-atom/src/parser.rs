@@ -19,14 +19,23 @@ pub fn parse_kdl_file<P: AsRef<Path>>(path: P) -> Result<Flow> {
 }
 
 /// KDL文字列をパース
-pub fn parse_kdl_string(content: &str, name: String) -> Result<Flow> {
+pub fn parse_kdl_string(content: &str, default_name: String) -> Result<Flow> {
     let doc: KdlDocument = content.parse()?;
 
     let mut stages = HashMap::new();
     let mut services = HashMap::new();
+    let mut name = default_name;
 
     for node in doc.nodes() {
         match node.name().value() {
+            "project" => {
+                // projectノードから名前を取得
+                if let Some(project_name) = node.entries()
+                    .first()
+                    .and_then(|e| e.value().as_string()) {
+                    name = project_name.to_string();
+                }
+            }
             "stage" => {
                 let (stage_name, stage) = parse_stage(node)?;
                 stages.insert(stage_name, stage);
@@ -42,8 +51,7 @@ pub fn parse_kdl_string(content: &str, name: String) -> Result<Flow> {
                 // TODO: 変数定義の実装
             }
             _ => {
-                // 不明なノードは警告してスキップ
-                eprintln!("Warning: Unknown node '{}'", node.name().value());
+                // 不明なノードはスキップ（projectなどの追加ノードも許可）
             }
         }
     }

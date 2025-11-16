@@ -225,7 +225,7 @@ async fn main() -> anyhow::Result<()> {
 
                 // サービスをコンテナ設定に変換
                 let (container_config, create_options) =
-                    fleetflow_container::service_to_container_config(service_name, service);
+                    fleetflow_container::service_to_container_config(service_name, service, &stage_name, &config.name);
 
                 // コンテナ作成
                 match docker
