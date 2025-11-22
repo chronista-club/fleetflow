@@ -41,6 +41,7 @@ spec.old/
 !.claude/skills/github/
 !.claude/skills/mcp-builder/
 !.claude/skills/physical-event/
+!.claude/skills/pre-pr-check/
 !.claude/skills/qdrant/
 !.claude/skills/spec-design-guide/
 !.claude/skills/surrealdb/
