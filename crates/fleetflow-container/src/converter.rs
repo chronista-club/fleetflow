@@ -337,4 +337,94 @@ mod tests {
 
         assert_eq!(options.name, "myapp-dev-my-service");
     }
+
+    #[test]
+    fn test_orbstack_labels_generation() {
+        let service = Service::default();
+        let (config, _) = service_to_container_config("postgres", &service, "local", "vantage");
+
+        let labels = config.labels.unwrap();
+
+        // OrbStackグループ化用ラベル
+        assert_eq!(
+            labels.get("com.docker.compose.project"),
+            Some(&"vantage-local".to_string())
+        );
+        assert_eq!(
+            labels.get("com.docker.compose.service"),
+            Some(&"postgres".to_string())
+        );
+
+        // FleetFlowメタデータラベル
+        assert_eq!(
+            labels.get("fleetflow.project"),
+            Some(&"vantage".to_string())
+        );
+        assert_eq!(
+            labels.get("fleetflow.stage"),
+            Some(&"local".to_string())
+        );
+        assert_eq!(
+            labels.get("fleetflow.service"),
+            Some(&"postgres".to_string())
+        );
+
+        // 全部で5つのラベルがあることを確認
+        assert_eq!(labels.len(), 5);
+    }
+
+    #[test]
+    fn test_orbstack_labels_with_different_stages() {
+        let service = Service::default();
+
+        // localステージ
+        let (config_local, _) =
+            service_to_container_config("api", &service, "local", "myapp");
+        let labels_local = config_local.labels.unwrap();
+        assert_eq!(
+            labels_local.get("com.docker.compose.project"),
+            Some(&"myapp-local".to_string())
+        );
+
+        // prodステージ
+        let (config_prod, _) = service_to_container_config("api", &service, "prod", "myapp");
+        let labels_prod = config_prod.labels.unwrap();
+        assert_eq!(
+            labels_prod.get("com.docker.compose.project"),
+            Some(&"myapp-prod".to_string())
+        );
+        assert_eq!(
+            labels_prod.get("fleetflow.stage"),
+            Some(&"prod".to_string())
+        );
+    }
+
+    #[test]
+    fn test_orbstack_labels_with_multiple_projects() {
+        let service = Service::default();
+
+        // プロジェクトA
+        let (config_a, _) = service_to_container_config("db", &service, "local", "project-a");
+        let labels_a = config_a.labels.unwrap();
+        assert_eq!(
+            labels_a.get("com.docker.compose.project"),
+            Some(&"project-a-local".to_string())
+        );
+        assert_eq!(
+            labels_a.get("fleetflow.project"),
+            Some(&"project-a".to_string())
+        );
+
+        // プロジェクトB
+        let (config_b, _) = service_to_container_config("db", &service, "local", "project-b");
+        let labels_b = config_b.labels.unwrap();
+        assert_eq!(
+            labels_b.get("com.docker.compose.project"),
+            Some(&"project-b-local".to_string())
+        );
+        assert_eq!(
+            labels_b.get("fleetflow.project"),
+            Some(&"project-b".to_string())
+        );
+    }
 }

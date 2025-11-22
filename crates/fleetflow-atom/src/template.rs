@@ -285,7 +285,7 @@ service "{{ service }}"
 variables {
     app_version "1.0.0"
     port 8080
-    debug true
+    debug #true
 }
 "#;
 

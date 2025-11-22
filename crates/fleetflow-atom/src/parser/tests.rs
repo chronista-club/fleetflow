@@ -101,7 +101,7 @@ fn test_parse_service_with_volumes() {
         service "db" {
             volumes {
                 volume "./data" "/var/lib/postgresql/data"
-                volume "./config" "/etc/config" read_only=true
+                volume "./config" "/etc/config" read_only=#true
             }
         }
     "#;
@@ -292,4 +292,61 @@ fn test_parse_service_without_command() {
     let service = &flow.services["postgres"];
 
     assert_eq!(service.command, None);
+}
+
+#[test]
+fn test_parse_project_name() {
+    let kdl = r#"
+        project "my-project"
+
+        service "api" {
+            version "1.0"
+        }
+    "#;
+
+    let flow = parse_kdl_string(kdl, "default".to_string()).unwrap();
+
+    // projectノードで指定した名前が使われる
+    assert_eq!(flow.name, "my-project");
+}
+
+#[test]
+fn test_parse_project_name_fallback() {
+    let kdl = r#"
+        service "api" {
+            version "1.0"
+        }
+    "#;
+
+    let flow = parse_kdl_string(kdl, "fallback-name".to_string()).unwrap();
+
+    // projectノードがない場合はデフォルト名が使われる
+    assert_eq!(flow.name, "fallback-name");
+}
+
+#[test]
+fn test_parse_full_flow_with_project() {
+    let kdl = r#"
+        project "fleetflow"
+
+        service "postgres" {
+            version "16"
+        }
+
+        service "redis" {
+            version "7"
+        }
+
+        stage "local" {
+            service "postgres"
+            service "redis"
+        }
+    "#;
+
+    let flow = parse_kdl_string(kdl, "default".to_string()).unwrap();
+
+    assert_eq!(flow.name, "fleetflow");
+    assert_eq!(flow.services.len(), 2);
+    assert_eq!(flow.stages.len(), 1);
+    assert_eq!(flow.stages["local"].services.len(), 2);
 }
