@@ -9,6 +9,8 @@ use std::collections::HashMap;
 pub fn service_to_container_config(
     service_name: &str,
     service: &Service,
+    stage_name: &str,
+    project_name: &str,
 ) -> (Config<String>, CreateContainerOptions<String>) {
     // イメージ名の決定
     // 1. imageとversionの両方が指定されている場合は "image:version"
@@ -90,12 +92,27 @@ pub fn service_to_container_config(
         ..Default::default()
     });
 
+    // ラベル設定（OrbStackグループ化対応）
+    let mut labels = HashMap::new();
+    labels.insert(
+        "com.docker.compose.project".to_string(),
+        format!("{}-{}", project_name, stage_name),
+    );
+    labels.insert(
+        "com.docker.compose.service".to_string(),
+        service_name.to_string(),
+    );
+    labels.insert("fleetflow.project".to_string(), project_name.to_string());
+    labels.insert("fleetflow.stage".to_string(), stage_name.to_string());
+    labels.insert("fleetflow.service".to_string(), service_name.to_string());
+
     // コンテナ設定
     let config = Config {
         image: Some(image),
         env: Some(env),
         exposed_ports: Some(exposed_ports),
         host_config,
+        labels: Some(labels),
         cmd: service.command.as_ref().map(|c| {
             // コマンドをスペースで分割
             c.split_whitespace().map(String::from).collect()
@@ -104,7 +121,7 @@ pub fn service_to_container_config(
     };
 
     let options = CreateContainerOptions {
-        name: format!("flow-{}", service_name),
+        name: format!("{}-{}-{}", project_name, stage_name, service_name),
         platform: None,
     };
 
@@ -129,22 +146,22 @@ mod tests {
     #[test]
     fn test_service_to_container_config_basic() {
         let service = Service {
-            image: Some("postgres:16".to_string()),
+            image: Some("postgres".to_string()),
             version: Some("16".to_string()),
             ..Default::default()
         };
 
-        let (config, options) = service_to_container_config("postgres", &service);
+        let (config, options) = service_to_container_config("postgres", &service, "local", "vantage");
 
         assert_eq!(config.image, Some("postgres:16".to_string()));
-        assert_eq!(options.name, "flow-postgres");
+        assert_eq!(options.name, "vantage-local-postgres");
     }
 
     #[test]
     fn test_service_to_container_config_default_image() {
         let service = Service::default();
 
-        let (config, _) = service_to_container_config("redis", &service);
+        let (config, _) = service_to_container_config("redis", &service, "local", "test");
 
         // imageが未指定の場合は"サービス名:latest"になる
         assert_eq!(config.image, Some("redis:latest".to_string()));
@@ -164,7 +181,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (config, _) = service_to_container_config("api", &service);
+        let (config, _) = service_to_container_config("api", &service, "local", "test");
 
         let env = config.env.unwrap();
         assert!(env.contains(&"DATABASE_URL=postgres://localhost".to_string()));
@@ -193,7 +210,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (config, _) = service_to_container_config("web", &service);
+        let (config, _) = service_to_container_config("web", &service, "local", "test");
 
         let exposed_ports = config.exposed_ports.unwrap();
         assert!(exposed_ports.contains_key("3000/tcp"));
@@ -224,7 +241,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (config, _) = service_to_container_config("dns", &service);
+        let (config, _) = service_to_container_config("dns", &service, "local", "test");
 
         let exposed_ports = config.exposed_ports.unwrap();
         assert!(exposed_ports.contains_key("53/udp"));
@@ -250,7 +267,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (config, _) = service_to_container_config("db", &service);
+        let (config, _) = service_to_container_config("db", &service, "local", "test");
 
         let host_config = config.host_config.unwrap();
         let binds = host_config.binds.unwrap();
@@ -267,7 +284,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (config, _) = service_to_container_config("db", &service);
+        let (config, _) = service_to_container_config("db", &service, "local", "test");
 
         let cmd = config.cmd.unwrap();
         assert_eq!(cmd, vec!["start", "--user", "root", "--pass", "root"]);
@@ -316,8 +333,8 @@ mod tests {
     #[test]
     fn test_container_name_format() {
         let service = Service::default();
-        let (_, options) = service_to_container_config("my-service", &service);
+        let (_, options) = service_to_container_config("my-service", &service, "dev", "myapp");
 
-        assert_eq!(options.name, "flow-my-service");
+        assert_eq!(options.name, "myapp-dev-my-service");
     }
 }

@@ -19,14 +19,23 @@ pub fn parse_kdl_file<P: AsRef<Path>>(path: P) -> Result<Flow> {
 }
 
 /// KDL文字列をパース
-pub fn parse_kdl_string(content: &str, name: String) -> Result<Flow> {
+pub fn parse_kdl_string(content: &str, default_name: String) -> Result<Flow> {
     let doc: KdlDocument = content.parse()?;
 
     let mut stages = HashMap::new();
     let mut services = HashMap::new();
+    let mut name = default_name;
 
     for node in doc.nodes() {
         match node.name().value() {
+            "project" => {
+                // projectノードから名前を取得
+                if let Some(project_name) =
+                    node.entries().first().and_then(|e| e.value().as_string())
+                {
+                    name = project_name.to_string();
+                }
+            }
             "stage" => {
                 let (stage_name, stage) = parse_stage(node)?;
                 stages.insert(stage_name, stage);
@@ -42,8 +51,7 @@ pub fn parse_kdl_string(content: &str, name: String) -> Result<Flow> {
                 // TODO: 変数定義の実装
             }
             _ => {
-                // 不明なノードは警告してスキップ
-                eprintln!("Warning: Unknown node '{}'", node.name().value());
+                // 不明なノードはスキップ（projectなどの追加ノードも許可）
             }
         }
     }
@@ -199,25 +207,33 @@ fn parse_port(node: &KdlNode) -> Option<Port> {
     // 名前付き引数を優先
     let host = node
         .get("host")
-        .and_then(|e| e.value().as_i64())
+        .and_then(|e| e.as_integer())
         .map(|v| v as u16)
         .or_else(|| {
             // フォールバック: 位置引数
-            node.entries().get(0)?.value().as_i64().map(|v| v as u16)
+            node.entries()
+                .get(0)?
+                .value()
+                .as_integer()
+                .map(|v| v as u16)
         })?;
 
     let container = node
         .get("container")
-        .and_then(|e| e.value().as_i64())
+        .and_then(|e| e.as_integer())
         .map(|v| v as u16)
         .or_else(|| {
             // フォールバック: 位置引数
-            node.entries().get(1)?.value().as_i64().map(|v| v as u16)
+            node.entries()
+                .get(1)?
+                .value()
+                .as_integer()
+                .map(|v| v as u16)
         })?;
 
     let protocol = node
         .get("protocol")
-        .and_then(|e| e.value().as_string())
+        .and_then(|e| e.as_string())
         .and_then(|s| match s {
             "tcp" => Some(Protocol::Tcp),
             "udp" => Some(Protocol::Udp),
@@ -227,7 +243,7 @@ fn parse_port(node: &KdlNode) -> Option<Port> {
 
     let host_ip = node
         .get("host_ip")
-        .and_then(|e| e.value().as_string())
+        .and_then(|e| e.as_string())
         .map(|s| s.to_string());
 
     Some(Port {
@@ -247,7 +263,7 @@ fn parse_volume(node: &KdlNode) -> Option<Volume> {
 
     let read_only = node
         .get("read_only")
-        .and_then(|e| e.value().as_bool())
+        .and_then(|e| e.as_bool())
         .unwrap_or(false);
 
     Some(Volume {

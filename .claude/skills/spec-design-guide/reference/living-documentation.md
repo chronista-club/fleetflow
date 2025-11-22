@@ -4,6 +4,57 @@
 
 ドキュメントは常に**現実とコードの写像**であり、リポジトリと共に進化する生きたテキストです。
 
+## 生きたメモリーとして機能する
+
+Living Documentationは、**AIエージェント（Claude）が信頼して活用できる生きたメモリー**として機能します。
+
+### なぜ「生きたメモリー」なのか
+
+**従来の静的ドキュメント**:
+
+- ❌ 書いた時点で古くなる
+- ❌ 実装と乖離していく
+- ❌ 信頼できず、読まれなくなる
+- ❌ 更新コストが高く放置される
+
+**Living Documentation（生きたメモリー）**:
+
+- ✅ コードと常に同期している
+- ✅ 実装を正確に反映している
+- ✅ AIエージェントが信頼して活用できる
+- ✅ コード変更時に自然に更新される
+
+### AIエージェントによる活用
+
+AIエージェント（Claude）は、Living Documentationを以下のように活用します：
+
+1. **コード変更前の理解**
+   - SPEC.mdを読んで「なぜこの設計なのか」を理解
+   - 設計思想を把握してから変更を行う
+
+2. **設計意図の継承**
+   - DESIGN.mdを参照して実装方針を理解
+   - 既存の設計パターンに沿った実装
+
+3. **過去の判断から学習**
+   - 変更履歴を読んで過去の意思決定を理解
+   - 同じ理由で同じ間違いを繰り返さない
+
+4. **自律的な作業**
+   - ドキュメントを信頼して判断を下せる
+   - 人間の介入なしに適切な実装が可能
+
+### 信頼性の維持
+
+Living Documentationが「信頼できる生きたメモリー」であり続けるために：
+
+- 📅 **常に新鮮**: コード変更と同時に更新
+- ✅ **正確性**: 実装と完全に一致
+- 📝 **明確性**: AIエージェントが理解できる明確な記述
+- 🔄 **進化**: プロジェクトの成長とともに成長
+
+**結果**: AIエージェントは、ドキュメントを読むことで、プロジェクトの文脈を理解し、適切な判断を下し、品質の高いコードを書くことができる。
+
 ## 必須ルール
 
 ### 1. コード変更時は必ずドキュメントを更新
@@ -13,13 +64,15 @@
 ```
 
 **例**:
-- `parser.rs`を修正 → `spec/02-kdl-parser/DESIGN.md`を確認・更新
-- データモデル変更 → `spec/01-core-concept/SPEC.md`を更新
+
+- `parser.rs`を修正 → `spec/02-parser-feature/DESIGN.md`を確認・更新
+- データモデル変更 → `spec/01-feature-name/SPEC.md`を更新
 - 新機能追加 → 新しいspec/ディレクトリを作成
 
 ### 2. ドキュメントとコードの不一致は技術的負債
 
 以下は**バグ**として扱う:
+
 - ドキュメントに書かれているが実装されていない機能
 - 実装されているがドキュメントに記載されていない振る舞い
 - 古い設計思想が残っているドキュメント
@@ -32,6 +85,7 @@
 ## 変更履歴
 
 ### 2025-01-06: イメージ名推測ロジック追加
+
 - **理由**: 設定の簡略化
 - **影響**: `parse_service()`の挙動変更
 - **コミット**: a9753e2
@@ -43,20 +97,20 @@
 
 ```bash
 # 1. コード変更
-vim crates/flow-atom/src/parser.rs
+vim src/parser/core.rs
 
 # 2. 関連ドキュメントを確認
-cat spec/02-kdl-parser/DESIGN.md
+cat spec/02-parser-feature/DESIGN.md
 
 # 3. ドキュメントが現実と一致しているか確認
 # 不一致なら更新
-vim spec/02-kdl-parser/DESIGN.md
+vim spec/02-parser-feature/DESIGN.md
 
 # 4. チェックリストを更新
 # DESIGN.mdの実装チェックリストにチェック
 
 # 5. コミット（ドキュメント更新も含める）
-git add crates/flow-atom/src/parser.rs spec/02-kdl-parser/DESIGN.md
+git add src/parser/core.rs spec/02-parser-feature/DESIGN.md
 git commit -m "パーサー改善とドキュメント更新"
 
 # 6. PRの説明にドキュメント更新を記載
@@ -65,6 +119,7 @@ git commit -m "パーサー改善とドキュメント更新"
 ### コードレビュー時
 
 レビュアーは以下を確認:
+
 - [ ] コード変更に対応するドキュメント更新があるか
 - [ ] SPEC.mdの哲学と実装が一致しているか
 - [ ] DESIGN.mdの設計と実装が一致しているか
@@ -76,10 +131,10 @@ git commit -m "パーサー改善とドキュメント更新"
 
 ```bash
 # 各spec/ディレクトリを順番に確認
-cd spec/01-core-concept
+cd spec/01-feature-name
 # SPEC.mdとmodel.rsが一致しているか
 
-cd ../02-kdl-parser
+cd ../02-parser-feature
 # DESIGN.mdとparser.rsが一致しているか
 ```
 
@@ -114,7 +169,7 @@ cd ../02-kdl-parser
 ///       imageは"postgres:16"となる
 #[test]
 fn test_infer_image_name_with_version() {
-    // spec/02-kdl-parser/SPEC.md FS-001に対応
+    // spec/02-parser-feature/SPEC.md FS-001に対応
     let result = infer_image_name("postgres", Some("16"));
     assert_eq!(result, "postgres:16");
 }
@@ -123,12 +178,14 @@ fn test_infer_image_name_with_version() {
 ## ドキュメントの品質指標
 
 ### 良いドキュメント
+
 - ✅ コードを読まなくても理解できる
 - ✅ なぜその設計なのか理由が書かれている
 - ✅ 実装と100%一致している
 - ✅ 最終更新日が新しい
 
 ### 悪いドキュメント
+
 - ❌ 古い設計思想が残っている
 - ❌ 実装と矛盾している
 - ❌ 「TODO」が放置されている
@@ -196,6 +253,7 @@ Refs: #issue番号
 5. 実装チェックリストを更新
 
 **禁止**:
+
 - ドキュメントを確認せずにコード変更
 - コード変更後にドキュメント更新を忘れる
 - 古い設計思想のドキュメントを放置
