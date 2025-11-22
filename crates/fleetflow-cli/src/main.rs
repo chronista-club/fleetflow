@@ -387,7 +387,8 @@ async fn main() -> anyhow::Result<()> {
                     format!("■ {} を停止中...", service_name).yellow().bold()
                 );
 
-                let container_name = format!("flow-{}", service_name);
+                // OrbStack連携の命名規則を使用: {project}-{stage}-{service}
+                let container_name = format!("{}-{}-{}", config.name, stage_name, service_name);
 
                 // コンテナを停止
                 match docker.stop_container(&container_name, None::<bollard::query_parameters::StopContainerOptions>).await {
@@ -460,17 +461,21 @@ async fn main() -> anyhow::Result<()> {
                     .ok_or_else(|| anyhow::anyhow!("ステージ '{}' が見つかりません", stage_name))?;
 
                 let mut filter_map = std::collections::HashMap::new();
+                // OrbStack連携の命名規則: {project}-{stage}-{service}
                 let names: Vec<String> = stage_config
                     .services
                     .iter()
-                    .map(|s| format!("flow-{}", s))
+                    .map(|s| format!("{}-{}-{}", config.name, stage_name, s))
                     .collect();
                 filter_map.insert("name".to_string(), names);
                 Some(filter_map)
             } else {
-                // flow- プレフィックスのコンテナのみ
+                // fleetflow.project ラベルでフィルタ
                 let mut filter_map = std::collections::HashMap::new();
-                filter_map.insert("name".to_string(), vec!["flow-".to_string()]);
+                filter_map.insert(
+                    "label".to_string(),
+                    vec![format!("fleetflow.project={}", config.name)],
+                );
                 Some(filter_map)
             };
 
@@ -550,22 +555,32 @@ async fn main() -> anyhow::Result<()> {
             // Docker接続
             let docker = init_docker_with_error_handling().await?;
 
+            // ステージ名を先に取得
+            let stage_name = if let Some(ref service_name) = service {
+                // サービス指定の場合でもステージ名が必要
+                stage.as_ref().ok_or_else(|| {
+                    anyhow::anyhow!("Logsコマンドにはステージ名の指定が必要です（-s/--stage）")
+                })?
+            } else if let Some(ref s) = stage {
+                s
+            } else {
+                return Err(anyhow::anyhow!(
+                    "ステージ名を指定してください（-s/--stage）"
+                ));
+            };
+
+            println!("ステージ: {}", stage_name.cyan());
+
             // 対象サービスの決定
             let target_services = if let Some(service_name) = service {
                 vec![service_name]
-            } else if let Some(stage_name) = stage {
-                println!("ステージ: {}", stage_name.cyan());
-
+            } else {
                 let stage_config = config
                     .stages
-                    .get(&stage_name)
+                    .get(stage_name)
                     .ok_or_else(|| anyhow::anyhow!("ステージ '{}' が見つかりません", stage_name))?;
 
                 stage_config.services.clone()
-            } else {
-                return Err(anyhow::anyhow!(
-                    "ステージ名またはサービス名を指定してください"
-                ));
             };
 
             println!();
@@ -580,7 +595,8 @@ async fn main() -> anyhow::Result<()> {
             ];
 
             for (idx, service_name) in target_services.iter().enumerate() {
-                let container_name = format!("flow-{}", service_name);
+                // OrbStack連携の命名規則を使用: {project}-{stage}-{service}
+                let container_name = format!("{}-{}-{}", config.name, stage_name, service_name);
                 let service_color = colors[idx % colors.len()];
 
                 if !follow {
