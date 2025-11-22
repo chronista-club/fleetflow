@@ -4,6 +4,72 @@ use clap::{Parser, Subcommand};
 use colored::Colorize;
 use std::path::PathBuf;
 
+/// イメージ名とタグを分離
+/// 例: "redis:7-alpine" -> ("redis", "7-alpine")
+///     "postgres" -> ("postgres", "latest")
+fn parse_image_tag(image: &str) -> (&str, &str) {
+    if let Some((name, tag)) = image.split_once(':') {
+        (name, tag)
+    } else {
+        (image, "latest")
+    }
+}
+
+/// Dockerイメージを自動的にpull
+async fn pull_image(
+    docker: &bollard::Docker,
+    image: &str,
+) -> anyhow::Result<()> {
+    use futures_util::stream::StreamExt;
+
+    let (image_name, tag) = parse_image_tag(image);
+
+    println!("  ℹ イメージが見つかりません: {}", image.cyan());
+    println!("  ↓ イメージをダウンロード中...");
+
+    let options = bollard::image::CreateImageOptions {
+        from_image: image_name,
+        tag,
+        ..Default::default()
+    };
+
+    let mut stream = docker.create_image(Some(options), None, None::<bollard::auth::DockerCredentials>);
+
+    while let Some(info) = stream.next().await {
+        match info {
+            Ok(bollard::models::CreateImageInfo {
+                status: Some(status),
+                progress: Some(progress),
+                ..
+            }) => {
+                // 進捗を表示（同じ行に上書き）
+                print!("\r  ↓ {}: {}", status, progress);
+                use std::io::Write;
+                std::io::stdout().flush()?;
+            }
+            Ok(bollard::models::CreateImageInfo {
+                status: Some(status),
+                ..
+            }) => {
+                // 進捗なしの場合
+                print!("\r  ↓ {}                    ", status);
+                use std::io::Write;
+                std::io::stdout().flush()?;
+            }
+            Err(e) => {
+                println!();
+                return Err(anyhow::anyhow!("イメージのダウンロードに失敗しました: {}", e));
+            }
+            _ => {}
+        }
+    }
+
+    println!();
+    println!("  ✓ イメージのダウンロード完了");
+
+    Ok(())
+}
+
 /// Docker接続を初期化（エラーハンドリング付き）
 async fn init_docker_with_error_handling() -> anyhow::Result<bollard::Docker> {
     match bollard::Docker::connect_with_local_defaults() {
@@ -286,23 +352,44 @@ async fn main() -> anyhow::Result<()> {
                     }
                     Err(bollard::errors::Error::DockerResponseServerError {
                         status_code: 404,
-                        message,
+                        ..
                     }) => {
-                        eprintln!();
-                        eprintln!("{}", "✗ イメージが見つかりません".red().bold());
-                        eprintln!();
-                        eprintln!("{}", "原因:".yellow());
-                        eprintln!("  {}", message);
-                        eprintln!();
-                        eprintln!("{}", "解決方法:".yellow());
-                        let image = service
-                            .image
-                            .as_ref()
-                            .cloned()
-                            .unwrap_or_else(|| format!("{}:latest", service_name));
-                        eprintln!("  • イメージをダウンロード: docker pull {}", image);
-                        eprintln!("  • イメージ名とタグを確認してください");
-                        return Err(anyhow::anyhow!("イメージが見つかりません"));
+                        // イメージが見つからない場合は自動的にpull
+                        let image = container_config.image.as_ref().ok_or_else(|| {
+                            anyhow::anyhow!("イメージ名が指定されていません")
+                        })?;
+
+                        // イメージをpull
+                        pull_image(&docker, image).await?;
+
+                        // pull成功後、再度コンテナ作成を試行
+                        match docker
+                            .create_container(Some(create_options.clone()), container_config.clone())
+                            .await
+                        {
+                            Ok(response) => {
+                                println!("  ✓ コンテナ作成: {}", response.id);
+
+                                // コンテナ起動
+                                match docker
+                                    .start_container(
+                                        &response.id,
+                                        None::<bollard::query_parameters::StartContainerOptions>,
+                                    )
+                                    .await
+                                {
+                                    Ok(_) => println!("  ✓ 起動完了"),
+                                    Err(e) => {
+                                        eprintln!("  ✗ 起動エラー: {}", e);
+                                        return Err(anyhow::anyhow!("コンテナ起動に失敗しました"));
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                eprintln!("  ✗ コンテナ作成エラー: {}", e);
+                                return Err(anyhow::anyhow!("コンテナ作成に失敗しました"));
+                            }
+                        }
                     }
                     Err(e) => {
                         let err_str = e.to_string();
@@ -556,7 +643,7 @@ async fn main() -> anyhow::Result<()> {
             let docker = init_docker_with_error_handling().await?;
 
             // ステージ名を先に取得
-            let stage_name = if let Some(ref service_name) = service {
+            let stage_name = if let Some(ref _service_name) = service {
                 // サービス指定の場合でもステージ名が必要
                 stage.as_ref().ok_or_else(|| {
                     anyhow::anyhow!("Logsコマンドにはステージ名の指定が必要です（-s/--stage）")
