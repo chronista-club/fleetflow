@@ -38,6 +38,7 @@ spec.old/
 !.claude/skills/code-flow/
 !.claude/skills/dev-essentials/
 !.claude/skills/document-skills/
+!.claude/skills/fleetflow/
 !.claude/skills/github/
 !.claude/skills/mcp-builder/
 !.claude/skills/physical-event/
