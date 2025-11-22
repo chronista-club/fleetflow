@@ -1,6 +1,6 @@
 use crate::error::{FlowError, Result};
 use crate::model::*;
-use crate::template::{extract_variables, TemplateProcessor};
+use crate::template::{TemplateProcessor, extract_variables};
 use kdl::{KdlDocument, KdlNode};
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -38,12 +38,13 @@ fn read_kdl_with_includes(
     let abs_path = if path.is_absolute() {
         path.to_path_buf()
     } else {
-        base_dir.join(path).canonicalize().map_err(|e| {
-            FlowError::IoError {
+        base_dir
+            .join(path)
+            .canonicalize()
+            .map_err(|e| FlowError::IoError {
                 path: path.to_path_buf(),
                 message: format!("Failed to resolve path: {}", e),
-            }
-        })?
+            })?
     };
 
     // 循環参照チェック
@@ -72,8 +73,7 @@ fn read_kdl_with_includes(
     for node in doc.nodes() {
         if node.name().value() == "include" {
             // includeノードを処理
-            if let Some(include_path) = node.entries().first().and_then(|e| e.value().as_string())
-            {
+            if let Some(include_path) = node.entries().first().and_then(|e| e.value().as_string()) {
                 // グロブパターンをチェック
                 if include_path.contains('*') {
                     // グロブパターンで展開
@@ -88,9 +88,8 @@ fn read_kdl_with_includes(
                     for entry in glob::glob(pattern_str).map_err(|e| {
                         FlowError::InvalidConfig(format!("Invalid glob pattern: {}", e))
                     })? {
-                        let entry_path = entry.map_err(|e| {
-                            FlowError::InvalidConfig(format!("Glob error: {}", e))
-                        })?;
+                        let entry_path = entry
+                            .map_err(|e| FlowError::InvalidConfig(format!("Glob error: {}", e)))?;
 
                         let included_content =
                             read_kdl_with_includes(&entry_path, current_dir, visited)?;

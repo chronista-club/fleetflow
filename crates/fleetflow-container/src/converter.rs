@@ -151,7 +151,8 @@ mod tests {
             ..Default::default()
         };
 
-        let (config, options) = service_to_container_config("postgres", &service, "local", "vantage");
+        let (config, options) =
+            service_to_container_config("postgres", &service, "local", "vantage");
 
         assert_eq!(config.image, Some("postgres:16".to_string()));
         assert_eq!(options.name, "vantage-local-postgres");
@@ -360,10 +361,7 @@ mod tests {
             labels.get("fleetflow.project"),
             Some(&"vantage".to_string())
         );
-        assert_eq!(
-            labels.get("fleetflow.stage"),
-            Some(&"local".to_string())
-        );
+        assert_eq!(labels.get("fleetflow.stage"), Some(&"local".to_string()));
         assert_eq!(
             labels.get("fleetflow.service"),
             Some(&"postgres".to_string())
@@ -378,8 +376,7 @@ mod tests {
         let service = Service::default();
 
         // localステージ
-        let (config_local, _) =
-            service_to_container_config("api", &service, "local", "myapp");
+        let (config_local, _) = service_to_container_config("api", &service, "local", "myapp");
         let labels_local = config_local.labels.unwrap();
         assert_eq!(
             labels_local.get("com.docker.compose.project"),

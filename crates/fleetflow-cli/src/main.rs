@@ -16,10 +16,7 @@ fn parse_image_tag(image: &str) -> (&str, &str) {
 }
 
 /// Dockerイメージを自動的にpull
-async fn pull_image(
-    docker: &bollard::Docker,
-    image: &str,
-) -> anyhow::Result<()> {
+async fn pull_image(docker: &bollard::Docker, image: &str) -> anyhow::Result<()> {
     use futures_util::stream::StreamExt;
 
     let (image_name, tag) = parse_image_tag(image);
@@ -33,7 +30,11 @@ async fn pull_image(
         ..Default::default()
     };
 
-    let mut stream = docker.create_image(Some(options), None, None::<bollard::auth::DockerCredentials>);
+    let mut stream = docker.create_image(
+        Some(options),
+        None,
+        None::<bollard::auth::DockerCredentials>,
+    );
 
     while let Some(info) = stream.next().await {
         match info {
@@ -58,7 +59,10 @@ async fn pull_image(
             }
             Err(e) => {
                 println!();
-                return Err(anyhow::anyhow!("イメージのダウンロードに失敗しました: {}", e));
+                return Err(anyhow::anyhow!(
+                    "イメージのダウンロードに失敗しました: {}",
+                    e
+                ));
             }
             _ => {}
         }
@@ -355,16 +359,20 @@ async fn main() -> anyhow::Result<()> {
                         ..
                     }) => {
                         // イメージが見つからない場合は自動的にpull
-                        let image = container_config.image.as_ref().ok_or_else(|| {
-                            anyhow::anyhow!("イメージ名が指定されていません")
-                        })?;
+                        let image = container_config
+                            .image
+                            .as_ref()
+                            .ok_or_else(|| anyhow::anyhow!("イメージ名が指定されていません"))?;
 
                         // イメージをpull
                         pull_image(&docker, image).await?;
 
                         // pull成功後、再度コンテナ作成を試行
                         match docker
-                            .create_container(Some(create_options.clone()), container_config.clone())
+                            .create_container(
+                                Some(create_options.clone()),
+                                container_config.clone(),
+                            )
                             .await
                         {
                             Ok(response) => {
@@ -478,13 +486,25 @@ async fn main() -> anyhow::Result<()> {
                 let container_name = format!("{}-{}-{}", config.name, stage_name, service_name);
 
                 // コンテナを停止
-                match docker.stop_container(&container_name, None::<bollard::query_parameters::StopContainerOptions>).await {
+                match docker
+                    .stop_container(
+                        &container_name,
+                        None::<bollard::query_parameters::StopContainerOptions>,
+                    )
+                    .await
+                {
                     Ok(_) => {
                         println!("  ✓ 停止完了");
 
                         // --remove フラグが指定されている場合は削除
                         if remove {
-                            match docker.remove_container(&container_name, None::<bollard::query_parameters::RemoveContainerOptions>).await {
+                            match docker
+                                .remove_container(
+                                    &container_name,
+                                    None::<bollard::query_parameters::RemoveContainerOptions>,
+                                )
+                                .await
+                            {
                                 Ok(_) => println!("  ✓ 削除完了"),
                                 Err(e) => println!("  ⚠ 削除エラー: {}", e),
                             }
@@ -498,7 +518,13 @@ async fn main() -> anyhow::Result<()> {
 
                         // --remove フラグが指定されている場合は削除
                         if remove {
-                            match docker.remove_container(&container_name, None::<bollard::query_parameters::RemoveContainerOptions>).await {
+                            match docker
+                                .remove_container(
+                                    &container_name,
+                                    None::<bollard::query_parameters::RemoveContainerOptions>,
+                                )
+                                .await
+                            {
                                 Ok(_) => println!("  ✓ 削除完了"),
                                 Err(e) => println!("  ⚠ 削除エラー: {}", e),
                             }
