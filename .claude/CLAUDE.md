@@ -45,9 +45,9 @@ fleetflow/
 │   └── {feature}/           # 機能ごとにSPEC.md, DESIGN.md, GUIDE.md
 ├── .claude/                 # Claude Code設定
 │   ├── CLAUDE.md            # プロジェクトガイド（このファイル）
-│   ├── bollard-guide.md     # bollard使用ガイド
 │   ├── ports.md             # ポート設定ガイド
 │   └── skills/              # インストール済みスキル
+│       ├── bollard/             # Bollard (Docker API)
 │       ├── code-flow/           # 開発フロー管理
 │       ├── spec-design-guide/   # 仕様・設計ドキュメント作成
 │       ├── document-skills/     # ドキュメント管理
@@ -119,6 +119,11 @@ spec/{feature-name}/
 **code-flow**：
 - ✅ 複雑な機能開発の開始時
 - ✅ 要件が不明確な場合
+
+**bollard**：
+- ✅ Docker操作の実装
+- ✅ コンテナ、イメージ、ボリューム、ネットワーク操作
+- ✅ エラーハンドリング
 
 ## 開発方針
 
@@ -266,14 +271,17 @@ service "web" {
 - [ ] リアルタイムログストリーミング
 - [ ] ヘルスチェック機能
 
-## bollardガイド
+## Bollard（Docker API）
 
-bollard（Rust Docker API client）の使用方法については、[bollard-guide.md](bollard-guide.md)を参照してください。
+Bollard（Rust製非同期Docker API client）の使用方法については、`bollard`スキルを参照してください。
 
 ### 重要なポイント
-- 非同期処理を前提とした設計
-- エラーハンドリングの適切な実装
-- リソースのクリーンアップを忘れない
+- 非同期処理を前提とした設計（Tokio）
+- ステータスコードによる適切なエラーハンドリング
+- Docker接続の再利用
+- リソースのクリーンアップ
+
+詳細は`.claude/skills/bollard/SKILL.md`を参照。
 
 ## Claude Codeでの開発
 
