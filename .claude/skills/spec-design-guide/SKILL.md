@@ -2,6 +2,7 @@
 name: spec-design-guide
 description: 仕様（Why）と設計（How）を記録し、Living Documentation原則でコードと常に同期させる
 ---
+
 # Spec-Design-Guide Skill
 
 このスキルは、プロジェクトの仕様・設計ドキュメント作成をガイドし、Living Documentation原則に基づいてドキュメントとコードを同期管理します。
@@ -29,6 +30,7 @@ description: 仕様（Why）と設計（How）を記録し、Living Documentatio
 - ✅ `spec/` ディレクトリ内のファイルを操作する際
 
 **ユーザーがスキルを明示的に呼び出す方法**:
+
 - `/spec-design-guide` または `/sdg` コマンド
 - 「spec」「design」「SPEC.md」「設計書」などのキーワードを含む質問
 
@@ -38,7 +40,7 @@ description: 仕様（Why）と設計（How）を記録し、Living Documentatio
 
 ## ドキュメントの役割
 
-### SPEC.md - コンセプト、仕様、哲学
+### spec/ - コンセプト、仕様、哲学
 
 **What & Why** - 何を作るか、なぜ作るか
 
@@ -47,7 +49,7 @@ description: 仕様（Why）と設計（How）を記録し、Living Documentatio
 - 機能仕様
 - ユーザー体験
 
-### DESIGN.md - モデル、手法、実装
+### design/ - モデル、手法、実装
 
 **How** - どう作るか
 
@@ -56,7 +58,7 @@ description: 仕様（Why）と設計（How）を記録し、Living Documentatio
 - 実装手法
 - 技術的詳細
 
-### GUIDE.md - ガイド
+### guides/ - ガイド
 
 **Usage** - どう使うか
 
@@ -66,21 +68,44 @@ description: 仕様（Why）と設計（How）を記録し、Living Documentatio
 
 ## ディレクトリ構造
 
+### 概要
+
+ドキュメントは3つのトップレベルディレクトリに分けて管理します。
+**すべてフラット構造で、番号付きファイルで管理**します：
+
 ```
-spec/
-├── 01-core-concept/
-│   ├── SPEC.md      # コンセプト・仕様・哲学
-│   ├── DESIGN.md    # モデル・手法・実装
-│   └── GUIDE.md     # 使い方ガイド（オプション）
-├── 02-kdl-parser/
-│   ├── SPEC.md
-│   └── DESIGN.md
-└── ...
+spec/                          # 仕様（What & Why）- フラット、番号付き
+├── 01-core-concepts.md        # コアコンセプト
+├── 02-memory-store.md         # メモリストア仕様
+├── 03-storage.md              # ストレージ仕様
+├── 04-embeddings.md           # 埋め込み仕様
+├── 05-search.md               # 検索仕様
+└── 06-attachments.md          # 添付ファイル仕様
+
+design/                        # 設計（How）- フラット、番号付き
+├── 01-system-architecture.md  # システムアーキテクチャ
+├── 02-data-model.md           # データモデル
+├── 03-memory-store-api.md     # Memory Store API設計
+├── 04-storage-integration.md  # ストレージ統合（SurrealDB + Qdrant）
+├── 05-embedding-integration.md # 埋め込み統合（Plamo）
+└── 06-search-implementation.md # 検索実装
+
+guides/                        # ガイド（Usage）- フラット、番号付き
+├── 01-getting-started.md      # はじめに
+├── 02-local-setup.md          # ローカル環境セットアップ
+└── 03-basic-operations.md     # 基本操作
 ```
 
-## SPEC.md のテンプレート
+### ディレクトリの役割
+
+- **spec/**: 機能別に連番で管理。各機能の「何を」「なぜ」を記述。フラット構造で優先順位が明確
+- **design/**: 設計種類別に連番で管理。「どう作られているか」を記述。フラット構造で重要度が明確
+- **guides/**: 利用順に連番で管理。ファイル名で内容が分かる実用的なガイド。フラット構造で迷わない
+
+## spec/ のテンプレート
 
 **目的**: コンセプト、仕様、哲学
+**ファイル名**: `spec/{連番}-{機能名}.md`（例: `spec/01-core-concepts.md`）
 
 ```markdown
 # {機能名} - 仕様書
@@ -105,11 +130,11 @@ spec/
 
 \`\`\`mermaid
 flowchart TD
-    A[入力] --> B[処理]
-    B --> C[出力]
-    B --> D{条件分岐}
-    D -->|Yes| E[処理A]
-    D -->|No| F[処理B]
+A[入力] --> B[処理]
+B --> C[出力]
+B --> D{条件分岐}
+D -->|Yes| E[処理A]
+D -->|No| F[処理B]
 \`\`\`
 
 ## 仕様
@@ -139,7 +164,7 @@ flowchart TD
 \`\`\`rust
 // ユーザーが使う形式
 pub fn example() {
-    // ...
+// ...
 }
 \`\`\`
 
@@ -166,17 +191,19 @@ pub fn example() {
 ## 変更履歴
 
 ### YYYY-MM-DD: 変更内容
+
 - **理由**: なぜこの変更が必要だったか
 - **影響**: どのコンポーネントに影響するか
 - **コミット**: コミットハッシュ
 ```
 
-## DESIGN.md のテンプレート
+## design/ のテンプレート
 
 **目的**: モデル、手法、実装
+**ファイル名**: `design/{連番}-{設計種類}.md`（例: `design/01-system-architecture.md`）
 
 ```markdown
-# {機能名} - 設計書
+# {設計種類} - 設計書
 
 ## 設計思想: Simplicity（シンプルさ）
 
@@ -204,8 +231,8 @@ calculations, actionsは関数的に実装されるのが望ましい。
 
 \`\`\`rust
 pub struct Example {
-    field1: Type1,
-    field2: Type2,
+field1: Type1,
+field2: Type2,
 }
 \`\`\`
 
@@ -213,20 +240,20 @@ pub struct Example {
 
 \`\`\`mermaid
 classDiagram
-    class ModelA {
-        +field1: Type1
-        +field2: Type2
-        +method1()
-    }
-    class ModelB {
-        +field1: Type1
-        +method1()
-    }
-    class ModelC {
-        +field1: Type1
-    }
-    ModelA --> ModelB : uses
-    ModelA --> ModelC : contains
+class ModelA {
++field1: Type1
++field2: Type2
++method1()
+}
+class ModelB {
++field1: Type1
++method1()
+}
+class ModelC {
++field1: Type1
+}
+ModelA --> ModelB : uses
+ModelA --> ModelC : contains
 \`\`\`
 
 ## アーキテクチャ
@@ -235,10 +262,10 @@ classDiagram
 
 \`\`\`mermaid
 flowchart LR
-    Input[入力] --> Parser[パーサー]
-    Parser --> Validator[バリデーター]
-    Validator --> Processor[プロセッサー]
-    Processor --> Output[出力]
+Input[入力] --> Parser[パーサー]
+Parser --> Validator[バリデーター]
+Validator --> Processor[プロセッサー]
+Processor --> Output[出力]
 \`\`\`
 
 ### コンポーネント詳細
@@ -249,7 +276,7 @@ flowchart LR
 **インターフェース**:
 \`\`\`rust
 pub trait ComponentA {
-    fn method(&self) -> Result<T>;
+fn method(&self) -> Result<T>;
 }
 \`\`\`
 
@@ -261,24 +288,23 @@ pub trait ComponentA {
 
 \`\`\`mermaid
 sequenceDiagram
-    participant User
-    participant System
-    participant Database
+participant User
+participant System
+participant Database
 
     User->>System: リクエスト
     System->>Database: データ取得
     Database-->>System: データ
     System->>System: 処理
     System-->>User: レスポンス
+
 \`\`\`
 
 ### エラーハンドリング
 
-\`\`\`rust
-#[derive(Error, Debug)]
-pub enum MyError {
-    #[error("...")]
-    Variant,
+\`\`\`rust #[derive(Error, Debug)]
+pub enum MyError { #[error("...")]
+Variant,
 }
 \`\`\`
 
@@ -310,29 +336,48 @@ pub enum MyError {
 ## 変更履歴
 
 ### YYYY-MM-DD: 変更内容
+
 - **理由**: なぜこの変更が必要だったか
 - **影響**: どのコンポーネントに影響するか
 - **コミット**: コミットハッシュ
 ```
 
-## GUIDE.md のテンプレート（オプション）
+## guides/ のテンプレート
 
-**目的**: 使い方ガイド
+**目的**: 実用的な使い方ガイド
+**ファイル名**: `guides/{連番}-{トピック名}.md`（例: `guides/01-getting-started.md`）
 
-```markdown
-# {機能名} - ガイド
+````markdown
+# {トピック名}
 
-## クイックスタート
+## 概要
 
-最小限の使用例。
+このガイドの目的と対象読者。
 
-## 基本的な使い方
+## 前提条件
 
-### ケース1: ...
+- 必要な環境
+- 必要な知識
+- 必要なツール
 
-説明と例。
+## 手順
 
-### ケース2: ...
+### ステップ1: ...
+
+詳細な説明とコード例。
+
+```bash
+# コマンド例
+```
+````
+
+### ステップ2: ...
+
+## コード例
+
+```typescript
+// 実用的なコード例
+```
 
 ## ベストプラクティス
 
@@ -343,9 +388,20 @@ pub enum MyError {
 
 ### 問題1: ...
 
+**症状**: ...
 **原因**: ...
 **解決策**: ...
-```
+
+## よくある質問
+
+**Q**: ...
+**A**: ...
+
+## 次のステップ
+
+関連するガイドへのリンク。
+
+````
 
 ## 連番の割り当て
 
@@ -363,58 +419,156 @@ pub enum MyError {
 
 ### 新機能追加時
 
-1. `spec/{連番}-{機能名}/` を作成
-2. SPEC.md を作成（コンセプト・仕様・哲学）
-3. DESIGN.md を作成（モデル・手法・実装）
-4. （必要なら）GUIDE.md を作成
-5. 実装開始
-6. 実装完了後、ドキュメント更新
+1. **spec/** に機能仕様を追加
+   - 次の連番を決定（既存の最大連番 + 1）
+   - `spec/{連番}-{機能名}.md` を作成（コンセプト・仕様・哲学）
+   - 例: `spec/07-realtime-sync.md`
+
+2. **design/** に設計を追加
+   - 設計の種類を決定（architecture, data-model, api, integrationなど）
+   - 次の連番を決定（既存の最大連番 + 1）
+   - `design/{連番}-{設計種類}.md` を作成
+   - 例: `design/07-realtime-architecture.md`
+
+3. **guides/** に使い方を追加（必要に応じて）
+   - 次の連番を決定（既存の最大連番 + 1）
+   - `guides/{連番}-{トピック}.md` を作成
+   - 例: `guides/04-realtime-usage.md`
+
+4. 実装開始
+
+5. 実装完了後、ドキュメント更新
 
 ### 既存機能修正時
 
-1. 該当するspec/ディレクトリを確認
-2. SPEC.md/DESIGN.mdを読んで理解
-3. 必要に応じてドキュメント更新
+1. **spec/** で該当機能のファイルを確認（例: `spec/02-memory-store.md`）
+2. **design/** で関連する設計ファイルを確認（例: `design/03-memory-store-api.md`）
+3. 変更が設計に影響する場合、該当ファイルを更新
 4. 実装
+5. 必要に応じて **guides/** も更新（例: `guides/03-basic-operations.md`）
 
-## Akasha MCPプロジェクトでの適用
+### ドキュメント構造の判断基準
 
-### spec/とコードの対応表
+**spec/に入れるもの**:
+- 機能の「何を」「なぜ」
+- ビジネス要件
+- ユーザーストーリー
+- 連番で優先順位を表現
 
-| spec/ディレクトリ | 対応するコード |
-|-----------------|--------------|
-| 01-core-concepts | `src/memory/types.rs`, `src/memory/creare.rs`, `src/memory/attachment.rs` |
-| 02-transport-layer | `src/server/transport.rs` |
-| 03-protocol-layer | `src/server/protocol.rs`, `src/server/mod.rs` |
-| 04-service-integration | `src/tools/` |
-| 06-local-storage | `src/memory/storage.rs`, `src/memory/qdrant.rs`, `src/memory/accessor.rs` |
-| 07-http-transport | HTTPトランスポート実装 |
+**design/に入れるもの**:
+- 技術的な「どう作るか」
+- アーキテクチャ、データモデル、API設計、統合設計
+- 連番で重要度を表現
 
-### 例: 機能の変更時
+**guides/に入れるもの**:
+- 実用的な「どう使うか」
+- セットアップ手順、使用例
+- 連番で利用順序を表現
+
+### ドキュメント追加の原則
+
+**既存ドキュメントへの追記を優先**:
+- 新しい情報を追加する際は、まず既存のドキュメントに含めるのが適切かを検討
+- 既存ドキュメントのスコープ内であれば、そちらに追記する
+- なるべくドキュメントの種類を増やさない運用を心がける
+
+**新規ドキュメント作成の判断基準**:
+- 既存ドキュメントのスコープを超える新しいトピック
+- 独立した機能・設計・ガイドとして扱うべき内容
+- 既存ドキュメントに追記すると焦点がぼやける場合
+
+**追記時の注意点**:
+- セクション構造を維持
+- 変更履歴に追記内容を記録
+- 関連する他のドキュメントも更新が必要か確認
+
+### ドキュメント構造の定期的な見直し
+
+**見直しのタイミング**:
+- 新機能追加時
+- 大きな設計変更時
+- ドキュメント数が増えてきた時
+- ユーザーからドキュメントに関するフィードバックがあった時
+
+**見直しの観点**:
+- **整理統合**: 似た内容のドキュメントを統合できないか
+- **分割**: 1つのドキュメントが大きくなりすぎていないか
+- **連番の再割り当て**: 優先順位・重要度・順序が適切か
+- **命名**: ファイル名が内容を適切に表現しているか
+- **スコープ**: 各ドキュメントのスコープが明確で重複がないか
+
+**見直しの実施**:
+- 構造変更が必要な場合は、ユーザーと相談
+- 変更履歴に構造見直しの理由を記録
+- 関連する全てのドキュメントを一度に更新
+
+## 実践例
+
+### 機能追加の例
+
+新機能「リアルタイム同期」を追加する場合：
 
 ```bash
-# 1. spec/を確認
-cat spec/01-feature-name/SPEC.md
-cat spec/02-another-feature/SPEC.md
+# 1. 仕様を作成
+vim spec/07-realtime-sync.md
 
-# 2. コード変更
-vim src/module/feature.rs
+# 2. 設計を作成
+vim design/07-realtime-architecture.md
 
-# 3. ドキュメント更新
-vim spec/01-feature-name/SPEC.md
+# 3. ガイドを作成
+vim guides/04-realtime-usage.md
 
-# 4. 両方をコミット
-git add src/module/feature.rs spec/01-feature-name/SPEC.md
-git commit -m "機能改善とドキュメント更新
+# 4. 実装
+# コードを書く...
 
-## コード変更
-- src/module/feature.rs: 新機能を追加
+# 5. コミット
+git add spec/07-realtime-sync.md design/07-realtime-architecture.md
+git add guides/04-realtime-usage.md packages/creo-memories/src/realtime/
+git commit -m "feat: リアルタイム同期機能を追加
 
-## ドキュメント更新
-- spec/01-feature-name/SPEC.md: 仕様を追加
+## 仕様
+- spec/07-realtime-sync.md: リアルタイム同期の仕様
+
+## 設計
+- design/07-realtime-architecture.md: リアルタイムアーキテクチャ
+
+## ガイド
+- guides/04-realtime-usage.md: 使い方ガイド
+
+## コード
+- packages/creo-memories/src/realtime/: リアルタイム機能の実装
 
 ## 理由
-ユーザー要望に基づく機能強化のため
+複数クライアント間でのメモリ同期を実現するため
+"
+````
+
+### 設計変更の例
+
+データモデルを変更する場合：
+
+```bash
+# 1. 該当する仕様を確認
+cat spec/01-core-concepts.md
+
+# 2. 設計ドキュメントを更新
+vim design/02-data-model.md
+
+# 3. 影響するコードを更新
+# コードを変更...
+
+# 4. コミット
+git add design/02-data-model.md packages/creo-core/src/types/
+git commit -m "refactor: メモリ構造を改善
+
+## 設計変更
+- design/02-data-model.md: メタデータ構造を拡張
+
+## コード変更
+- packages/creo-core/src/types/memory.ts: Memory型を更新
+
+## 理由
+より柔軟なメタデータ管理のため
 "
 ```
 
@@ -456,14 +610,20 @@ git commit -m "機能改善とドキュメント更新
 
 ### コード変更時の必須手順
 
-1. ✅ 変更対象のコードに対応する`spec/XX-YY/`を特定
-2. ✅ SPEC.mdを読んで「なぜ」（What & Why）を理解
-3. ✅ DESIGN.mdを読んで「どう実装するか」（How）を理解
+1. ✅ 変更対象の機能に対応する`spec/{連番}-{機能名}.md`を特定
+2. ✅ spec/ファイルを読んで「なぜ」（What & Why）を理解
+3. ✅ `design/`配下の関連する設計ファイルを特定して読む（How）
+   - システム全体 → `design/01-system-architecture.md`
+   - データモデル変更 → `design/02-data-model.md`
+   - API変更 → `design/03-memory-store-api.md`
+   - ストレージ統合変更 → `design/04-storage-integration.md`
+   - 埋め込み統合変更 → `design/05-embedding-integration.md`
+   - 検索実装変更 → `design/06-search-implementation.md`
 4. ✅ コード変更を実施
-5. ✅ SPEC.md/DESIGN.mdとの乖離をチェック
+5. ✅ spec/およびdesign/ファイルとの乖離をチェック
 6. ✅ 乖離があればドキュメントを更新
-7. ✅ 実装チェックリストを更新
-8. ✅ 変更履歴セクションを更新
+7. ✅ 必要に応じて`guides/`も更新
+8. ✅ 各ドキュメントの変更履歴セクションを更新
 
 ### 視覚化の推奨
 
@@ -507,33 +667,58 @@ classDiagram
 
 #### マーメイド図の種類
 
-| 図の種類 | 用途 | 使用例 |
-|---------|------|--------|
-| `flowchart` | 処理フロー、アーキテクチャ | システム概要、コンポーネント構成 |
-| `sequenceDiagram` | 時系列の相互作用 | API呼び出し、メッセージングフロー |
-| `classDiagram` | データモデル | 構造体、クラスの関係性 |
-| `stateDiagram` | 状態遷移 | ライフサイクル、ステートマシン |
-| `erDiagram` | データベース設計 | テーブル関係、エンティティ |
+| 図の種類          | 用途                       | 使用例                            |
+| ----------------- | -------------------------- | --------------------------------- |
+| `flowchart`       | 処理フロー、アーキテクチャ | システム概要、コンポーネント構成  |
+| `sequenceDiagram` | 時系列の相互作用           | API呼び出し、メッセージングフロー |
+| `classDiagram`    | データモデル               | 構造体、クラスの関係性            |
+| `stateDiagram`    | 状態遷移                   | ライフサイクル、ステートマシン    |
+| `erDiagram`       | データベース設計           | テーブル関係、エンティティ        |
+
+### ドキュメント追加・更新の原則
+
+**既存ドキュメントへの追記を最優先**:
+
+- 新しい情報を追加する際は、必ず既存のドキュメントに含められないか検討
+- 既存ドキュメントのスコープ内であれば、そちらに追記する
+- ドキュメントの種類を無闇に増やさない
+
+**新規ドキュメント作成の判断**:
+
+- 既存ドキュメントのスコープを明らかに超える内容
+- 独立したトピックとして扱うべき内容
+- 既存ドキュメントに追記すると焦点がぼやける場合
+- この場合は遠慮なく新規ドキュメントを作成
 
 ### 禁止事項
 
 - ❌ spec/を確認せずにコード変更
+- ❌ design/の関連ファイルを確認せずに設計変更
 - ❌ ドキュメント更新を忘れる
 - ❌ 古い情報を放置
 - ❌ 実装とドキュメントの不一致を許容
 - ❌ 図で表現できるものをテキストだけで説明
+- ❌ 既存ドキュメントに追記できる内容を新規ドキュメントとして作成
 
 ### コミット時の推奨フォーマット
 
 ```
 {変更内容の要約}
 
-## コード変更
-- src/xxx.rs: 変更内容
+## 仕様（該当する場合）
+- spec/{連番}-{機能名}/SPEC.md: 更新内容
 
-## ドキュメント更新
-- spec/XX-YY/SPEC.md: 更新内容
-- spec/XX-YY/DESIGN.md: 更新内容
+## 設計（該当する場合）
+- design/architecture/xxx.md: 更新内容
+- design/data-model/yyy.md: 更新内容
+- design/api/zzz.md: 更新内容
+
+## ガイド（該当する場合）
+- guides/usage/aaa.md: 更新内容
+
+## コード変更
+- src/xxx.ts: 変更内容
+- packages/yyy/: 変更内容
 
 ## 理由
 なぜこの変更が必要だったか
@@ -562,6 +747,7 @@ classDiagram
 - ✅ **進化する**: コードの変化とともに成長・更新される
 
 **AIエージェントの活用シナリオ**:
+
 - コード変更時にSPEC.mdを読んで「なぜ」を理解
 - DESIGN.mdを参照して設計意図を把握
 - 変更履歴から過去の判断理由を学習
@@ -571,28 +757,30 @@ classDiagram
 
 ## ベストプラクティス
 
-### SPEC.md（コンセプト・仕様・哲学）
+### spec/ - 仕様（What & Why）
 
 - **Why重視**: なぜその選択をしたか
 - **ユーザー視点**: 技術詳細より価値を重視
 - **哲学を語る**: 設計思想を明確に
 - **変更履歴**: 全ての変更を記録
 - **視覚化**: フローチャートや状態図で全体像を示す
+- **フラット構造**: 連番で優先順位を管理、ファイル名で機能が分かる
 
-### DESIGN.md（モデル・手法・実装）
+### design/ - 設計（How）
 
 - **How重視**: どう実装するか
 - **Simplicity**: 型分類とStraightforward原則でシンプルさを実現
 - **実装可能に**: コードに落とし込める粒度
 - **技術的詳細**: データ構造、アルゴリズム
-- **チェックリスト**: 実装の進捗を追跡
+- **フラット構造**: 連番で重要度を管理、ファイル名で設計種類が分かる
 - **視覚化**: クラス図、シーケンス図、アーキテクチャ図で設計を明確に
 
-### GUIDE.md（使い方）
+### guides/ - ガイド（Usage）
 
 - **実用的**: すぐ使える例
 - **段階的**: 簡単→複雑へ
 - **トラブル対応**: よくある問題と解決策
+- **フラット構造**: 連番で利用順序を管理、ファイル名でトピックが分かる
 - **視覚化**: 使用フロー図で操作手順を分かりやすく
 
 ## まとめ
@@ -600,10 +788,13 @@ classDiagram
 このスキルは、仕様と設計を明確にし、Living Documentation原則に基づいてドキュメントとコードを同期させることで、プロジェクトの品質と保守性を高めます。
 
 **キーポイント**:
-- 📝 SPEC.md: What & Why（コンセプト・仕様・哲学）
-- 🏗️ DESIGN.md: How（モデル・手法・実装）
-- 📖 GUIDE.md: Usage（使い方）
-- 🎯 Simplicity: 型分類 + Straightforward原則 = シンプルさ
-- 🔄 Living Documentation: ドキュメントとコードの同期
-- ✅ 実装チェックリスト: 進捗の可視化
-- 📊 マーメイド図: 積極的な視覚化で理解しやすく
+
+- 📝 **spec/**: What & Why（フラット構造・連番で優先順位管理）
+- 🏗️ **design/**: How（フラット構造・連番で重要度管理）
+- 📖 **guides/**: Usage（フラット構造・連番で利用順序管理）
+- 🎯 **Simplicity**: 型分類 + Straightforward原則 = シンプルさ
+- 🔄 **Living Documentation**: ドキュメントとコードの同期
+- ✅ **実装チェックリスト**: 進捗の可視化
+- 📊 **マーメイド図**: 積極的な視覚化で理解しやすく
+- 📁 **フラット構造**: すべてのドキュメントをフラットに配置、番号付きで管理
+- 🔢 **連番管理**: ファイル名の番号で優先順位・重要度・順序を表現

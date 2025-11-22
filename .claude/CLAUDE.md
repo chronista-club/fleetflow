@@ -41,8 +41,18 @@ fleetflow/
 │   ├── fleetflow-atom/      # 基本的なデータ構造
 │   ├── fleetflow-config/    # 設定パーサーと管理
 │   └── fleetflow-container/ # コンテナ操作
-├── spec/                    # 仕様・設計ドキュメント（Living Documentation）
-│   └── {feature}/           # 機能ごとにSPEC.md, DESIGN.md, GUIDE.md
+├── spec/                    # 仕様書（What & Why）
+│   ├── 01-core-concepts.md
+│   ├── 02-kdl-parser.md
+│   ├── 03-cli-commands.md
+│   ├── 04-auto-import.md
+│   ├── 05-template-variables.md
+│   └── 06-orbstack-integration.md
+├── design/                  # 設計書（How）
+│   ├── 01-kdl-parser.md
+│   └── 02-orbstack-integration.md
+├── guides/                  # 利用ガイド（Usage）
+│   └── 01-orbstack-integration.md
 ├── .claude/                 # Claude Code設定
 │   ├── CLAUDE.md            # プロジェクトガイド（このファイル）
 │   ├── ports.md             # ポート設定ガイド
@@ -59,7 +69,6 @@ fleetflow/
 │       ├── surrealdb/           # SurrealDB
 │       └── sycamore/            # Sycamoreフレームワーク
 ├── docs/                    # 公式ドキュメント
-│   └── design/              # 設計文書（OrbStack連携など）
 └── README.md                # プロジェクト説明
 ```
 
@@ -78,19 +87,27 @@ Phase 1: Brain相談 → Phase 2: ヒアリング → Phase 3: SDG → Phase 4: 
 - ヒアリングで仕様を詳細化
 
 #### Phase 3: SDG（Spec-Design-Guide）
-仕様・設計ドキュメントを`spec/`ディレクトリに作成：
+仕様・設計・ガイドのドキュメントをフラット構造で作成：
 
 ```
-spec/{feature-name}/
-├── SPEC.md      # What & Why（コンセプト・仕様・哲学）
-├── DESIGN.md    # How（モデル・手法・実装）
-└── GUIDE.md     # Usage（使い方・ベストプラクティス）
+spec/              # What & Why（コンセプト・仕様・哲学）
+├── 01-feature-a.md
+└── 02-feature-b.md
+
+design/            # How（モデル・手法・実装）
+├── 01-feature-a.md
+└── 02-feature-b.md
+
+guides/            # Usage（使い方・ベストプラクティス）
+├── 01-feature-a.md
+└── 02-feature-b.md
 ```
 
 **Living Documentation原則**：
 - ドキュメントは「生きた写像」としてコードと常に同期
 - コード変更時は必ず対応するドキュメントも更新
 - 技術的負債を防ぎ、生きたメモリーとして機能
+- フラット構造で機能ごとに番号付けして管理
 
 #### Phase 4: 実装
 - チェックリスト駆動開発
@@ -109,7 +126,7 @@ spec/{feature-name}/
 - ✅ 新機能の設計・実装
 - ✅ 既存機能のリファクタリング
 - ✅ バグ修正で設計に影響がある場合
-- ✅ `spec/`ディレクトリ操作時
+- ✅ `spec/`, `design/`, `guides/`ディレクトリ操作時
 
 **document-skills**：
 - ✅ README、ガイドなどの公式文書作成
@@ -248,7 +265,10 @@ service "web" {
 | `fleetflow.stage` | ステージ名 | メタデータ |
 | `fleetflow.service` | サービス名 | メタデータ |
 
-詳細: [OrbStack連携設計書](../docs/design/orbstack-integration.md)
+詳細:
+- [OrbStack連携仕様書](../spec/06-orbstack-integration.md)
+- [OrbStack連携設計書](../design/02-orbstack-integration.md)
+- [OrbStack連携ガイド](../guides/01-orbstack-integration.md)
 
 ## 開発フェーズとロードマップ
 
@@ -289,12 +309,12 @@ Bollard（Rust製非同期Docker API client）の使用方法については、`
 
 1. **実装前の準備**
    - **既存コードの確認**: 関連するコードを必ず読む
-   - **仕様の確認**: `spec/`ディレクトリ内のSPEC.md/DESIGN.mdを確認
-   - **関連ドキュメント**: `docs/`や`.claude/`のガイドを参照
+   - **仕様の確認**: `spec/`, `design/`ディレクトリ内のドキュメントを確認
+   - **関連ドキュメント**: `guides/`, `docs/`, `.claude/`のガイドを参照
 
 2. **新機能開発時（Code Flowの活用）**
    - **Phase 1-2**: 要件をヒアリングで明確化
-   - **Phase 3**: `spec/{feature}/`にSPEC.md, DESIGN.mdを作成
+   - **Phase 3**: `spec/`, `design/`, `guides/`にドキュメントを作成
    - **Phase 4**: チェックリスト駆動で実装
    - **Phase 5**: 学習とパターン記録
 
@@ -323,9 +343,11 @@ Bollard（Rust製非同期Docker API client）の使用方法については、`
 
 ### 内部ドキュメント
 - [README.md](../README.md) - プロジェクト概要
-- [bollard-guide.md](bollard-guide.md) - Docker API使用ガイド
 - [ports.md](ports.md) - ポート設定ガイド
-- [OrbStack連携設計書](../docs/design/orbstack-integration.md)
+- [spec/](../spec/) - 仕様書（What & Why）
+- [design/](../design/) - 設計書（How）
+- [guides/](../guides/) - 利用ガイド（Usage）
+- [.claude/skills/bollard/](skills/bollard/) - Docker API (Bollard) スキル
 
 ### 外部リソース
 - [KDL Document Language](https://kdl.dev/)
