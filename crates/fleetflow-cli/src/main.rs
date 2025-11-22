@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 mod tui;
 
 use clap::{Parser, Subcommand};
@@ -699,7 +701,7 @@ async fn main() -> anyhow::Result<()> {
             println!();
 
             // 複数サービスの場合は色を割り当て
-            let colors = vec![
+            let colors = [
                 colored::Color::Cyan,
                 colored::Color::Green,
                 colored::Color::Yellow,

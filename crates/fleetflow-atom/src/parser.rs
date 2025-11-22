@@ -266,10 +266,10 @@ fn parse_service(node: &KdlNode) -> Result<(String, Service)> {
                 "ports" => {
                     if let Some(ports) = child.children() {
                         for port_node in ports.nodes() {
-                            if port_node.name().value() == "port" {
-                                if let Some(port) = parse_port(port_node) {
-                                    service.ports.push(port);
-                                }
+                            if port_node.name().value() == "port"
+                                && let Some(port) = parse_port(port_node)
+                            {
+                                service.ports.push(port);
                             }
                         }
                     }
@@ -291,10 +291,10 @@ fn parse_service(node: &KdlNode) -> Result<(String, Service)> {
                 "volumes" => {
                     if let Some(vols) = child.children() {
                         for vol_node in vols.nodes() {
-                            if vol_node.name().value() == "volume" {
-                                if let Some(volume) = parse_volume(vol_node) {
-                                    service.volumes.push(volume);
-                                }
+                            if vol_node.name().value() == "volume"
+                                && let Some(volume) = parse_volume(vol_node)
+                            {
+                                service.volumes.push(volume);
                             }
                         }
                     }
@@ -333,7 +333,7 @@ fn parse_port(node: &KdlNode) -> Option<Port> {
         .or_else(|| {
             // フォールバック: 位置引数
             node.entries()
-                .get(0)?
+                .first()?
                 .value()
                 .as_integer()
                 .map(|v| v as u16)
@@ -379,7 +379,7 @@ fn parse_port(node: &KdlNode) -> Option<Port> {
 fn parse_volume(node: &KdlNode) -> Option<Volume> {
     let entries: Vec<_> = node.entries().iter().collect();
 
-    let host = PathBuf::from(entries.get(0)?.value().as_string()?);
+    let host = PathBuf::from(entries.first()?.value().as_string()?);
     let container = PathBuf::from(entries.get(1)?.value().as_string()?);
 
     let read_only = node

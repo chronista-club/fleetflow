@@ -116,10 +116,10 @@ fn test_parse_service_with_volumes() {
     let vol1 = &service.volumes[0];
     assert_eq!(vol1.host.to_str().unwrap(), "./data");
     assert_eq!(vol1.container.to_str().unwrap(), "/var/lib/postgresql/data");
-    assert_eq!(vol1.read_only, false);
+    assert!(!vol1.read_only);
 
     let vol2 = &service.volumes[1];
-    assert_eq!(vol2.read_only, true);
+    assert!(vol2.read_only);
 }
 
 #[test]

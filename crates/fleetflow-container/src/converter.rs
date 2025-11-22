@@ -1,5 +1,7 @@
 //! FlowConfig から Docker API パラメータへの変換
 
+#![allow(deprecated)]
+
 use bollard::container::{Config, CreateContainerOptions};
 use bollard::models::{HostConfig, PortBinding};
 use fleetflow_atom::{Flow, Service};
