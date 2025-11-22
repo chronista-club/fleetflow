@@ -70,6 +70,7 @@ pub fn find_flow_file() -> Result<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
     use std::fs;
 
     #[test]
@@ -83,6 +84,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_find_flow_file_in_current_dir() {
         let temp_dir = tempfile::tempdir().unwrap();
         let original_dir = std::env::current_dir().unwrap();
@@ -104,6 +106,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_find_flow_file_local_priority() {
         let temp_dir = tempfile::tempdir().unwrap();
         let original_dir = std::env::current_dir().unwrap();
@@ -123,6 +126,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_find_flow_file_in_flow_dir() {
         let temp_dir = tempfile::tempdir().unwrap();
         let original_dir = std::env::current_dir().unwrap();
@@ -141,6 +145,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_find_flow_file_env_var() {
         let temp_dir = tempfile::tempdir().unwrap();
         let config_path = temp_dir.path().join("custom.kdl");
@@ -161,6 +166,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_find_flow_file_not_found() {
         let temp_dir = tempfile::tempdir().unwrap();
         let original_dir = std::env::current_dir().unwrap();
@@ -181,6 +187,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_hidden_file_priority() {
         let temp_dir = tempfile::tempdir().unwrap();
         let original_dir = std::env::current_dir().unwrap();
