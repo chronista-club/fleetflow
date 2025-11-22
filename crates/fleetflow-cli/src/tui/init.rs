@@ -127,41 +127,41 @@ pub fn run_init_wizard() -> io::Result<Option<(String, String)>> {
     let result = loop {
         terminal.draw(|f| draw_ui(f, &state))?;
 
-        if let Event::Key(key) = event::read()? {
-            if key.kind == KeyEventKind::Press {
-                match key.code {
-                    KeyCode::Char('q') | KeyCode::Esc => {
-                        break None;
-                    }
-                    KeyCode::Enter => {
-                        if state.step == WizardStep::Confirm {
-                            let template = &state.templates[state.selected_template];
-                            let path = state.get_config_path_string().to_string();
-                            break Some((path, template.content.clone()));
-                        } else {
-                            state.next_step();
-                        }
-                    }
-                    KeyCode::Backspace => {
-                        state.previous_step();
-                    }
-                    KeyCode::Down | KeyCode::Char('j') => {
-                        if state.step == WizardStep::SelectTemplate {
-                            state.select_next_template();
-                        }
-                    }
-                    KeyCode::Up | KeyCode::Char('k') => {
-                        if state.step == WizardStep::SelectTemplate {
-                            state.select_previous_template();
-                        }
-                    }
-                    KeyCode::Tab => {
-                        if state.step == WizardStep::SelectPath {
-                            state.cycle_config_path();
-                        }
-                    }
-                    _ => {}
+        if let Event::Key(key) = event::read()?
+            && key.kind == KeyEventKind::Press
+        {
+            match key.code {
+                KeyCode::Char('q') | KeyCode::Esc => {
+                    break None;
                 }
+                KeyCode::Enter => {
+                    if state.step == WizardStep::Confirm {
+                        let template = &state.templates[state.selected_template];
+                        let path = state.get_config_path_string().to_string();
+                        break Some((path, template.content.clone()));
+                    } else {
+                        state.next_step();
+                    }
+                }
+                KeyCode::Backspace => {
+                    state.previous_step();
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    if state.step == WizardStep::SelectTemplate {
+                        state.select_next_template();
+                    }
+                }
+                KeyCode::Up | KeyCode::Char('k') => {
+                    if state.step == WizardStep::SelectTemplate {
+                        state.select_previous_template();
+                    }
+                }
+                KeyCode::Tab => {
+                    if state.step == WizardStep::SelectPath {
+                        state.cycle_config_path();
+                    }
+                }
+                _ => {}
             }
         }
     };
@@ -266,7 +266,7 @@ fn draw_template_selection(frame: &mut Frame, area: Rect, state: &InitWizardStat
 }
 
 fn draw_path_selection(frame: &mut Frame, area: Rect, state: &InitWizardState) {
-    let paths = vec![
+    let paths = [
         ("./flow.kdl", "カレントディレクトリ (推奨)"),
         ("./.fleetflow/flow.kdl", ".fleetflowディレクトリ内"),
         ("~/.config/fleetflow/flow.kdl", "グローバル設定"),
