@@ -33,6 +33,7 @@ Cargo.lock
 
 # Skills - ホワイトリスト形式
 .claude/skills/*
+!.claude/skills/bollard/
 !.claude/skills/code-flow/
 !.claude/skills/dev-essentials/
 !.claude/skills/document-skills/
