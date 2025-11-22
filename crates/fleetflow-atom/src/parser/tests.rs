@@ -1,5 +1,7 @@
 use super::*;
 use crate::model::Protocol;
+use std::fs;
+use tempfile::TempDir;
 
 #[test]
 fn test_parse_simple_service() {
@@ -414,4 +416,139 @@ fn test_parse_without_variables() {
 
     // 変数なしでも正常に動作
     assert_eq!(service.image, Some("myapp:1.0.0".to_string()));
+}
+
+#[test]
+fn test_include_single_file() {
+    let temp_dir = TempDir::new().unwrap();
+    let base_path = temp_dir.path();
+
+    // includeされるファイルを作成
+    let included_kdl = r#"
+service "redis" {
+    version "7"
+}
+"#;
+    fs::write(base_path.join("redis.kdl"), included_kdl).unwrap();
+
+    // メインファイルを作成
+    let main_kdl = r#"
+include "redis.kdl"
+
+service "postgres" {
+    version "16"
+}
+"#;
+    fs::write(base_path.join("main.kdl"), main_kdl).unwrap();
+
+    // パースして確認
+    let flow = parse_kdl_file(base_path.join("main.kdl")).unwrap();
+
+    assert_eq!(flow.services.len(), 2);
+    assert!(flow.services.contains_key("redis"));
+    assert!(flow.services.contains_key("postgres"));
+
+    assert_eq!(flow.services["redis"].version, Some("7".to_string()));
+    assert_eq!(flow.services["postgres"].version, Some("16".to_string()));
+}
+
+#[test]
+fn test_include_glob_pattern() {
+    let temp_dir = TempDir::new().unwrap();
+    let base_path = temp_dir.path();
+
+    // services ディレクトリを作成
+    fs::create_dir(base_path.join("services")).unwrap();
+
+    // 複数のサービスファイルを作成
+    fs::write(
+        base_path.join("services/redis.kdl"),
+        r#"service "redis" { version "7" }"#,
+    )
+    .unwrap();
+
+    fs::write(
+        base_path.join("services/postgres.kdl"),
+        r#"service "postgres" { version "16" }"#,
+    )
+    .unwrap();
+
+    // メインファイルを作成
+    let main_kdl = r#"
+include "services/*.kdl"
+
+service "api" {
+    version "1.0"
+}
+"#;
+    fs::write(base_path.join("main.kdl"), main_kdl).unwrap();
+
+    // パースして確認
+    let flow = parse_kdl_file(base_path.join("main.kdl")).unwrap();
+
+    assert_eq!(flow.services.len(), 3);
+    assert!(flow.services.contains_key("redis"));
+    assert!(flow.services.contains_key("postgres"));
+    assert!(flow.services.contains_key("api"));
+}
+
+#[test]
+fn test_include_circular_reference() {
+    let temp_dir = TempDir::new().unwrap();
+    let base_path = temp_dir.path();
+
+    // a.kdl が b.kdl をinclude
+    fs::write(base_path.join("a.kdl"), r#"include "b.kdl""#).unwrap();
+
+    // b.kdl が a.kdl をinclude（循環参照）
+    fs::write(base_path.join("b.kdl"), r#"include "a.kdl""#).unwrap();
+
+    // パースするとエラーになるはず
+    let result = parse_kdl_file(base_path.join("a.kdl"));
+    assert!(result.is_err());
+
+    if let Err(e) = result {
+        assert!(e.to_string().contains("Circular include"));
+    }
+}
+
+#[test]
+fn test_include_nested() {
+    let temp_dir = TempDir::new().unwrap();
+    let base_path = temp_dir.path();
+
+    // level2.kdl
+    fs::write(
+        base_path.join("level2.kdl"),
+        r#"service "redis" { version "7" }"#,
+    )
+    .unwrap();
+
+    // level1.kdl が level2.kdl をinclude
+    fs::write(
+        base_path.join("level1.kdl"),
+        r#"
+include "level2.kdl"
+service "postgres" { version "16" }
+"#,
+    )
+    .unwrap();
+
+    // main.kdl が level1.kdl をinclude
+    fs::write(
+        base_path.join("main.kdl"),
+        r#"
+include "level1.kdl"
+service "api" { version "1.0" }
+"#,
+    )
+    .unwrap();
+
+    // パースして確認
+    let flow = parse_kdl_file(base_path.join("main.kdl")).unwrap();
+
+    assert_eq!(flow.services.len(), 3);
+    assert!(flow.services.contains_key("redis"));
+    assert!(flow.services.contains_key("postgres"));
+    assert!(flow.services.contains_key("api"));
 }
