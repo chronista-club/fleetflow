@@ -335,19 +335,43 @@ async fn test_create_container_with_labels() {
 
 ## 実装チェックリスト
 
-- [x] コンテナ命名規則の実装
+### Phase 1: MVP機能
+- [x] コンテナ命名規則の実装 (`{project}-{stage}-{service}`)
 - [x] Dockerラベル生成の実装
+  - [x] `com.docker.compose.project` / `com.docker.compose.service`
+  - [x] `fleetflow.project` / `fleetflow.stage` / `fleetflow.service`
 - [x] KDLパーサーでproject解析
-- [x] Bollard統合
-- [ ] エラーハンドリングの強化
+- [x] Bollard統合（コンテナ作成・起動・停止・削除）
+- [x] CLIコマンド実装
+  - [x] up（コンテナ起動）
+  - [x] down（コンテナ停止・削除）
+  - [x] ps（コンテナ一覧）
+  - [x] logs（ログ表示）
+  - [x] validate（設定検証）
+- [x] 自動イメージpull機能（Issue #8）
 - [x] ユニットテストの追加
-  - [x] projectノードのパーステスト (parser/tests.rs)
-  - [x] OrbStackラベル生成のテスト (converter.rs)
+  - [x] projectノードのパーステスト (parser/tests.rs) - 3件
+  - [x] OrbStackラベル生成のテスト (converter.rs) - 3件
   - [x] 複数ステージ・プロジェクトでのラベルテスト
-- [ ] 統合テストの追加（実際のDocker環境を使用）
 - [x] ドキュメント更新
 
+### Phase 2: 品質向上
+- [ ] エラーハンドリングの強化
+  - [ ] ネットワークエラーのリトライ
+  - [ ] タイムアウト設定
+  - [ ] より詳細なエラーメッセージ
+- [ ] 統合テストの追加（実際のDocker環境を使用）
+  - [ ] E2Eテスト（up → ps → down）
+  - [ ] エラーケーステスト
+
 ## 変更履歴
+
+### 2025-11-23: 自動イメージpull機能実装とチェックリスト更新
+- **理由**: UX改善とMVP完成状況の記録
+- **影響**:
+  - main.rs: 自動pull機能実装（parse_image_tag, pull_image関数追加）
+  - 設計書: チェックリストを更新してPhase 1 MVP完了を記録
+- **コミット**: 22a0cc5
 
 ### 2025-11-23: ユニットテスト追加
 - **理由**: OrbStack連携機能の品質保証
@@ -355,7 +379,7 @@ async fn test_create_container_with_labels() {
   - projectノードのパーステスト3件
   - OrbStackラベル生成のテスト3件
   - KDL 2.0構文エラーの修正
-- **コミット**: (未定)
+- **コミット**: 53c7ad6
 
 ### 2025-11-22: ドキュメント構造変更
 - **理由**: SDGスキルのフラット構造に対応

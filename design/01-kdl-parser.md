@@ -302,17 +302,28 @@ fn test_invalid_syntax() {
 
 ## 実装チェックリスト
 
+### Phase 1: MVP機能
 - [x] parse_kdl_file 実装
 - [x] parse_kdl_string 実装
 - [x] parse_service 実装
-- [x] parse_environment 実装
+- [x] parse_stage 実装 (旧 parse_environment)
 - [x] parse_port 実装
 - [x] parse_volume 実装
+- [x] parse_command 実装
+- [x] parse_project 実装
 - [x] infer_image_name 実装
+- [x] ユニットテスト (41件)
+  - [x] サービスパース（基本・バージョン・イメージ・ポート・環境変数・ボリューム・依存関係・コマンド）
+  - [x] ステージパース
+  - [x] プロジェクト名パース
+  - [x] エラーケース（名前なしサービス/ステージ）
+
+### Phase 2: 拡張機能（Issue #7）
 - [ ] include ディレクティブ対応
 - [ ] 変数展開対応
-- [ ] ユニットテスト
-- [ ] 統合テスト
+
+### Phase 3: 品質向上
+- [ ] 統合テスト（実際のKDLファイルを使用）
 - [ ] エラーメッセージ改善
 - [ ] パフォーマンステスト
 
@@ -356,3 +367,13 @@ service "api" {
     }
 }
 ```
+
+## 変更履歴
+
+### 2025-11-23: チェックリスト更新
+- **理由**: MVP完成状況の記録
+- **影響**: 実装チェックリストをPhase別に再構成
+  - Phase 1: MVP機能（完了）
+  - Phase 2: 拡張機能（Issue #7で計画中）
+  - Phase 3: 品質向上（今後の課題）
+- **コミット**: (未定)
