@@ -58,6 +58,7 @@ tracing-subscriber = "0.3"
 
 # Utils
 chrono = "0.4"
+glob = "0.3"
 
 # Testing
 tempfile = "3"
