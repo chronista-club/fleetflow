@@ -1,11 +1,12 @@
 use crate::error::{FlowError, Result};
 use crate::model::*;
+use crate::template::{extract_variables, TemplateProcessor};
 use kdl::{KdlDocument, KdlNode};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// KDLファイルをパースしてFlowを生成
+/// KDLファイルをパースしてFlowを生成（変数展開をサポート）
 pub fn parse_kdl_file<P: AsRef<Path>>(path: P) -> Result<Flow> {
     let content = fs::read_to_string(path.as_ref())?;
     let name = path
@@ -15,11 +16,35 @@ pub fn parse_kdl_file<P: AsRef<Path>>(path: P) -> Result<Flow> {
         .and_then(|n| n.to_str())
         .unwrap_or("unnamed")
         .to_string();
-    parse_kdl_string(&content, name)
+    parse_kdl_with_variables(&content, name)
 }
 
-/// KDL文字列をパース
+/// KDL文字列をパース（変数展開をサポート）
 pub fn parse_kdl_string(content: &str, default_name: String) -> Result<Flow> {
+    parse_kdl_with_variables(content, default_name)
+}
+
+/// 変数展開をサポートするKDLパーサー
+pub fn parse_kdl_with_variables(content: &str, default_name: String) -> Result<Flow> {
+    // 1. variablesノードから変数を抽出
+    let variables = extract_variables(content)?;
+
+    // 2. 変数がある場合はテンプレート展開
+    let expanded_content = if !variables.is_empty() {
+        let mut processor = TemplateProcessor::new();
+        processor.add_variables(variables);
+        processor.add_env_variables(); // 環境変数も追加
+        processor.render_str(content)?
+    } else {
+        content.to_string()
+    };
+
+    // 3. 展開後のKDLをパース
+    parse_kdl_string_raw(&expanded_content, default_name)
+}
+
+/// KDL文字列を直接パース（内部使用・変数展開なし）
+fn parse_kdl_string_raw(content: &str, default_name: String) -> Result<Flow> {
     let doc: KdlDocument = content.parse()?;
 
     let mut stages = HashMap::new();

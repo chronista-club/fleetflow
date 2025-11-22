@@ -350,3 +350,68 @@ fn test_parse_full_flow_with_project() {
     assert_eq!(flow.stages.len(), 1);
     assert_eq!(flow.stages["local"].services.len(), 2);
 }
+
+#[test]
+fn test_parse_with_variables() {
+    let kdl = r#"
+        variables {
+            registry "ghcr.io/myorg"
+            version "1.0.0"
+        }
+
+        service "api" {
+            image "{{ registry }}/api:{{ version }}"
+        }
+    "#;
+
+    let flow = parse_kdl_string(kdl, "test".to_string()).unwrap();
+    let service = &flow.services["api"];
+
+    // 変数が展開されている
+    assert_eq!(service.image, Some("ghcr.io/myorg/api:1.0.0".to_string()));
+}
+
+#[test]
+fn test_parse_with_multiple_variables() {
+    let kdl = r#"
+        variables {
+            registry "ghcr.io/myorg"
+            api_version "2.0.0"
+            worker_version "1.5.0"
+        }
+
+        service "api" {
+            image "{{ registry }}/api:{{ api_version }}"
+        }
+
+        service "worker" {
+            image "{{ registry }}/worker:{{ worker_version }}"
+        }
+    "#;
+
+    let flow = parse_kdl_string(kdl, "test".to_string()).unwrap();
+
+    // 変数が展開されている
+    assert_eq!(flow.services.len(), 2);
+
+    let api = &flow.services["api"];
+    assert_eq!(api.image, Some("ghcr.io/myorg/api:2.0.0".to_string()));
+
+    let worker = &flow.services["worker"];
+    assert_eq!(worker.image, Some("ghcr.io/myorg/worker:1.5.0".to_string()));
+}
+
+#[test]
+fn test_parse_without_variables() {
+    let kdl = r#"
+        service "api" {
+            image "myapp:1.0.0"
+        }
+    "#;
+
+    let flow = parse_kdl_string(kdl, "test".to_string()).unwrap();
+    let service = &flow.services["api"];
+
+    // 変数なしでも正常に動作
+    assert_eq!(service.image, Some("myapp:1.0.0".to_string()));
+}
