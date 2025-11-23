@@ -1,0 +1,28 @@
+[package]
+name = "fleetflow-build"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Docker image build functionality for FleetFlow"
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+fleetflow-atom = { path = "../fleetflow-atom" }
+bollard.workspace = true
+tokio.workspace = true
+futures-util.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tar = "0.4"
+flate2 = "1.0"
+colored = "2.1"
+indicatif = "0.17"
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio-test = "0.4"

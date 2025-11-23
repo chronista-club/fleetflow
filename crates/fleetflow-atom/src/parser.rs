@@ -185,6 +185,57 @@ fn parse_service(node: &KdlNode) -> Result<(String, Service)> {
                         .filter_map(|e| e.value().as_string().map(|s| s.to_string()))
                         .collect();
                 }
+                // ビルド関連フィールド（フラット記法）
+                "dockerfile" => {
+                    if let Some(path) = child.entries().first().and_then(|e| e.value().as_string())
+                    {
+                        service.build.get_or_insert_with(Default::default).dockerfile =
+                            Some(PathBuf::from(path));
+                    }
+                }
+                "context" => {
+                    if let Some(path) = child.entries().first().and_then(|e| e.value().as_string())
+                    {
+                        service.build.get_or_insert_with(Default::default).context =
+                            Some(PathBuf::from(path));
+                    }
+                }
+                "target" => {
+                    if let Some(target) =
+                        child.entries().first().and_then(|e| e.value().as_string())
+                    {
+                        service.build.get_or_insert_with(Default::default).target =
+                            Some(target.to_string());
+                    }
+                }
+                "build_args" => {
+                    if let Some(args) = child.children() {
+                        let build_config = service.build.get_or_insert_with(Default::default);
+                        for arg_node in args.nodes() {
+                            let key = arg_node.name().value().to_string();
+                            let value = arg_node
+                                .entries()
+                                .first()
+                                .and_then(|e| e.value().as_string())
+                                .unwrap_or("")
+                                .to_string();
+                            build_config.args.insert(key, value);
+                        }
+                    }
+                }
+                "image_tag" => {
+                    if let Some(tag) = child.entries().first().and_then(|e| e.value().as_string())
+                    {
+                        service.build.get_or_insert_with(Default::default).image_tag =
+                            Some(tag.to_string());
+                    }
+                }
+                // ネストしたbuildブロック
+                "build" => {
+                    if let Some(build_children) = child.children() {
+                        service.build = Some(parse_build_config(build_children));
+                    }
+                }
                 _ => {}
             }
         }
@@ -196,6 +247,58 @@ fn parse_service(node: &KdlNode) -> Result<(String, Service)> {
     }
 
     Ok((name, service))
+}
+
+/// buildブロックをパース（ネスト記法用）
+fn parse_build_config(doc: &KdlDocument) -> BuildConfig {
+    let mut config = BuildConfig::default();
+
+    for node in doc.nodes() {
+        match node.name().value() {
+            "dockerfile" => {
+                if let Some(path) = node.entries().first().and_then(|e| e.value().as_string()) {
+                    config.dockerfile = Some(PathBuf::from(path));
+                }
+            }
+            "context" => {
+                if let Some(path) = node.entries().first().and_then(|e| e.value().as_string()) {
+                    config.context = Some(PathBuf::from(path));
+                }
+            }
+            "args" => {
+                if let Some(args_children) = node.children() {
+                    for arg_node in args_children.nodes() {
+                        let key = arg_node.name().value().to_string();
+                        let value = arg_node
+                            .entries()
+                            .first()
+                            .and_then(|e| e.value().as_string())
+                            .unwrap_or("")
+                            .to_string();
+                        config.args.insert(key, value);
+                    }
+                }
+            }
+            "target" => {
+                if let Some(target) = node.entries().first().and_then(|e| e.value().as_string()) {
+                    config.target = Some(target.to_string());
+                }
+            }
+            "no_cache" => {
+                if let Some(value) = node.entries().first().and_then(|e| e.value().as_bool()) {
+                    config.no_cache = value;
+                }
+            }
+            "image_tag" => {
+                if let Some(tag) = node.entries().first().and_then(|e| e.value().as_string()) {
+                    config.image_tag = Some(tag.to_string());
+                }
+            }
+            _ => {}
+        }
+    }
+
+    config
 }
 
 /// port ノードをパース

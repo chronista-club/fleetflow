@@ -5,6 +5,7 @@ members = [
   "crates/fleetflow-atom",
   "crates/fleetflow-container",
   "crates/fleetflow-config",
+  "crates/fleetflow-build",
 ]
 
 [workspace.package]
@@ -58,6 +59,11 @@ tracing-subscriber = "0.3"
 
 # Utils
 chrono = "0.4"
+
+# Build utilities
+tar = "0.4"
+flate2 = "1.0"
+indicatif = "0.17"
 
 # Testing
 tempfile = "3"
