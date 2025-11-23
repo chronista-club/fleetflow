@@ -39,6 +39,22 @@ fn determine_stage_name(
     }
 }
 
+/// 読み込んだ設定ファイル情報を表示
+fn print_loaded_config_files(project_root: &std::path::Path) {
+    use colored::Colorize;
+    println!("📄 読み込んだ設定ファイル:");
+
+    let flow_kdl = project_root.join("flow.kdl");
+    if flow_kdl.exists() {
+        println!("  • {}", flow_kdl.display().to_string().cyan());
+    }
+
+    let flow_local_kdl = project_root.join("flow.local.kdl");
+    if flow_local_kdl.exists() {
+        println!("  • {} (ローカルオーバーライド)", flow_local_kdl.display().to_string().cyan());
+    }
+}
+
 /// Dockerイメージを自動的にpull
 async fn pull_image(
     docker: &bollard::Docker,
@@ -232,10 +248,10 @@ async fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    // 設定ファイルを検索
-    let config_path = match fleetflow_config::find_flow_file() {
-        Ok(path) => path,
-        Err(fleetflow_config::ConfigError::FlowFileNotFound) => {
+    // プロジェクトルートを検索
+    let project_root = match fleetflow_atom::find_project_root() {
+        Ok(root) => root,
+        Err(fleetflow_atom::FlowError::ProjectRootNotFound(_)) => {
             // 設定ファイルが見つからない場合は初期化ウィザードを起動
             println!("{}", "設定ファイルが見つかりません。".yellow());
             println!("{}", "初期化ウィザードを起動します...".cyan());
@@ -278,14 +294,14 @@ async fn main() -> anyhow::Result<()> {
         Err(e) => return Err(e.into()),
     };
 
-    // 設定ファイルをパース
-    let config = fleetflow_atom::parse_kdl_file(&config_path)?;
+    // プロジェクト全体をロード（flow.kdl + flow.local.kdlを自動マージ）
+    let config = fleetflow_atom::load_project_from_root(&project_root)?;
 
     // ここから既存のコマンド処理
     match cli.command {
         Commands::Up { stage } => {
             println!("{}", "ステージを起動中...".green());
-            println!("設定ファイル: {}", config_path.display().to_string().cyan());
+            print_loaded_config_files(&project_root);
 
             // ステージ名の決定（デフォルトステージをサポート）
             let stage_name = if let Some(s) = stage {
@@ -474,7 +490,7 @@ async fn main() -> anyhow::Result<()> {
         }
         Commands::Down { stage, remove } => {
             println!("{}", "ステージを停止中...".yellow());
-            println!("設定ファイル: {}", config_path.display().to_string().cyan());
+            print_loaded_config_files(&project_root);
 
             // ステージ名の決定（デフォルトステージをサポート）
             let stage_name = if let Some(s) = stage {
@@ -583,7 +599,7 @@ async fn main() -> anyhow::Result<()> {
         }
         Commands::Ps { stage, all } => {
             println!("{}", "コンテナ一覧を取得中...".blue());
-            println!("設定ファイル: {}", config_path.display().to_string().cyan());
+            print_loaded_config_files(&project_root);
 
             // Docker接続
             let docker = init_docker_with_error_handling().await?;
@@ -688,7 +704,7 @@ async fn main() -> anyhow::Result<()> {
             follow,
         } => {
             println!("{}", "ログを取得中...".blue());
-            println!("設定ファイル: {}", config_path.display().to_string().cyan());
+            print_loaded_config_files(&project_root);
 
             // Docker接続
             let docker = init_docker_with_error_handling().await?;
