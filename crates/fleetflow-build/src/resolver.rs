@@ -146,7 +146,7 @@ impl BuildResolver {
     }
 
     /// ビルド引数の検証（機密情報の警告）
-    pub fn validate_build_arg(&self, key: &str, value: &str) {
+    pub fn validate_build_arg(&self, key: &str, _value: &str) {
         let sensitive_patterns = ["password", "token", "secret", "api_key", "private_key"];
 
         let key_lower = key.to_lowercase();

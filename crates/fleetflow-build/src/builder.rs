@@ -26,10 +26,16 @@ impl ImageBuilder {
         tracing::info!("Building image: {}", tag);
 
         // ビルドオプションの設定
+        // build_argsを&str型に変換
+        let build_args_refs: std::collections::HashMap<&str, &str> = build_args
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect();
+
         let options = BuildImageOptions {
             dockerfile: "Dockerfile",
             t: tag,
-            buildargs: build_args.clone(),
+            buildargs: build_args_refs,
             target: target.unwrap_or(""),
             nocache: no_cache,
             rm: true,     // 中間コンテナを削除
@@ -44,9 +50,13 @@ impl ImageBuilder {
         }
 
         // ビルドストリームの開始
+        use bytes::Bytes;
+        use http_body_util::{Either, Full};
+        let context_bytes = Bytes::from(context_data);
+        let body = Full::new(context_bytes);
         let mut stream = self
             .docker
-            .build_image(options, None, Some(context_data.into()));
+            .build_image(options, None, Some(Either::Left(body)));
 
         // ビルド進捗の表示
         while let Some(msg) = stream.next().await {

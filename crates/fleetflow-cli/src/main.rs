@@ -15,6 +15,30 @@ fn parse_image_tag(image: &str) -> (&str, &str) {
     }
 }
 
+/// ステージ名を決定する（共通ロジック）
+fn determine_stage_name(
+    stage: Option<String>,
+    config: &fleetflow_atom::Flow,
+) -> anyhow::Result<String> {
+    if let Some(s) = stage {
+        Ok(s)
+    } else if config.stages.contains_key("default") {
+        Ok("default".to_string())
+    } else if config.stages.len() == 1 {
+        Ok(config.stages.keys().next().unwrap().clone())
+    } else {
+        Err(anyhow::anyhow!(
+            "ステージ名を指定してください: --stage=<stage> または FLOW_STAGE=<stage>\n利用可能なステージ: {}",
+            config
+                .stages
+                .keys()
+                .map(|s| s.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        ))
+    }
+}
+
 /// Dockerイメージを自動的にpull
 async fn pull_image(
     docker: &bollard::Docker,
@@ -162,6 +186,33 @@ enum Commands {
         /// 停止中のコンテナも表示
         #[arg(short, long)]
         all: bool,
+    },
+    /// サービスを再起動
+    Restart {
+        /// サービス名
+        service: String,
+        /// ステージ名を指定 (local, dev, stg, prd)
+        /// 環境変数 FLOW_STAGE からも読み込み可能
+        #[arg(short, long, env = "FLOW_STAGE")]
+        stage: Option<String>,
+    },
+    /// サービスを停止
+    Stop {
+        /// サービス名
+        service: String,
+        /// ステージ名を指定 (local, dev, stg, prd)
+        /// 環境変数 FLOW_STAGE からも読み込み可能
+        #[arg(short, long, env = "FLOW_STAGE")]
+        stage: Option<String>,
+    },
+    /// サービスを起動
+    Start {
+        /// サービス名
+        service: String,
+        /// ステージ名を指定 (local, dev, stg, prd)
+        /// 環境変数 FLOW_STAGE からも読み込み可能
+        #[arg(short, long, env = "FLOW_STAGE")]
+        stage: Option<String>,
     },
     /// 設定を検証
     Validate,
@@ -757,6 +808,215 @@ async fn main() -> anyhow::Result<()> {
             if follow {
                 println!();
                 println!("{}", "Ctrl+C でログ追跡を終了".dimmed());
+            }
+        }
+        Commands::Restart { service, stage } => {
+            println!("{}", format!("サービス '{}' を再起動中...", service).green());
+
+            // ステージ名の決定
+            let stage_name = determine_stage_name(stage, &config)?;
+            println!("ステージ: {}", stage_name.cyan());
+
+            // サービスの存在確認
+            let service_def = config.services.get(&service).ok_or_else(|| {
+                anyhow::anyhow!("サービス '{}' が見つかりません", service)
+            })?;
+
+            // Docker接続
+            let docker = init_docker_with_error_handling().await?;
+
+            // コンテナ名
+            let container_name = format!("{}-{}-{}", config.name, stage_name, service);
+
+            // コンテナの停止
+            println!("  ↓ コンテナを停止中...");
+            match docker
+                .stop_container(&container_name, None::<bollard::query_parameters::StopContainerOptions>)
+                .await
+            {
+                Ok(_) => println!("  ✓ コンテナを停止しました"),
+                Err(bollard::errors::Error::DockerResponseServerError {
+                    status_code: 404,
+                    ..
+                }) => {
+                    println!("  ℹ コンテナは実行されていません");
+                }
+                Err(e) => return Err(e.into()),
+            }
+
+            // コンテナの起動
+            println!("  ↑ コンテナを起動中...");
+            match docker
+                .start_container(&container_name, None::<bollard::query_parameters::StartContainerOptions>)
+                .await
+            {
+                Ok(_) => {
+                    println!("  ✓ コンテナを起動しました");
+                    println!();
+                    println!("{}", format!("✓ '{}' を再起動しました", service).green().bold());
+                }
+                Err(bollard::errors::Error::DockerResponseServerError {
+                    status_code: 404,
+                    ..
+                }) => {
+                    // コンテナが存在しない場合は作成して起動
+                    println!("  ℹ コンテナが存在しないため、新規作成します");
+
+                    // コンテナ作成・起動（upコマンドのロジックを再利用）
+                    let (container_config, create_options) =
+                        fleetflow_container::service_to_container_config(
+                            &service,
+                            service_def,
+                            &stage_name,
+                            &config.name,
+                        );
+
+                    // イメージ名の取得
+                    let image = container_config.image.as_ref().ok_or_else(|| {
+                        anyhow::anyhow!("サービス '{}' のイメージ設定が見つかりません", service)
+                    })?;
+
+                    // イメージの存在確認とpull
+                    match docker.inspect_image(image).await {
+                        Ok(_) => {}
+                        Err(bollard::errors::Error::DockerResponseServerError {
+                            status_code: 404,
+                            ..
+                        }) => {
+                            pull_image(&docker, image).await?;
+                        }
+                        Err(e) => return Err(e.into()),
+                    }
+
+                    // コンテナ作成
+                    docker
+                        .create_container(Some(create_options), container_config)
+                        .await?;
+
+                    // コンテナ起動
+                    docker
+                        .start_container(&container_name, None::<bollard::query_parameters::StartContainerOptions>)
+                        .await?;
+
+                    println!("  ✓ コンテナを作成・起動しました");
+                    println!();
+                    println!("{}", format!("✓ '{}' を起動しました", service).green().bold());
+                }
+                Err(e) => return Err(e.into()),
+            }
+        }
+        Commands::Stop { service, stage } => {
+            println!("{}", format!("サービス '{}' を停止中...", service).yellow());
+
+            // ステージ名の決定
+            let stage_name = determine_stage_name(stage, &config)?;
+            println!("ステージ: {}", stage_name.cyan());
+
+            // サービスの存在確認
+            config.services.get(&service).ok_or_else(|| {
+                anyhow::anyhow!("サービス '{}' が見つかりません", service)
+            })?;
+
+            // Docker接続
+            let docker = init_docker_with_error_handling().await?;
+
+            // コンテナ名
+            let container_name = format!("{}-{}-{}", config.name, stage_name, service);
+
+            // コンテナの停止
+            match docker
+                .stop_container(&container_name, None::<bollard::query_parameters::StopContainerOptions>)
+                .await
+            {
+                Ok(_) => {
+                    println!();
+                    println!("{}", format!("✓ '{}' を停止しました", service).green().bold());
+                }
+                Err(bollard::errors::Error::DockerResponseServerError {
+                    status_code: 404,
+                    ..
+                }) => {
+                    println!();
+                    println!("{}", format!("ℹ コンテナ '{}' は存在しません", service).dimmed());
+                }
+                Err(e) => return Err(e.into()),
+            }
+        }
+        Commands::Start { service, stage } => {
+            println!("{}", format!("サービス '{}' を起動中...", service).green());
+
+            // ステージ名の決定
+            let stage_name = determine_stage_name(stage, &config)?;
+            println!("ステージ: {}", stage_name.cyan());
+
+            // サービスの存在確認
+            let service_def = config.services.get(&service).ok_or_else(|| {
+                anyhow::anyhow!("サービス '{}' が見つかりません", service)
+            })?;
+
+            // Docker接続
+            let docker = init_docker_with_error_handling().await?;
+
+            // コンテナ名
+            let container_name = format!("{}-{}-{}", config.name, stage_name, service);
+
+            // コンテナの起動
+            match docker
+                .start_container(&container_name, None::<bollard::query_parameters::StartContainerOptions>)
+                .await
+            {
+                Ok(_) => {
+                    println!();
+                    println!("{}", format!("✓ '{}' を起動しました", service).green().bold());
+                }
+                Err(bollard::errors::Error::DockerResponseServerError {
+                    status_code: 404,
+                    ..
+                }) => {
+                    // コンテナが存在しない場合は作成して起動
+                    println!("  ℹ コンテナが存在しないため、新規作成します");
+
+                    // コンテナ作成・起動（upコマンドのロジックを再利用）
+                    let (container_config, create_options) =
+                        fleetflow_container::service_to_container_config(
+                            &service,
+                            service_def,
+                            &stage_name,
+                            &config.name,
+                        );
+
+                    // イメージ名の取得
+                    let image = container_config.image.as_ref().ok_or_else(|| {
+                        anyhow::anyhow!("サービス '{}' のイメージ設定が見つかりません", service)
+                    })?;
+
+                    // イメージの存在確認とpull
+                    match docker.inspect_image(image).await {
+                        Ok(_) => {}
+                        Err(bollard::errors::Error::DockerResponseServerError {
+                            status_code: 404,
+                            ..
+                        }) => {
+                            pull_image(&docker, image).await?;
+                        }
+                        Err(e) => return Err(e.into()),
+                    }
+
+                    // コンテナ作成
+                    docker
+                        .create_container(Some(create_options), container_config)
+                        .await?;
+
+                    // コンテナ起動
+                    docker
+                        .start_container(&container_name, None::<bollard::query_parameters::StartContainerOptions>)
+                        .await?;
+
+                    println!("  ✓ コンテナを作成・起動しました");
+                    println!();
+                    println!("{}", format!("✓ '{}' を起動しました", service).green().bold());
+                }
+                Err(e) => return Err(e.into()),
             }
         }
         Commands::Validate => {
