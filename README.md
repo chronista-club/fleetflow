@@ -2,11 +2,14 @@
 
 > Docker Composeよりシンプル。KDLで書く、次世代の環境構築ツール。
 
+[![CI](https://github.com/chronista-club/fleetflow/actions/workflows/ci.yml/badge.svg)](https://github.com/chronista-club/fleetflow/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](LICENSE-MIT)
+
 ## コンセプト
 
 **「宣言だけで、開発も本番も」**
 
-FleetFlowは、KDL（KDL Document Language）をベースにした、革新的で超シンプルなデプロイ・環境構築ツールです。
+FleetFlowは、KDL（KDL Document Language）をベースにした、革新的で超シンプルなコンテナオーケストレーション・環境構築ツールです。
 Docker Composeの手軽さはそのままに、より少ない記述で、より強力な設定管理を実現します。
 
 ### なぜFleetFlow？
@@ -15,45 +18,68 @@ Docker Composeの手軽さはそのままに、より少ない記述で、より
 - **可読性**: YAMLよりも読みやすいKDL構文
 - **モジュール化**: include機能で設定を分割・再利用
 - **統一管理**: 開発環境から本番環境まで同じツールで
+- **OrbStack連携**: macOSでの開発体験を最適化
 
 ## クイックスタート
 
 ### インストール
 
 ```bash
+# cargoでインストール
 cargo install fleetflow
+
+# または、GitHubから直接インストール
+cargo install --git https://github.com/chronista-club/fleetflow
 ```
 
 ### 基本的な使い方
 
-```kdl
-// fleetflow.kdl
-environment "development" {
-  service "web" {
-    image "node:20-alpine"
-    port 3000
-    env {
-      NODE_ENV "development"
-    }
-  }
+1. `flow.kdl` を作成:
 
-  service "db" {
+```kdl
+// flow.kdl
+project "myapp"
+
+stage "local" {
+    service "web"
+    service "db"
+}
+
+service "web" {
+    image "node:20-alpine"
+    ports {
+        port host=3000 container=3000
+    }
+    environment {
+        NODE_ENV "development"
+    }
+}
+
+service "db" {
     image "postgres:16"
-    port 5432
-    volume "./data:/var/lib/postgresql/data"
-  }
+    ports {
+        port host=5432 container=5432
+    }
+    environment {
+        POSTGRES_PASSWORD "password"
+    }
 }
 ```
 
+2. 起動:
+
 ```bash
-# 環境を起動
-fleetflow up
+# ステージを起動
+fleetflow up local
 
-# 環境を停止
-fleetflow down
+# ログを確認
+fleetflow logs
 
-# 設定を検証
-fleetflow validate
+# 状態を確認
+fleetflow ps
+
+# 停止
+fleetflow down local
 ```
 
 ## 特徴
@@ -64,196 +90,158 @@ YAMLの冗長さから解放され、読みやすく書きやすい設定ファ�
 
 ```kdl
 service "api" {
-  image "myapp:latest"
-  port 8080
-  env {
-    DATABASE_URL "postgresql://localhost/mydb"
-    REDIS_URL "redis://localhost:6379"
-  }
+    image "myapp:latest"
+    ports {
+        port host=8080 container=8080
+    }
+    environment {
+        DATABASE_URL "postgresql://localhost/mydb"
+        REDIS_URL "redis://localhost:6379"
+    }
 }
 ```
 
-### 2. 強力なinclude機能
+### 2. ステージベースの環境管理
 
-設定を分割して管理。共通設定を再利用できます。
+開発（local）、検証（dev）、本番（prd）など、複数の環境を1つのファイルで管理。
 
 ```kdl
-// flow.kdl
-include "common/database.kdl"
-include "common/redis.kdl"
-include "services/api.kdl"
-include "services/worker.kdl"
+project "myapp"
 
-stage "development" {
-  // includeした設定が自動的に利用される
+stage "local" {
+    service "api"
+    service "db"
+    variables {
+        LOG_LEVEL "debug"
+    }
+}
+
+stage "prd" {
+    service "api"
+    service "db"
+    variables {
+        LOG_LEVEL "info"
+    }
 }
 ```
 
-プロジェクト構造例：
+### 3. Dockerビルド機能
+
+Dockerfileからのイメージビルドをサポート。
+
+```kdl
+service "api" {
+    dockerfile "services/api/Dockerfile"
+    context "."
+    build_args {
+        RUST_VERSION "1.75"
+    }
+}
+```
+
+### 4. OrbStack連携
+
+macOSのOrbStackと連携し、プロジェクト・ステージごとにコンテナをグループ化。
+
+- コンテナ名: `{project}-{stage}-{service}`
+- OrbStackグループ: `{project}-{stage}`
+
+### 5. 自動設定読み込み
+
+`flow.kdl` または `flow/` ディレクトリ内の `.kdl` ファイルを自動検出。
 
 ```
 project/
-├── flow.kdl                # メイン設定
-├── common/
-│   ├── database.kdl       # DB共通設定
-│   └── redis.kdl          # Redis共通設定
-├── environments/
-│   ├── dev.kdl            # 開発環境
-│   ├── staging.kdl        # ステージング
-│   └── prod.kdl           # 本番環境
-└── services/
-    ├── api.kdl
-    ├── worker.kdl
-    └── frontend.kdl
-```
-
-### 3. 環境間の継承
-
-開発環境と本番環境の差分だけを記述。
-
-```kdl
-environment "development" {
-  service "api" {
-    image "node:20-alpine"
-    port 3000
-    env {
-      NODE_ENV "development"
-    }
-  }
-}
-
-environment "production" {
-  include-from "development"
-
-  service "api" {
-    replicas 3  // 本番環境では3台に
-    env {
-      NODE_ENV "production"
-    }
-  }
-}
-```
-
-### 4. 変数とテンプレート
-
-繰り返しを減らし、保守性を向上。
-
-```kdl
-vars {
-  app-version "1.0.0"
-  registry "ghcr.io/myorg"
-  node-image "node:20-alpine"
-}
-
-service "api" {
-  image "{registry}/api:{app-version}"
-  base-image "{node-image}"
-}
-```
-
-## 拡張機能
-
-### include
-
-ファイル全体をインクルード。
-
-```kdl
-include "path/to/config.kdl"
-include "services/*.kdl"  // グロブパターン対応（予定）
-```
-
-### 環境変数参照
-
-```kdl
-service "api" {
-  env {
-    DATABASE_URL from-env "DATABASE_URL"
-    API_KEY from-secret "api-key"
-  }
-}
-```
-
-### 条件分岐（予定）
-
-```kdl
-service "api" {
-  if env "production" {
-    replicas 3
-  } else {
-    replicas 1
-  }
-}
+├── flow.kdl              # 単一ファイル
+# または
+├── flow/
+│   ├── main.kdl         # メイン設定
+│   ├── services.kdl     # サービス定義
+│   └── stages.kdl       # ステージ定義
 ```
 
 ## コマンド
 
 ```bash
-# 環境を起動
-fleetflow up [--stage <stage>]
+# ステージを起動
+fleetflow up <stage>
 
-# 環境を停止
-fleetflow down [--stage <stage>]
+# ステージを停止
+fleetflow down <stage>
 
-# 環境を再起動
-fleetflow restart [--stage <stage>]
+# サービスを再起動
+fleetflow restart <stage> [service]
+
+# サービスを停止（コンテナは保持）
+fleetflow stop <stage> [service]
+
+# サービスを起動（停止中のコンテナ）
+fleetflow start <stage> [service]
+
+# ログを表示
+fleetflow logs [--follow] [--lines N] [service]
+
+# コンテナ一覧
+fleetflow ps [--all]
 
 # 設定を検証
 fleetflow validate
 
-# ステージ間の差分を表示
-fleetflow diff <stage1> <stage2>
+# バージョン表示
+fleetflow version
+```
 
-# 設定をDocker Composeに変換
-fleetflow export docker-compose
+## プロジェクト構造
 
-# ログを表示
-fleetflow logs [service-name]
-
-# サービス一覧を表示
-fleetflow ps
+```
+fleetflow/
+├── crates/
+│   ├── fleetflow-cli/           # CLIエントリーポイント
+│   ├── fleetflow-atom/          # KDLパーサー・データモデル
+│   ├── fleetflow-container/     # コンテナ操作
+│   ├── fleetflow-config/        # 設定管理
+│   ├── fleetflow-build/         # Dockerビルド機能
+│   ├── fleetflow-cloud/         # クラウドインフラ抽象化
+│   ├── fleetflow-cloud-sakura/  # さくらクラウド連携
+│   └── fleetflow-cloud-cloudflare/ # Cloudflare連携
+├── spec/                        # 仕様書
+├── design/                      # 設計書
+└── guides/                      # 利用ガイド
 ```
 
 ## ロードマップ
 
-### Phase 1: MVP (現在の目標)
+### Phase 1: MVP ✅
+- [x] KDLパーサーの実装
+- [x] 基本的なCLIコマンド（up/down/ps/logs）
+- [x] Docker API統合（bollard）
+- [x] OrbStack連携
+- [x] 自動イメージpull
 
-- [x] プロジェクト初期化
-- [ ] KDLパーサーの実装
-- [ ] 基本的なservice定義のパース
-- [ ] include機能の実装
-- [ ] Docker Compose形式への変換
-- [ ] 基本的なCLIコマンド（up/down/validate）
+### Phase 2: ビルド機能 ✅
+- [x] Dockerビルド機能（fleetflow-build）
+- [x] 個別サービス操作（start/stop/restart）
+- [x] 複数設定ファイル対応
 
-### Phase 2: 拡張機能
+### Phase 3: クラウドインフラ 🚧
+- [x] クラウドプロバイダー抽象化
+- [x] さくらクラウド連携（usacloud）
+- [x] Cloudflare連携（スケルトン）
+- [ ] CLI統合
 
+### Phase 4: 拡張機能
 - [ ] 環境変数の参照
 - [ ] 変数定義と展開
 - [ ] 環境継承（include-from）
-- [ ] グロブパターンによるinclude
-- [ ] 設定の検証とエラーメッセージ改善
-
-### Phase 3: 独自実行エンジン
-
-- [ ] Docker API直接利用
-- [ ] パフォーマンス最適化
-- [ ] リアルタイムログストリーミング
 - [ ] ヘルスチェック機能
-
-### Phase 4: エコシステム拡張
-
-- [ ] Kubernetes manifestへの変換
-- [ ] Terraform/Pulumiとの統合
-- [ ] Web UI
-- [ ] プラグインシステム
-- [ ] CI/CDパイプライン統合
 
 ## 技術スタック
 
-- **言語**: Rust
+- **言語**: Rust (Edition 2024)
 - **パーサー**: `kdl` crate
-- **コンテナ**: Docker API / bollard
-- **CLI**: clap
-- **設定検証**: serde + custom validation
+- **コンテナAPI**: `bollard` (Docker API client)
+- **CLI**: `clap`
+- **非同期**: `tokio`
 
 ## 開発に参加する
 
@@ -268,13 +256,27 @@ cargo build
 cargo test
 ```
 
-### テスト
+### 開発コマンド
 
 ```bash
+# テスト実行
 cargo test
+
+# リント
 cargo clippy
+
+# フォーマット
 cargo fmt
+
+# ローカルインストール
+cargo install --path crates/fleetflow-cli
 ```
+
+## ドキュメント
+
+- [仕様書](spec/) - 機能の詳細仕様
+- [設計書](design/) - 実装の設計詳細
+- [利用ガイド](guides/) - ユースケース別のガイド
 
 ## ライセンス
 
@@ -295,6 +297,7 @@ dual licensed as above, without any additional terms or conditions.
 
 - [KDL - The KDL Document Language](https://kdl.dev/)
 - [kdl-rs](https://github.com/kdl-org/kdl-rs)
+- [bollard](https://docs.rs/bollard/) - Docker API client for Rust
 
 ---
 

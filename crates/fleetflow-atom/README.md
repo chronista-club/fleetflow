@@ -16,6 +16,25 @@ FleetFlowのコア機能を提供するライブラリクレート。
 - **テンプレートエンジン** - 変数展開とテンプレート処理
 - **ファイル検出** - 自動的な設定ファイルの発見
 
+## モジュール構造
+
+```
+src/
+├── model/           # データ構造
+│   ├── flow.rs      # Flow
+│   ├── stage.rs     # Stage
+│   ├── service.rs   # Service, BuildConfig
+│   ├── port.rs      # Port, Protocol
+│   ├── volume.rs    # Volume
+│   └── process.rs   # Process, ProcessState
+└── parser/          # KDLパーサー
+    ├── mod.rs       # メインパース関数
+    ├── stage.rs     # stageノードパース
+    ├── service.rs   # serviceノードパース
+    ├── port.rs      # portノードパース
+    └── volume.rs    # volumeノードパース
+```
+
 ## 使用例
 
 ```rust
@@ -67,6 +86,16 @@ pub struct Service {
     pub environment: HashMap<String, String>,
     pub volumes: Vec<Volume>,
     pub depends_on: Vec<String>,
+    pub build: Option<BuildConfig>,  // Dockerビルド設定
+}
+
+pub struct BuildConfig {
+    pub dockerfile: Option<PathBuf>,
+    pub context: Option<PathBuf>,
+    pub args: HashMap<String, String>,
+    pub target: Option<String>,
+    pub no_cache: bool,
+    pub image_tag: Option<String>,
 }
 ```
 

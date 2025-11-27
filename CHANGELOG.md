@@ -7,6 +7,48 @@
 
 ## [Unreleased]
 
+## [0.2.0] - 2025-11-28
+
+### 追加
+
+#### Dockerビルド機能
+- `fleetflow-build` クレート追加
+- Dockerfile検出と変数展開
+- ビルドコンテキスト作成とビルド実行
+- 進捗表示機能
+
+#### クラウドインフラ管理
+- `fleetflow-cloud`: コア抽象化レイヤー（CloudProviderトレイト）
+- `fleetflow-cloud-sakura`: さくらクラウドプロバイダー（usacloud CLI）
+- `fleetflow-cloud-cloudflare`: Cloudflareプロバイダー（スケルトン）
+
+#### CLIコマンド拡張
+- `fleetflow start` - 停止中のサービスを起動
+- `fleetflow stop` - サービスを停止（コンテナは保持）
+- `fleetflow restart` - サービスを再起動
+
+### 変更
+
+#### コード構造
+- KDLノードタイプをモジュール分割（`model/`, `parser/`）
+- 各ノードタイプを独立したファイルで管理
+  - `model/`: flow, stage, service, port, volume, process
+  - `parser/`: mod, stage, service, port, volume
+
+#### 機能改善
+- 複数設定ファイルの読み込み状況を表示
+- 個別サービス操作コマンドの追加
+
+### ドキュメント
+
+- Dockerビルド機能の仕様・設計・ガイド
+  - `spec/07-docker-build.md`
+  - `design/03-docker-build.md`
+  - `guides/02-docker-build.md`
+- クラウドインフラ管理の仕様・設計
+  - `spec/08-cloud-infrastructure.md`
+  - `design/04-cloud-infrastructure.md`
+
 ## [0.1.0] - 2025-01-09
 
 ### 追加
@@ -46,5 +88,6 @@
 - アーキテクチャと設計ドキュメント
 - MIT OR Apache-2.0のデュアルライセンス
 
-[Unreleased]: https://github.com/chronista-club/fleetflow/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/chronista-club/fleetflow/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/chronista-club/fleetflow/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/chronista-club/fleetflow/releases/tag/v0.1.0
