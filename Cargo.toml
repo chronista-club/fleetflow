@@ -6,6 +6,9 @@ members = [
   "crates/fleetflow-container",
   "crates/fleetflow-config",
   "crates/fleetflow-build",
+  "crates/fleetflow-cloud",
+  "crates/fleetflow-cloud-sakura",
+  "crates/fleetflow-cloud-cloudflare",
 ]
 
 [workspace.package]
