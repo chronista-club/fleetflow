@@ -165,10 +165,10 @@ impl Usacloud {
             args.push(os.as_str());
         }
 
-        // Add SSH key
+        // Add SSH key IDs (usacloud uses --disk-edit-ssh-key-ids)
         if let Some(ref ssh_key_ids) = config.ssh_key_ids {
             for id in ssh_key_ids {
-                args.push("--disk-edit-ssh-key-id");
+                args.push("--disk-edit-ssh-key-ids");
                 args.push(id.as_str());
             }
         }
@@ -178,6 +178,10 @@ impl Usacloud {
             args.push("--tags");
             args.push(tags_str.as_str());
         }
+
+        // Connect to shared network for public IP
+        args.push("--network-interface-upstream");
+        args.push("shared");
 
         let output = self.run_command(&args).await?;
 
@@ -339,13 +343,20 @@ impl CreateServerConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SshKeyInfo {
     #[serde(rename = "ID")]
-    pub id: String,
+    pub id: u64,
 
     #[serde(rename = "Name")]
     pub name: String,
 
     #[serde(rename = "PublicKey")]
     pub public_key: Option<String>,
+}
+
+impl SshKeyInfo {
+    /// Get ID as string
+    pub fn id_str(&self) -> String {
+        self.id.to_string()
+    }
 }
 
 #[cfg(test)]

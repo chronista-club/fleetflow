@@ -97,7 +97,7 @@ impl SakuraCloudProvider {
                 .filter_map(|name| {
                     all_keys.iter()
                         .find(|k| k.name == *name)
-                        .map(|k| k.id.clone())
+                        .map(|k| k.id_str())
                 })
                 .collect();
             if ids.is_empty() { None } else { Some(ids) }

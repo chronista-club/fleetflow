@@ -1,0 +1,34 @@
+{
+  "mcpServers": {
+    "creo-memories": {
+      "type": "http",
+      "url": "http://localhost:12080/mcp"
+    },
+    "surrealdbmcp": {
+      "command": "docker",
+      "args": [
+        "run",
+        "--rm",
+        "-i",
+        "--pull",
+        "always",
+        "surrealdb/surrealmcp:latest",
+        "start"
+      ]
+    },
+    "serena": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": [
+        "--from",
+        "serena-agent",
+        "serena-mcp-server",
+        "--context",
+        "ide-assistant",
+        "--project",
+        "$(pwd)"
+      ],
+      "env": {}
+    }
+  }
+}
