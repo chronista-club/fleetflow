@@ -95,6 +95,27 @@ fn test_parse_service_with_environment() {
     );
 }
 
+// Issue #12: env と environment 両方をサポート
+#[test]
+fn test_parse_service_with_env_alias() {
+    let kdl = r#"
+        service "api" {
+            env {
+                NODE_ENV "development"
+                DEBUG "true"
+            }
+        }
+    "#;
+
+    let flow = parse_kdl_string(kdl, "test".to_string()).unwrap();
+    let service = &flow.services["api"];
+
+    // env キーワードでも environment と同様に動作する
+    assert_eq!(service.environment.len(), 2);
+    assert_eq!(service.environment["NODE_ENV"], "development");
+    assert_eq!(service.environment["DEBUG"], "true");
+}
+
 #[test]
 fn test_parse_service_with_volumes() {
     let kdl = r#"
@@ -118,6 +139,26 @@ fn test_parse_service_with_volumes() {
 
     let vol2 = &service.volumes[1];
     assert_eq!(vol2.read_only, true);
+}
+
+// Issue #13: 文字列 "true"/"false" でも動作する（警告は出る）
+#[test]
+fn test_parse_volume_with_string_bool() {
+    let kdl = r#"
+        service "db" {
+            volumes {
+                volume "./config" "/etc/config" read_only="true"
+            }
+        }
+    "#;
+
+    let flow = parse_kdl_string(kdl, "test".to_string()).unwrap();
+    let service = &flow.services["db"];
+
+    // 文字列 "true" でも警告付きで動作する
+    assert_eq!(service.volumes.len(), 1);
+    let vol = &service.volumes[0];
+    assert_eq!(vol.read_only, true);
 }
 
 #[test]

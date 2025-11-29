@@ -53,7 +53,8 @@ pub fn parse_service(node: &KdlNode) -> Result<(String, Service)> {
                         }
                     }
                 }
-                "environment" => {
+                // env と environment 両方をサポート (#12)
+                "environment" | "env" => {
                     if let Some(envs) = child.children() {
                         for env_node in envs.nodes() {
                             let key = env_node.name().value().to_string();
