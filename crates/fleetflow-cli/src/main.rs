@@ -234,6 +234,40 @@ enum Commands {
     Validate,
     /// バージョン情報を表示
     Version,
+    /// クラウドリソースを管理
+    #[command(subcommand)]
+    Cloud(CloudCommands),
+}
+
+/// クラウド関連のサブコマンド
+#[derive(Subcommand)]
+enum CloudCommands {
+    /// クラウドリソースの状態を表示
+    Status {
+        /// ステージ名を指定 (production, staging)
+        #[arg(short, long)]
+        stage: Option<String>,
+    },
+    /// クラウドプロバイダーの認証状態を確認
+    Auth,
+    /// クラウドリソースを作成/更新
+    Up {
+        /// ステージ名を指定
+        #[arg(short, long)]
+        stage: String,
+        /// 確認なしで実行
+        #[arg(short, long)]
+        yes: bool,
+    },
+    /// クラウドリソースを削除
+    Down {
+        /// ステージ名を指定
+        #[arg(short, long)]
+        stage: String,
+        /// 確認なしで実行
+        #[arg(short, long)]
+        yes: bool,
+    },
 }
 
 #[tokio::main]
@@ -1115,11 +1149,32 @@ async fn main() -> anyhow::Result<()> {
                             }
                             println!("  ステージ: {}個", config.stages.len());
                             for (name, stage) in &config.stages {
+                                let server_info = if stage.servers.is_empty() {
+                                    String::new()
+                                } else {
+                                    format!(", {}個のサーバー", stage.servers.len())
+                                };
                                 println!(
-                                    "    - {} ({}個のサービス)",
+                                    "    - {} ({}個のサービス{})",
                                     name.cyan(),
-                                    stage.services.len()
+                                    stage.services.len(),
+                                    server_info
                                 );
+                            }
+
+                            // クラウドリソースの表示
+                            if !config.providers.is_empty() {
+                                println!("  プロバイダー: {}個", config.providers.len());
+                                for (name, provider) in &config.providers {
+                                    let zone = provider.zone.as_deref().unwrap_or("(未設定)");
+                                    println!("    - {} (zone: {})", name.cyan(), zone);
+                                }
+                            }
+                            if !config.servers.is_empty() {
+                                println!("  サーバー: {}個", config.servers.len());
+                                for (name, server) in &config.servers {
+                                    println!("    - {} ({})", name.cyan(), server.provider);
+                                }
                             }
                         }
                         Err(e) => {
@@ -1143,6 +1198,143 @@ async fn main() -> anyhow::Result<()> {
         Commands::Version => {
             // すでに上で処理済み
             unreachable!()
+        }
+        Commands::Cloud(cloud_cmd) => {
+            handle_cloud_command(cloud_cmd, &config).await?;
+        }
+    }
+
+    Ok(())
+}
+
+/// クラウドコマンドを処理
+async fn handle_cloud_command(cmd: CloudCommands, config: &fleetflow_atom::Flow) -> anyhow::Result<()> {
+    use fleetflow_cloud_sakura::SakuraCloudProvider;
+    use fleetflow_cloud::CloudProvider;
+
+    match cmd {
+        CloudCommands::Auth => {
+            println!("{}", "クラウドプロバイダーの認証状態を確認中...".blue());
+
+            for (name, provider_config) in &config.providers {
+                println!("\n{} {}:", "Provider:".cyan(), name.bold());
+
+                // 現在はsakura-cloudのみサポート
+                if name == "sakura-cloud" {
+                    let zone = provider_config.zone.as_deref().unwrap_or("tk1a");
+                    let provider = SakuraCloudProvider::new(zone);
+
+                    match provider.check_auth().await {
+                        Ok(status) => {
+                            if status.authenticated {
+                                println!("  {} 認証済み", "✓".green().bold());
+                                if let Some(info) = status.account_info {
+                                    println!("  アカウント: {}", info.cyan());
+                                }
+                            } else {
+                                println!("  {} 未認証", "✗".red().bold());
+                                if let Some(err) = status.error {
+                                    println!("  エラー: {}", err);
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            println!("  {} 認証チェック失敗: {}", "✗".red().bold(), e);
+                        }
+                    }
+                } else {
+                    println!("  {} プロバイダー '{}' はサポートされていません", "!".yellow(), name);
+                }
+            }
+
+            if config.providers.is_empty() {
+                println!("{}", "クラウドプロバイダーが設定されていません。".yellow());
+                println!("flow.kdl に provider ブロックを追加してください。");
+            }
+        }
+        CloudCommands::Status { stage } => {
+            println!("{}", "クラウドリソースの状態を取得中...".blue());
+
+            // ステージ名が指定されていない場合は全サーバーを表示
+            let servers_to_show: Vec<&str> = if let Some(ref stage_name) = stage {
+                if let Some(stage_config) = config.stages.get(stage_name) {
+                    stage_config.servers.iter().map(|s| s.as_str()).collect()
+                } else {
+                    println!("{} ステージ '{}' が見つかりません", "✗".red().bold(), stage_name);
+                    return Ok(());
+                }
+            } else {
+                config.servers.keys().map(|s| s.as_str()).collect()
+            };
+
+            if servers_to_show.is_empty() {
+                println!("{}", "サーバーリソースが設定されていません。".yellow());
+                return Ok(());
+            }
+
+            println!("\n{}", "サーバーリソース:".bold());
+            for server_name in servers_to_show {
+                if let Some(server) = config.servers.get(server_name) {
+                    println!("  {} {}", "•".cyan(), server_name.bold());
+                    println!("    プロバイダー: {}", server.provider.cyan());
+                    if let Some(plan) = &server.plan {
+                        println!("    プラン: {}", plan);
+                    }
+                    if let Some(disk) = server.disk_size {
+                        println!("    ディスク: {}GB", disk);
+                    }
+                }
+            }
+        }
+        CloudCommands::Up { stage, yes } => {
+            println!("{}", format!("ステージ '{}' のクラウドリソースを作成中...", stage).blue());
+
+            let stage_config = config.stages.get(&stage)
+                .ok_or_else(|| anyhow::anyhow!("ステージ '{}' が見つかりません", stage))?;
+
+            if stage_config.servers.is_empty() {
+                println!("{}", "このステージにはサーバーリソースがありません。".yellow());
+                return Ok(());
+            }
+
+            if !yes {
+                println!("\n以下のサーバーを作成します:");
+                for server_name in &stage_config.servers {
+                    if let Some(server) = config.servers.get(server_name) {
+                        println!("  - {} ({})", server_name.cyan(), server.provider);
+                    }
+                }
+                println!("\n実行するには --yes オプションを指定してください");
+                return Ok(());
+            }
+
+            // TODO: 実際のサーバー作成処理
+            println!("{}", "サーバー作成機能は近日実装予定です。".yellow());
+        }
+        CloudCommands::Down { stage, yes } => {
+            println!("{}", format!("ステージ '{}' のクラウドリソースを削除中...", stage).blue());
+
+            let stage_config = config.stages.get(&stage)
+                .ok_or_else(|| anyhow::anyhow!("ステージ '{}' が見つかりません", stage))?;
+
+            if stage_config.servers.is_empty() {
+                println!("{}", "このステージにはサーバーリソースがありません。".yellow());
+                return Ok(());
+            }
+
+            if !yes {
+                println!("\n{}", "警告: 以下のサーバーを削除します:".red().bold());
+                for server_name in &stage_config.servers {
+                    if let Some(server) = config.servers.get(server_name) {
+                        println!("  - {} ({})", server_name.cyan(), server.provider);
+                    }
+                }
+                println!("\n実行するには --yes オプションを指定してください");
+                return Ok(());
+            }
+
+            // TODO: 実際のサーバー削除処理
+            println!("{}", "サーバー削除機能は近日実装予定です。".yellow());
         }
     }
 

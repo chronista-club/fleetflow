@@ -9,6 +9,9 @@ pub struct Stage {
     /// このステージで起動するサービスのリスト
     #[serde(default)]
     pub services: Vec<String>,
+    /// このステージで必要なサーバーのリスト
+    #[serde(default)]
+    pub servers: Vec<String>,
     /// ステージ固有の環境変数
     #[serde(default)]
     pub variables: HashMap<String, String>,

@@ -391,3 +391,98 @@ fn test_parse_full_flow_with_project() {
     assert_eq!(flow.stages.len(), 1);
     assert_eq!(flow.stages["local"].services.len(), 2);
 }
+
+// Issue #15: クラウドリソースのパース
+#[test]
+fn test_parse_cloud_provider() {
+    let kdl = r#"
+        provider "sakura-cloud" {
+            zone "tk1a"
+        }
+    "#;
+
+    let flow = parse_kdl_string(kdl, "test".to_string()).unwrap();
+    assert_eq!(flow.providers.len(), 1);
+
+    let provider = &flow.providers["sakura-cloud"];
+    assert_eq!(provider.zone, Some("tk1a".to_string()));
+}
+
+#[test]
+fn test_parse_cloud_server() {
+    let kdl = r#"
+        server "creo-vps" {
+            provider "sakura-cloud"
+            plan "2core-4gb"
+            disk_size 100
+            os "ubuntu-24.04"
+            ssh_keys "my-key"
+        }
+    "#;
+
+    let flow = parse_kdl_string(kdl, "test".to_string()).unwrap();
+    assert_eq!(flow.servers.len(), 1);
+
+    let server = &flow.servers["creo-vps"];
+    assert_eq!(server.provider, "sakura-cloud");
+    assert_eq!(server.plan, Some("2core-4gb".to_string()));
+    assert_eq!(server.disk_size, Some(100));
+    assert_eq!(server.os, Some("ubuntu-24.04".to_string()));
+    assert_eq!(server.ssh_keys.len(), 1);
+}
+
+#[test]
+fn test_parse_stage_with_servers() {
+    let kdl = r#"
+        stage "production" {
+            server "vps-01"
+            service "api"
+        }
+    "#;
+
+    let flow = parse_kdl_string(kdl, "test".to_string()).unwrap();
+    let stage = &flow.stages["production"];
+
+    assert_eq!(stage.servers.len(), 1);
+    assert!(stage.servers.contains(&"vps-01".to_string()));
+    assert_eq!(stage.services.len(), 1);
+}
+
+#[test]
+fn test_parse_full_cloud_config() {
+    let kdl = r#"
+        project "creo-memories"
+
+        provider "sakura-cloud" {
+            zone "tk1a"
+        }
+
+        server "creo-vps" {
+            provider "sakura-cloud"
+            plan "2core-4gb"
+            disk_size 100
+        }
+
+        service "surrealdb" {
+            image "surrealdb/surrealdb"
+            version "latest"
+        }
+
+        stage "production" {
+            server "creo-vps"
+            service "surrealdb"
+        }
+    "#;
+
+    let flow = parse_kdl_string(kdl, "default".to_string()).unwrap();
+
+    assert_eq!(flow.name, "creo-memories");
+    assert_eq!(flow.providers.len(), 1);
+    assert_eq!(flow.servers.len(), 1);
+    assert_eq!(flow.services.len(), 1);
+    assert_eq!(flow.stages.len(), 1);
+
+    let stage = &flow.stages["production"];
+    assert_eq!(stage.servers.len(), 1);
+    assert_eq!(stage.services.len(), 1);
+}

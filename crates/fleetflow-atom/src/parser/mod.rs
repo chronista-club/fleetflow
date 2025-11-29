@@ -3,12 +3,14 @@
 //! FleetFlowのKDL設定ファイルをパースします。
 //! 各ノードタイプのパース処理はモジュールに分離されています。
 
+mod cloud;
 mod port;
 mod service;
 mod stage;
 mod volume;
 
 // 内部で使用するパース関数
+use cloud::{parse_provider, parse_server};
 use service::parse_service;
 use stage::parse_stage;
 
@@ -42,6 +44,8 @@ pub fn parse_kdl_string(content: &str, default_name: String) -> Result<Flow> {
 
     let mut stages = HashMap::new();
     let mut services = HashMap::new();
+    let mut providers = HashMap::new();
+    let mut servers = HashMap::new();
     let mut name = default_name;
 
     for node in doc.nodes() {
@@ -62,6 +66,14 @@ pub fn parse_kdl_string(content: &str, default_name: String) -> Result<Flow> {
                 let (service_name, service) = parse_service(node)?;
                 services.insert(service_name, service);
             }
+            "provider" => {
+                let (provider_name, provider) = parse_provider(node)?;
+                providers.insert(provider_name, provider);
+            }
+            "server" => {
+                let (server_name, server) = parse_server(node)?;
+                servers.insert(server_name, server);
+            }
             "include" => {
                 // TODO: include機能の実装
             }
@@ -78,6 +90,8 @@ pub fn parse_kdl_string(content: &str, default_name: String) -> Result<Flow> {
         name,
         stages,
         services,
+        providers,
+        servers,
     })
 }
 

@@ -343,6 +343,7 @@ mod tests {
             "local".to_string(),
             Stage {
                 services: vec!["api".to_string(), "db".to_string()],
+                servers: vec![],
                 variables: HashMap::new(),
             },
         );
@@ -351,6 +352,8 @@ mod tests {
             name: "test".to_string(),
             services,
             stages,
+            providers: HashMap::new(),
+            servers: HashMap::new(),
         };
 
         let result = get_stage_services(&flow, "local").unwrap();
@@ -365,6 +368,8 @@ mod tests {
             name: "test".to_string(),
             services: HashMap::new(),
             stages: HashMap::new(),
+            providers: HashMap::new(),
+            servers: HashMap::new(),
         };
 
         let result = get_stage_services(&flow, "prod");

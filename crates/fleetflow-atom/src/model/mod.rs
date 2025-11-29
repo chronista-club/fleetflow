@@ -3,6 +3,7 @@
 //! FleetFlowで使用されるデータモデルを定義します。
 //! 各モデルは機能ごとにモジュールに分離されています。
 
+mod cloud;
 mod flow;
 mod port;
 mod process;
@@ -11,6 +12,7 @@ mod stage;
 mod volume;
 
 // Re-exports
+pub use cloud::*;
 pub use flow::*;
 pub use port::*;
 pub use process::*;
@@ -39,6 +41,7 @@ mod tests {
             "local".to_string(),
             Stage {
                 services: vec!["api".to_string()],
+                servers: vec![],
                 variables: HashMap::new(),
             },
         );
@@ -47,6 +50,8 @@ mod tests {
             name: "my-project".to_string(),
             services,
             stages,
+            providers: HashMap::new(),
+            servers: HashMap::new(),
         };
 
         assert_eq!(flow.name, "my-project");
@@ -68,6 +73,8 @@ mod tests {
             name: "test-flow".to_string(),
             services: services.clone(),
             stages: stages.clone(),
+            providers: HashMap::new(),
+            servers: HashMap::new(),
         };
 
         assert_eq!(flow.services.len(), 1);

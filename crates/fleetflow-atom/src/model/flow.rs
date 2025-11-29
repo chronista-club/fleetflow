@@ -1,5 +1,6 @@
 //! Flow定義
 
+use super::cloud::{CloudProvider, ServerResource};
 use super::service::Service;
 use super::stage::Stage;
 use serde::{Deserialize, Serialize};
@@ -17,4 +18,10 @@ pub struct Flow {
     pub services: HashMap<String, Service>,
     /// このFlowで定義されるステージ
     pub stages: HashMap<String, Stage>,
+    /// クラウドプロバイダー設定
+    #[serde(default)]
+    pub providers: HashMap<String, CloudProvider>,
+    /// サーバーリソース
+    #[serde(default)]
+    pub servers: HashMap<String, ServerResource>,
 }

@@ -26,6 +26,14 @@ pub fn parse_stage(node: &KdlNode) -> Result<(String, Stage)> {
                         stage.services.push(service_name.to_string());
                     }
                 }
+                "server" => {
+                    // server "name" 形式でサーバーを指定
+                    if let Some(server_name) =
+                        child.entries().first().and_then(|e| e.value().as_string())
+                    {
+                        stage.servers.push(server_name.to_string());
+                    }
+                }
                 "variables" => {
                     if let Some(vars) = child.children() {
                         for var in vars.nodes() {
