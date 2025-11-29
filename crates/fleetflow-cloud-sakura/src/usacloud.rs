@@ -29,24 +29,44 @@ impl Usacloud {
             return Err(SakuraError::UsacloudNotFound);
         }
 
-        // Check authentication by running a simple command
+        // Check authentication by running a simple command (no zone needed)
         let output = self
-            .run_command(&["auth-status", "--output-type", "json"])
+            .run_command_global(&["auth-status", "--output-type", "json"])
             .await?;
 
         let auth: UsacloudAuth = serde_json::from_str(&output)?;
         Ok(auth)
     }
 
-    /// Run a usacloud command and return stdout
-    async fn run_command(&self, args: &[&str]) -> Result<String> {
+    /// Run a usacloud command without zone (for global commands like auth-status)
+    async fn run_command_global(&self, args: &[&str]) -> Result<String> {
         let mut cmd = Command::new("usacloud");
-        cmd.arg("--zone").arg(&self.zone);
         cmd.args(args);
         cmd.stdout(Stdio::piped());
         cmd.stderr(Stdio::piped());
 
-        tracing::debug!("Running: usacloud --zone {} {}", self.zone, args.join(" "));
+        tracing::debug!("Running: usacloud {}", args.join(" "));
+
+        let output = cmd.output().await?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(SakuraError::CommandFailed(stderr.to_string()));
+        }
+
+        Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    }
+
+    /// Run a usacloud command with zone and return stdout
+    /// Zone flag is added after the subcommand: usacloud server list --zone tk1a
+    async fn run_command(&self, args: &[&str]) -> Result<String> {
+        let mut cmd = Command::new("usacloud");
+        cmd.args(args);
+        cmd.arg("--zone").arg(&self.zone);
+        cmd.stdout(Stdio::piped());
+        cmd.stderr(Stdio::piped());
+
+        tracing::debug!("Running: usacloud {} --zone {}", args.join(" "), self.zone);
 
         let output = cmd.output().await?;
 
@@ -72,6 +92,28 @@ impl Usacloud {
         Ok(servers)
     }
 
+    /// Find servers by tag
+    /// Tag format: "key=value" (e.g., "fleetflow:server=creo-vps")
+    pub async fn find_servers_by_tag(&self, tag: &str) -> Result<Vec<ServerInfo>> {
+        let output = self
+            .run_command(&["server", "list", "--tags", tag, "--output-type", "json"])
+            .await?;
+
+        if output.trim().is_empty() || output.trim() == "[]" {
+            return Ok(Vec::new());
+        }
+
+        let servers: Vec<ServerInfo> = serde_json::from_str(&output)?;
+        Ok(servers)
+    }
+
+    /// Find a single server by FleetFlow tag
+    pub async fn find_server_by_fleetflow_tag(&self, project: &str, server_name: &str) -> Result<Option<ServerInfo>> {
+        let tag = format!("fleetflow:{}:{}", project, server_name);
+        let servers = self.find_servers_by_tag(&tag).await?;
+        Ok(servers.into_iter().next())
+    }
+
     /// Get server by name
     pub async fn get_server(&self, name: &str) -> Result<Option<ServerInfo>> {
         let servers = self.list_servers().await?;
@@ -94,6 +136,8 @@ impl Usacloud {
         let core_str = config.core.to_string();
         let memory_str = config.memory.to_string();
         let disk_size_str = config.disk_size.map(|d| d.to_string());
+        // Join tags with comma for usacloud
+        let tags_str = config.tags.join(",");
 
         let mut args = vec![
             "server",
@@ -106,7 +150,7 @@ impl Usacloud {
             memory_str.as_str(),
             "--output-type",
             "json",
-            "--yes",
+            "-y",
         ];
 
         // Add disk options
@@ -115,9 +159,9 @@ impl Usacloud {
             args.push(disk_size.as_str());
         }
 
-        // Add OS type
+        // Add OS type (usacloud uses --disk-os-type)
         if let Some(ref os) = config.os_type {
-            args.push("--os-type");
+            args.push("--disk-os-type");
             args.push(os.as_str());
         }
 
@@ -129,15 +173,25 @@ impl Usacloud {
             }
         }
 
+        // Add tags
+        if !config.tags.is_empty() {
+            args.push("--tags");
+            args.push(tags_str.as_str());
+        }
+
         let output = self.run_command(&args).await?;
 
-        let server: ServerInfo = serde_json::from_str(&output)?;
-        Ok(server)
+        // usacloud server create returns an array of servers
+        let servers: Vec<ServerInfo> = serde_json::from_str(&output)?;
+        servers
+            .into_iter()
+            .next()
+            .ok_or_else(|| SakuraError::CommandFailed("サーバー作成結果が空です".to_string()))
     }
 
     /// Delete a server
     pub async fn delete_server(&self, id: &str, with_disks: bool) -> Result<()> {
-        let mut args = vec!["server", "delete", id, "--yes"];
+        let mut args = vec!["server", "delete", id, "-y"];
 
         if with_disks {
             args.push("--with-disks");
@@ -149,20 +203,20 @@ impl Usacloud {
 
     /// Power on a server
     pub async fn power_on(&self, id: &str) -> Result<()> {
-        self.run_command(&["server", "power-on", id, "--yes"]).await?;
+        self.run_command(&["server", "power-on", id, "-y"]).await?;
         Ok(())
     }
 
     /// Power off a server (graceful shutdown)
     pub async fn power_off(&self, id: &str) -> Result<()> {
-        self.run_command(&["server", "shutdown", id, "--yes"]).await?;
+        self.run_command(&["server", "shutdown", id, "-y"]).await?;
         Ok(())
     }
 
-    /// List SSH keys
+    /// List SSH keys (global resource, no zone needed)
     pub async fn list_ssh_keys(&self) -> Result<Vec<SshKeyInfo>> {
         let output = self
-            .run_command(&["ssh-key", "list", "--output-type", "json"])
+            .run_command_global(&["ssh-key", "list", "--output-type", "json"])
             .await?;
 
         if output.trim().is_empty() || output.trim() == "[]" {
@@ -173,10 +227,10 @@ impl Usacloud {
         Ok(keys)
     }
 
-    /// Create SSH key
+    /// Create SSH key (global resource, no zone needed)
     pub async fn create_ssh_key(&self, name: &str, public_key: &str) -> Result<SshKeyInfo> {
         let output = self
-            .run_command(&[
+            .run_command_global(&[
                 "ssh-key",
                 "create",
                 "--name",
@@ -212,7 +266,7 @@ pub struct AccountInfo {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerInfo {
     #[serde(rename = "ID")]
-    pub id: String,
+    pub id: u64,
 
     #[serde(rename = "Name")]
     pub name: String,
@@ -228,9 +282,17 @@ pub struct ServerInfo {
 
     #[serde(rename = "Interfaces")]
     pub interfaces: Option<Vec<InterfaceInfo>>,
+
+    #[serde(rename = "Tags", default)]
+    pub tags: Vec<String>,
 }
 
 impl ServerInfo {
+    /// Get ID as string
+    pub fn id_str(&self) -> String {
+        self.id.to_string()
+    }
+
     /// Get the first IP address
     pub fn ip_address(&self) -> Option<String> {
         self.interfaces
@@ -260,6 +322,17 @@ pub struct CreateServerConfig {
     pub disk_size: Option<i32>,
     pub os_type: Option<String>,
     pub ssh_key_ids: Option<Vec<String>>,
+    pub tags: Vec<String>,
+}
+
+impl CreateServerConfig {
+    /// Create FleetFlow tags for this server
+    pub fn fleetflow_tags(project: &str, server_name: &str) -> Vec<String> {
+        vec![
+            format!("fleetflow:{}:{}", project, server_name),
+            format!("fleetflow:project:{}", project),
+        ]
+    }
 }
 
 /// SSH key information
@@ -290,9 +363,11 @@ mod tests {
             interfaces: Some(vec![InterfaceInfo {
                 ip_address: Some("192.168.1.1".to_string()),
             }]),
+            tags: vec!["fleetflow:test:server".to_string()],
         };
 
         assert_eq!(server.ip_address(), Some("192.168.1.1".to_string()));
         assert!(server.is_running());
+        assert!(server.tags.contains(&"fleetflow:test:server".to_string()));
     }
 }

@@ -8,10 +8,61 @@ use fleetflow_cloud::{
     ResourceConfig, ResourceSet, ResourceState, ResourceStatus,
 };
 
+/// Parse plan string like "2core-4gb" to (core, memory_gb)
+fn parse_plan(plan: &Option<String>) -> (i32, i32) {
+    if let Some(p) = plan {
+        // Try to parse "NcoreN-Mgb" format
+        let parts: Vec<&str> = p.split('-').collect();
+        if parts.len() == 2 {
+            let core = parts[0]
+                .trim_end_matches("core")
+                .parse::<i32>()
+                .unwrap_or(1);
+            let memory = parts[1]
+                .trim_end_matches("gb")
+                .parse::<i32>()
+                .unwrap_or(1);
+            return (core, memory);
+        }
+    }
+    (1, 1) // Default: 1 core, 1GB
+}
+
 /// Sakura Cloud provider
 pub struct SakuraCloudProvider {
     usacloud: Usacloud,
     zone: String,
+}
+
+/// Options for creating a server (simplified for CLI use)
+#[derive(Debug, Clone)]
+pub struct CreateServerOptions {
+    pub name: String,
+    pub plan: Option<String>,
+    pub disk_size: Option<i32>,
+    pub os: Option<String>,
+    pub ssh_keys: Vec<String>,
+    pub tags: Vec<String>,
+}
+
+/// Simple server info returned to CLI
+#[derive(Debug, Clone)]
+pub struct SimpleServerInfo {
+    pub id: String,
+    pub name: String,
+    pub is_running: bool,
+    pub ip_address: Option<String>,
+}
+
+impl From<crate::usacloud::ServerInfo> for SimpleServerInfo {
+    fn from(info: crate::usacloud::ServerInfo) -> Self {
+        Self {
+            id: info.id_str(),
+            name: info.name.clone(),
+            is_running: info.is_running(),
+            ip_address: info.ip_address(),
+        }
+    }
 }
 
 impl SakuraCloudProvider {
@@ -21,6 +72,54 @@ impl SakuraCloudProvider {
             usacloud: Usacloud::new(&zone),
             zone,
         }
+    }
+
+    /// Find server by FleetFlow tag (for idempotent operations)
+    pub async fn find_server_by_tag(&self, project: &str, server_name: &str) -> Result<Option<SimpleServerInfo>> {
+        match self.usacloud.find_server_by_fleetflow_tag(project, server_name).await {
+            Ok(Some(server)) => Ok(Some(server.into())),
+            Ok(None) => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Create a new server with FleetFlow tags
+    pub async fn create_server(&self, options: &CreateServerOptions) -> Result<SimpleServerInfo> {
+        // Parse plan to get core and memory
+        let (core, memory) = parse_plan(&options.plan);
+
+        // Look up SSH key IDs
+        let ssh_key_ids = if options.ssh_keys.is_empty() {
+            None
+        } else {
+            let all_keys = self.usacloud.list_ssh_keys().await?;
+            let ids: Vec<String> = options.ssh_keys.iter()
+                .filter_map(|name| {
+                    all_keys.iter()
+                        .find(|k| k.name == *name)
+                        .map(|k| k.id.clone())
+                })
+                .collect();
+            if ids.is_empty() { None } else { Some(ids) }
+        };
+
+        let config = CreateServerConfig {
+            name: options.name.clone(),
+            core,
+            memory,
+            disk_size: options.disk_size,
+            os_type: options.os.clone(),
+            ssh_key_ids,
+            tags: options.tags.clone(),
+        };
+
+        let server = self.usacloud.create_server(&config).await?;
+        Ok(server.into())
+    }
+
+    /// Delete a server
+    pub async fn delete_server(&self, id: &str, with_disks: bool) -> Result<()> {
+        self.usacloud.delete_server(id, with_disks).await
     }
 
     /// Parse server configuration from ResourceConfig
@@ -99,7 +198,7 @@ impl CloudProvider for SakuraCloudProvider {
                 ResourceStatus::Stopped
             };
 
-            let mut resource = ResourceState::new(&server.id, "server").with_status(status);
+            let mut resource = ResourceState::new(&server.id_str(), "server").with_status(status);
 
             resource.set_attribute("name", serde_json::json!(server.name));
 
@@ -197,6 +296,7 @@ impl CloudProvider for SakuraCloudProvider {
                         disk_size: Some(20),
                         os_type: Some("ubuntu2404".to_string()),
                         ssh_key_ids: None,
+                        tags: Vec::new(),
                     };
 
                     match self.usacloud.create_server(&config).await {
@@ -220,7 +320,7 @@ impl CloudProvider for SakuraCloudProvider {
                     // Get server ID
                     match self.usacloud.get_server(&action.resource_id).await {
                         Ok(Some(server)) => {
-                            match self.usacloud.delete_server(&server.id, true).await {
+                            match self.usacloud.delete_server(&server.id_str(), true).await {
                                 Ok(()) => {
                                     result.add_success(
                                         action.id.clone(),
@@ -268,7 +368,7 @@ impl CloudProvider for SakuraCloudProvider {
             })?;
 
         self.usacloud
-            .delete_server(&server.id, true)
+            .delete_server(&server.id_str(), true)
             .await
             .map_err(|e| fleetflow_cloud::CloudError::ApiError(e.to_string()))?;
 
@@ -286,7 +386,7 @@ impl CloudProvider for SakuraCloudProvider {
             .map_err(|e| fleetflow_cloud::CloudError::ApiError(e.to_string()))?;
 
         for server in servers {
-            match self.usacloud.delete_server(&server.id, true).await {
+            match self.usacloud.delete_server(&server.id_str(), true).await {
                 Ok(()) => {
                     result.add_success(
                         format!("delete-{}", server.name),

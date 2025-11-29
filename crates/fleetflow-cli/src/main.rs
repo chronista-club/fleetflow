@@ -1308,8 +1308,75 @@ async fn handle_cloud_command(cmd: CloudCommands, config: &fleetflow_atom::Flow)
                 return Ok(());
             }
 
-            // TODO: 実際のサーバー作成処理
-            println!("{}", "サーバー作成機能は近日実装予定です。".yellow());
+            // 各サーバーを作成
+            for server_name in &stage_config.servers {
+                let server = config.servers.get(server_name)
+                    .ok_or_else(|| anyhow::anyhow!("サーバー '{}' の定義が見つかりません", server_name))?;
+
+                println!("\n{} {} を処理中...", "▶".cyan(), server_name.bold());
+
+                // プロバイダー別の処理
+                if server.provider == "sakura-cloud" {
+                    // プロバイダー設定からzoneを取得
+                    let zone = config.providers.get("sakura-cloud")
+                        .and_then(|p| p.zone.as_deref())
+                        .unwrap_or("tk1a");
+
+                    let provider = SakuraCloudProvider::new(zone);
+
+                    // タグベースの冪等性チェック
+                    println!("  ↓ 既存サーバーを検索中...");
+                    match provider.find_server_by_tag(&config.name, server_name).await {
+                        Ok(Some(existing)) => {
+                            println!("  {} サーバーは既に存在します", "✓".green().bold());
+                            println!("    ID: {}", existing.id.cyan());
+                            println!("    状態: {}", if existing.is_running { "起動中".green() } else { "停止中".yellow() });
+                            if let Some(ip) = &existing.ip_address {
+                                println!("    IP: {}", ip.cyan());
+                            }
+                            continue;
+                        }
+                        Ok(None) => {
+                            println!("  ℹ 既存サーバーなし、新規作成します");
+                        }
+                        Err(e) => {
+                            println!("  {} サーバー検索エラー: {}", "✗".red().bold(), e);
+                            continue;
+                        }
+                    }
+
+                    // 新規作成
+                    println!("  ↓ サーバーを作成中...");
+                    let create_config = fleetflow_cloud_sakura::CreateServerOptions {
+                        name: server_name.clone(),
+                        plan: server.plan.clone(),
+                        disk_size: server.disk_size.map(|d| d as i32),
+                        os: server.os.clone(),
+                        ssh_keys: server.ssh_keys.clone(),
+                        tags: vec![
+                            format!("fleetflow:{}:{}", config.name, server_name),
+                            format!("fleetflow:project:{}", config.name),
+                        ],
+                    };
+
+                    match provider.create_server(&create_config).await {
+                        Ok(info) => {
+                            println!("  {} サーバー作成完了!", "✓".green().bold());
+                            println!("    ID: {}", info.id.cyan());
+                            if let Some(ip) = &info.ip_address {
+                                println!("    IP: {}", ip.cyan());
+                            }
+                        }
+                        Err(e) => {
+                            println!("  {} サーバー作成エラー: {}", "✗".red().bold(), e);
+                        }
+                    }
+                } else {
+                    println!("  {} プロバイダー '{}' はサポートされていません", "!".yellow(), server.provider);
+                }
+            }
+
+            println!("\n{}", "✓ クラウドリソースの処理が完了しました".green().bold());
         }
         CloudCommands::Down { stage, yes } => {
             println!("{}", format!("ステージ '{}' のクラウドリソースを削除中...", stage).blue());
@@ -1333,8 +1400,52 @@ async fn handle_cloud_command(cmd: CloudCommands, config: &fleetflow_atom::Flow)
                 return Ok(());
             }
 
-            // TODO: 実際のサーバー削除処理
-            println!("{}", "サーバー削除機能は近日実装予定です。".yellow());
+            // 各サーバーを削除
+            for server_name in &stage_config.servers {
+                let server = config.servers.get(server_name)
+                    .ok_or_else(|| anyhow::anyhow!("サーバー '{}' の定義が見つかりません", server_name))?;
+
+                println!("\n{} {} を削除中...", "▶".cyan(), server_name.bold());
+
+                // プロバイダー別の処理
+                if server.provider == "sakura-cloud" {
+                    // プロバイダー設定からzoneを取得
+                    let zone = config.providers.get("sakura-cloud")
+                        .and_then(|p| p.zone.as_deref())
+                        .unwrap_or("tk1a");
+
+                    let provider = SakuraCloudProvider::new(zone);
+
+                    // タグでサーバーを検索
+                    println!("  ↓ サーバーを検索中...");
+                    match provider.find_server_by_tag(&config.name, server_name).await {
+                        Ok(Some(existing)) => {
+                            println!("  ℹ サーバー発見: {} (ID: {})", server_name, existing.id.cyan());
+
+                            // 削除実行
+                            println!("  ↓ サーバーを削除中（ディスク含む）...");
+                            match provider.delete_server(&existing.id, true).await {
+                                Ok(_) => {
+                                    println!("  {} サーバー削除完了!", "✓".green().bold());
+                                }
+                                Err(e) => {
+                                    println!("  {} サーバー削除エラー: {}", "✗".red().bold(), e);
+                                }
+                            }
+                        }
+                        Ok(None) => {
+                            println!("  {} サーバーが見つかりません（既に削除済み？）", "ℹ".yellow());
+                        }
+                        Err(e) => {
+                            println!("  {} サーバー検索エラー: {}", "✗".red().bold(), e);
+                        }
+                    }
+                } else {
+                    println!("  {} プロバイダー '{}' はサポートされていません", "!".yellow(), server.provider);
+                }
+            }
+
+            println!("\n{}", "✓ クラウドリソースの削除処理が完了しました".green().bold());
         }
     }
 

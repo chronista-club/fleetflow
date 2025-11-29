@@ -37,5 +37,5 @@ pub mod provider;
 pub mod usacloud;
 
 pub use error::{Result, SakuraError};
-pub use provider::SakuraCloudProvider;
+pub use provider::{CreateServerOptions, SakuraCloudProvider, SimpleServerInfo};
 pub use usacloud::{CreateServerConfig, ServerInfo, SshKeyInfo, Usacloud};
