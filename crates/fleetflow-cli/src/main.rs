@@ -344,6 +344,34 @@ async fn main() -> anyhow::Result<()> {
             println!("{}", "Dockerに接続中...".blue());
             let docker = init_docker_with_error_handling().await?;
 
+            // ネットワーク作成 (#14)
+            let network_name = fleetflow_container::get_network_name(&config.name, &stage_name);
+            println!();
+            println!("{}", format!("🌐 ネットワーク: {}", network_name).blue());
+
+            match docker
+                .create_network(bollard::network::CreateNetworkOptions {
+                    name: network_name.as_str(),
+                    driver: "bridge",
+                    ..Default::default()
+                })
+                .await
+            {
+                Ok(_) => {
+                    println!("  ✓ ネットワーク作成完了");
+                }
+                Err(bollard::errors::Error::DockerResponseServerError {
+                    status_code: 409,
+                    ..
+                }) => {
+                    println!("  ℹ ネットワークは既に存在します");
+                }
+                Err(e) => {
+                    eprintln!("  ⚠ ネットワーク作成エラー: {}", e);
+                    // ネットワーク作成に失敗しても続行（既存のブリッジネットワークを使用）
+                }
+            }
+
             // 各サービスを起動
             for service_name in &stage_config.services {
                 let service = config.services.get(service_name).ok_or_else(|| {
@@ -579,6 +607,29 @@ async fn main() -> anyhow::Result<()> {
                     }
                     Err(e) => {
                         println!("  ⚠ 停止エラー: {}", e);
+                    }
+                }
+            }
+
+            // ネットワーク削除 (#14)
+            if remove {
+                let network_name = fleetflow_container::get_network_name(&config.name, &stage_name);
+                println!();
+                println!("{}", format!("🌐 ネットワーク削除: {}", network_name).yellow());
+
+                match docker.remove_network(&network_name).await {
+                    Ok(_) => {
+                        println!("  ✓ ネットワーク削除完了");
+                    }
+                    Err(bollard::errors::Error::DockerResponseServerError {
+                        status_code: 404,
+                        ..
+                    }) => {
+                        println!("  ℹ ネットワークは既に存在しません");
+                    }
+                    Err(e) => {
+                        // コンテナがまだ接続されている可能性
+                        println!("  ⚠ ネットワーク削除エラー: {}", e);
                     }
                 }
             }

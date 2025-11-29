@@ -1,9 +1,14 @@
 //! FlowConfig から Docker API パラメータへの変換
 
-use bollard::container::{Config, CreateContainerOptions};
-use bollard::models::{HostConfig, PortBinding};
+use bollard::container::{Config, CreateContainerOptions, NetworkingConfig};
+use bollard::models::{EndpointSettings, HostConfig, PortBinding};
 use fleetflow_atom::{Flow, Service};
 use std::collections::HashMap;
+
+/// ネットワーク名を生成
+pub fn get_network_name(project_name: &str, stage_name: &str) -> String {
+    format!("{}-{}", project_name, stage_name)
+}
 
 /// FlowConfigのServiceをDockerのコンテナ設定に変換
 pub fn service_to_container_config(
@@ -11,6 +16,17 @@ pub fn service_to_container_config(
     service: &Service,
     stage_name: &str,
     project_name: &str,
+) -> (Config<String>, CreateContainerOptions<String>) {
+    service_to_container_config_with_network(service_name, service, stage_name, project_name, true)
+}
+
+/// FlowConfigのServiceをDockerのコンテナ設定に変換（ネットワーク設定オプション付き）
+pub fn service_to_container_config_with_network(
+    service_name: &str,
+    service: &Service,
+    stage_name: &str,
+    project_name: &str,
+    use_network: bool,
 ) -> (Config<String>, CreateContainerOptions<String>) {
     // イメージ名の決定
     // 1. imageとversionの両方が指定されている場合は "image:version"
@@ -85,10 +101,18 @@ pub fn service_to_container_config(
         })
         .collect();
 
-    // HostConfig設定
+    // ネットワーク名
+    let network_name = get_network_name(project_name, stage_name);
+
+    // HostConfig設定（ネットワーク対応 #14）
     let host_config = Some(HostConfig {
         port_bindings: Some(port_bindings),
         binds: Some(binds),
+        network_mode: if use_network {
+            Some(network_name.clone())
+        } else {
+            None
+        },
         ..Default::default()
     });
 
@@ -106,6 +130,23 @@ pub fn service_to_container_config(
     labels.insert("fleetflow.stage".to_string(), stage_name.to_string());
     labels.insert("fleetflow.service".to_string(), service_name.to_string());
 
+    // ネットワーク設定（サービス名でエイリアス #14）
+    let networking_config = if use_network {
+        let mut endpoints = HashMap::new();
+        endpoints.insert(
+            network_name,
+            EndpointSettings {
+                aliases: Some(vec![service_name.to_string()]),
+                ..Default::default()
+            },
+        );
+        Some(NetworkingConfig {
+            endpoints_config: endpoints,
+        })
+    } else {
+        None
+    };
+
     // コンテナ設定
     let config = Config {
         image: Some(image),
@@ -117,6 +158,7 @@ pub fn service_to_container_config(
             // コマンドをスペースで分割
             c.split_whitespace().map(String::from).collect()
         }),
+        networking_config,
         ..Default::default()
     };
 
