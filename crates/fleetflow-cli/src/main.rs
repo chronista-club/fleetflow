@@ -1211,6 +1211,7 @@ async fn main() -> anyhow::Result<()> {
 async fn handle_cloud_command(cmd: CloudCommands, config: &fleetflow_atom::Flow) -> anyhow::Result<()> {
     use fleetflow_cloud_sakura::SakuraCloudProvider;
     use fleetflow_cloud::CloudProvider;
+    use fleetflow_cloud_cloudflare::{CloudflareDns, DnsConfig};
 
     match cmd {
         CloudCommands::Auth => {
@@ -1353,6 +1354,7 @@ async fn handle_cloud_command(cmd: CloudCommands, config: &fleetflow_atom::Flow)
                         disk_size: server.disk_size.map(|d| d as i32),
                         os: server.os.clone(),
                         ssh_keys: server.ssh_keys.clone(),
+                        startup_scripts: server.startup_script.clone().into_iter().collect(),
                         tags: vec![
                             format!("fleetflow:{}:{}", config.name, server_name),
                             format!("fleetflow:project:{}", config.name),
@@ -1365,6 +1367,21 @@ async fn handle_cloud_command(cmd: CloudCommands, config: &fleetflow_atom::Flow)
                             println!("    ID: {}", info.id.cyan());
                             if let Some(ip) = &info.ip_address {
                                 println!("    IP: {}", ip.cyan());
+
+                                // DNS設定（環境変数が設定されている場合）
+                                if let Ok(dns_config) = DnsConfig::from_env() {
+                                    let dns = CloudflareDns::new(dns_config);
+                                    let subdomain = dns.generate_subdomain(server_name, &stage);
+                                    println!("  ↓ DNSレコードを設定中...");
+                                    match dns.ensure_record(&subdomain, ip).await {
+                                        Ok(record) => {
+                                            println!("  {} DNS: {}", "✓".green().bold(), record.name.cyan());
+                                        }
+                                        Err(e) => {
+                                            println!("  {} DNS設定エラー: {}", "⚠".yellow(), e);
+                                        }
+                                    }
+                                }
                             }
                         }
                         Err(e) => {
@@ -1421,6 +1438,21 @@ async fn handle_cloud_command(cmd: CloudCommands, config: &fleetflow_atom::Flow)
                     match provider.find_server_by_tag(&config.name, server_name).await {
                         Ok(Some(existing)) => {
                             println!("  ℹ サーバー発見: {} (ID: {})", server_name, existing.id.cyan());
+
+                            // DNS削除（環境変数が設定されている場合）
+                            if let Ok(dns_config) = DnsConfig::from_env() {
+                                let dns = CloudflareDns::new(dns_config);
+                                let subdomain = dns.generate_subdomain(server_name, &stage);
+                                println!("  ↓ DNSレコードを削除中...");
+                                match dns.remove_record(&subdomain).await {
+                                    Ok(_) => {
+                                        println!("  {} DNS削除: {}.{}", "✓".green().bold(), subdomain, dns.domain());
+                                    }
+                                    Err(e) => {
+                                        println!("  {} DNS削除エラー: {}", "⚠".yellow(), e);
+                                    }
+                                }
+                            }
 
                             // 削除実行
                             println!("  ↓ サーバーを削除中（ディスク含む）...");

@@ -22,6 +22,7 @@ fleetflow-container = { version = "0.2.0-devel", path = "../fleetflow-container"
 fleetflow-config = { version = "0.2.0-devel", path = "../fleetflow-config" }
 fleetflow-cloud = { version = "0.2.0-devel", path = "../fleetflow-cloud" }
 fleetflow-cloud-sakura = { version = "0.2.0-devel", path = "../fleetflow-cloud-sakura" }
+fleetflow-cloud-cloudflare = { version = "0.2.0-devel", path = "../fleetflow-cloud-cloudflare" }
 
 # External dependencies
 clap.workspace = true

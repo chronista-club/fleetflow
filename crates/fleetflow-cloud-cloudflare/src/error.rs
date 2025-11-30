@@ -31,6 +31,15 @@ pub enum CloudflareError {
     #[error("Resource deletion failed: {0}")]
     DeletionFailed(String),
 
+    #[error("Missing environment variable: {0}")]
+    MissingEnvVar(String),
+
+    #[error("Cloudflare API error: {0}")]
+    ApiError(String),
+
+    #[error("HTTP request error: {0}")]
+    HttpError(#[from] reqwest::Error),
+
     #[error("JSON parse error: {0}")]
     JsonError(#[from] serde_json::Error),
 
