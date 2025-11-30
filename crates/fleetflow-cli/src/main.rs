@@ -1334,6 +1334,20 @@ async fn handle_cloud_command(cmd: CloudCommands, config: &fleetflow_atom::Flow)
                             println!("    状態: {}", if existing.is_running { "起動中".green() } else { "停止中".yellow() });
                             if let Some(ip) = &existing.ip_address {
                                 println!("    IP: {}", ip.cyan());
+
+                                // 既存サーバーでもDNS設定を確認・更新
+                                if let Ok(dns_config) = DnsConfig::from_env() {
+                                    let dns = CloudflareDns::new(dns_config);
+                                    let subdomain = dns.generate_subdomain(server_name, &stage);
+                                    match dns.ensure_record(&subdomain, ip).await {
+                                        Ok(record) => {
+                                            println!("    {} DNS: {}", "✓".green().bold(), record.name.cyan());
+                                        }
+                                        Err(e) => {
+                                            println!("    {} DNS設定エラー: {}", "⚠".yellow(), e);
+                                        }
+                                    }
+                                }
                             }
                             continue;
                         }
