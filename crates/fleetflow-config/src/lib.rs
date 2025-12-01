@@ -87,7 +87,7 @@ mod tests {
     #[serial]
     fn test_find_flow_file_in_current_dir() {
         let temp_dir = tempfile::tempdir().unwrap();
-        let original_dir = std::env::current_dir().unwrap();
+        let original_dir = std::env::current_dir().ok();
 
         // flow.kdlを作成
         fs::write(temp_dir.path().join("flow.kdl"), "// test").unwrap();
@@ -102,7 +102,9 @@ mod tests {
         assert!(flow_file.ends_with("flow.kdl"));
 
         // 元のディレクトリに戻る（エラーは無視）
-        let _ = std::env::set_current_dir(original_dir);
+        if let Some(dir) = original_dir {
+            let _ = std::env::set_current_dir(dir);
+        }
     }
 
     #[test]
@@ -135,7 +137,7 @@ mod tests {
     #[serial]
     fn test_find_flow_file_in_flow_dir() {
         let temp_dir = tempfile::tempdir().unwrap();
-        let original_dir = std::env::current_dir().unwrap();
+        let original_dir = std::env::current_dir().ok();
 
         // .fleetflow/ ディレクトリを作成
         let flow_dir = temp_dir.path().join(".fleetflow");
@@ -147,7 +149,9 @@ mod tests {
         let result = find_flow_file().unwrap();
         assert!(result.ends_with(".fleetflow/flow.kdl"));
 
-        let _ = std::env::set_current_dir(original_dir);
+        if let Some(dir) = original_dir {
+            let _ = std::env::set_current_dir(dir);
+        }
     }
 
     #[test]
@@ -174,7 +178,7 @@ mod tests {
     #[serial]
     fn test_find_flow_file_not_found() {
         let temp_dir = tempfile::tempdir().unwrap();
-        let original_dir = std::env::current_dir().unwrap();
+        let original_dir = std::env::current_dir().ok();
 
         // 空のディレクトリに移動
         std::env::set_current_dir(&temp_dir).unwrap();
@@ -188,14 +192,16 @@ mod tests {
             panic!("Expected FlowFileNotFound error");
         }
 
-        let _ = std::env::set_current_dir(original_dir);
+        if let Some(dir) = original_dir {
+            let _ = std::env::set_current_dir(dir);
+        }
     }
 
     #[test]
     #[serial]
     fn test_hidden_file_priority() {
         let temp_dir = tempfile::tempdir().unwrap();
-        let original_dir = std::env::current_dir().unwrap();
+        let original_dir = std::env::current_dir().ok();
 
         // .flow.local.kdl と flow.kdl を作成
         fs::write(temp_dir.path().join(".flow.local.kdl"), "// hidden local").unwrap();
@@ -208,6 +214,8 @@ mod tests {
         // .flow.local.kdl が優先される
         assert!(result.ends_with(".flow.local.kdl"));
 
-        let _ = std::env::set_current_dir(original_dir);
+        if let Some(dir) = original_dir {
+            let _ = std::env::set_current_dir(dir);
+        }
     }
 }
