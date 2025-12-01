@@ -12,6 +12,7 @@ use fleetflow_cloud::{
 /// Cloudflare provider
 pub struct CloudflareProvider {
     wrangler: Wrangler,
+    // TODO: このフィールドは将来のアカウント管理機能で使用予定
     #[allow(dead_code)]
     account_id: Option<String>,
 }

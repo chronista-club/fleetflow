@@ -27,14 +27,15 @@ impl BuildResolver {
     ) -> Result<Option<PathBuf>> {
         // 明示的な指定がある場合
         if let Some(build) = &service.build
-            && let Some(dockerfile) = &build.dockerfile {
-                let path = self.project_root.join(dockerfile);
-                if path.exists() {
-                    return Ok(Some(path));
-                } else {
-                    return Err(BuildError::DockerfileNotFound(path));
-                }
+            && let Some(dockerfile) = &build.dockerfile
+        {
+            let path = self.project_root.join(dockerfile);
+            if path.exists() {
+                return Ok(Some(path));
+            } else {
+                return Err(BuildError::DockerfileNotFound(path));
             }
+        }
 
         // 規約ベースの検索
         let candidates = vec![
@@ -135,9 +136,10 @@ impl BuildResolver {
     ) -> String {
         // 明示的なタグ指定
         if let Some(build) = &service.build
-            && let Some(tag) = &build.image_tag {
-                return tag.clone();
-            }
+            && let Some(tag) = &build.image_tag
+        {
+            return tag.clone();
+        }
 
         // 自動生成タグ: {project}-{service}:{stage}
         format!("{}-{}:{}", project_name, service_name, stage_name)

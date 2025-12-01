@@ -483,4 +483,52 @@ mod tests {
             Some(&"project-b".to_string())
         );
     }
+
+    #[test]
+    fn test_service_to_container_config_with_healthcheck() {
+        use fleetflow_atom::HealthCheck;
+
+        let service = Service {
+            healthcheck: Some(HealthCheck {
+                test: vec![
+                    "CMD-SHELL".to_string(),
+                    "curl -f http://localhost:3000/health || exit 1".to_string(),
+                ],
+                interval: 30,
+                timeout: 5,
+                retries: 3,
+                start_period: 10,
+            }),
+            ..Default::default()
+        };
+
+        let (config, _) = service_to_container_config("api", &service, "local", "test");
+
+        let healthcheck = config.healthcheck.unwrap();
+        assert_eq!(
+            healthcheck.test,
+            Some(vec![
+                "CMD-SHELL".to_string(),
+                "curl -f http://localhost:3000/health || exit 1".to_string()
+            ])
+        );
+        // 秒 → ナノ秒変換を確認
+        assert_eq!(healthcheck.interval, Some(30_000_000_000));
+        assert_eq!(healthcheck.timeout, Some(5_000_000_000));
+        assert_eq!(healthcheck.retries, Some(3));
+        assert_eq!(healthcheck.start_period, Some(10_000_000_000));
+    }
+
+    #[test]
+    fn test_service_to_container_config_without_healthcheck() {
+        let service = Service {
+            healthcheck: None,
+            ..Default::default()
+        };
+
+        let (config, _) = service_to_container_config("api", &service, "local", "test");
+
+        // HealthCheckが設定されていない場合はNone
+        assert!(config.healthcheck.is_none());
+    }
 }

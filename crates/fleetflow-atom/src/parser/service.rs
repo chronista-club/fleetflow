@@ -275,3 +275,84 @@ pub fn infer_image_name(service_name: &str, version: Option<&str>) -> String {
     let tag = version.unwrap_or("latest");
     format!("{}:{}", service_name, tag)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use kdl::KdlDocument;
+
+    #[test]
+    fn test_parse_healthcheck_defaults() {
+        let kdl = r#"
+            healthcheck {
+                test "CMD-SHELL" "curl -f http://localhost:3000/health || exit 1"
+            }
+        "#;
+        let doc: KdlDocument = kdl.parse().unwrap();
+        let node = doc.nodes().first().unwrap();
+
+        let healthcheck = parse_healthcheck(node.children().unwrap());
+
+        assert_eq!(
+            healthcheck.test,
+            vec![
+                "CMD-SHELL".to_string(),
+                "curl -f http://localhost:3000/health || exit 1".to_string()
+            ]
+        );
+        assert_eq!(healthcheck.interval, 30);
+        assert_eq!(healthcheck.timeout, 3);
+        assert_eq!(healthcheck.retries, 3);
+        assert_eq!(healthcheck.start_period, 10);
+    }
+
+    #[test]
+    fn test_parse_healthcheck_custom_values() {
+        let kdl = r#"
+            healthcheck {
+                test "CMD" "python" "healthcheck.py"
+                interval 60
+                timeout 10
+                retries 5
+                start_period 30
+            }
+        "#;
+        let doc: KdlDocument = kdl.parse().unwrap();
+        let node = doc.nodes().first().unwrap();
+
+        let healthcheck = parse_healthcheck(node.children().unwrap());
+
+        assert_eq!(
+            healthcheck.test,
+            vec![
+                "CMD".to_string(),
+                "python".to_string(),
+                "healthcheck.py".to_string()
+            ]
+        );
+        assert_eq!(healthcheck.interval, 60);
+        assert_eq!(healthcheck.timeout, 10);
+        assert_eq!(healthcheck.retries, 5);
+        assert_eq!(healthcheck.start_period, 30);
+    }
+
+    #[test]
+    fn test_parse_healthcheck_minimal() {
+        let kdl = r#"
+            healthcheck {
+                test "NONE"
+            }
+        "#;
+        let doc: KdlDocument = kdl.parse().unwrap();
+        let node = doc.nodes().first().unwrap();
+
+        let healthcheck = parse_healthcheck(node.children().unwrap());
+
+        assert_eq!(healthcheck.test, vec!["NONE".to_string()]);
+        // デフォルト値が使われる
+        assert_eq!(healthcheck.interval, 30);
+        assert_eq!(healthcheck.timeout, 3);
+        assert_eq!(healthcheck.retries, 3);
+        assert_eq!(healthcheck.start_period, 10);
+    }
+}

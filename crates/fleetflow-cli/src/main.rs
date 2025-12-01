@@ -861,11 +861,13 @@ async fn main() -> anyhow::Result<()> {
             println!();
 
             // 複数サービスの場合は色を割り当て
-            let colors = [colored::Color::Cyan,
+            let colors = [
+                colored::Color::Cyan,
                 colored::Color::Green,
                 colored::Color::Yellow,
                 colored::Color::Magenta,
-                colored::Color::Blue];
+                colored::Color::Blue,
+            ];
 
             for (idx, service_name) in target_services.iter().enumerate() {
                 // OrbStack連携の命名規則を使用: {project}-{stage}-{service}

@@ -190,4 +190,51 @@ mod tests {
         assert_eq!(server.plan, Some("4core-8gb".to_string()));
         assert_eq!(server.dns_aliases, vec!["app", "api", "www"]);
     }
+
+    #[test]
+    fn test_parse_server_with_empty_dns_aliases() {
+        let kdl = r#"
+            server "creo-vps" {
+                provider "sakura-cloud"
+            }
+        "#;
+        let doc: kdl::KdlDocument = kdl.parse().unwrap();
+        let node = doc.nodes().first().unwrap();
+
+        let (_, server) = parse_server(node).unwrap();
+        // dns_aliasesが指定されていない場合は空配列
+        assert!(server.dns_aliases.is_empty());
+    }
+
+    #[test]
+    fn test_parse_server_with_single_dns_alias() {
+        let kdl = r#"
+            server "creo-vps" {
+                provider "sakura-cloud"
+                dns_aliases "app"
+            }
+        "#;
+        let doc: kdl::KdlDocument = kdl.parse().unwrap();
+        let node = doc.nodes().first().unwrap();
+
+        let (_, server) = parse_server(node).unwrap();
+        assert_eq!(server.dns_aliases, vec!["app"]);
+    }
+
+    #[test]
+    fn test_parse_server_with_duplicate_dns_aliases() {
+        // 重複した場合もそのまま保持（重複排除はアプリケーション層の責務）
+        let kdl = r#"
+            server "creo-vps" {
+                provider "sakura-cloud"
+                dns_aliases "app" "app" "api"
+            }
+        "#;
+        let doc: kdl::KdlDocument = kdl.parse().unwrap();
+        let node = doc.nodes().first().unwrap();
+
+        let (_, server) = parse_server(node).unwrap();
+        assert_eq!(server.dns_aliases, vec!["app", "app", "api"]);
+        assert_eq!(server.dns_aliases.len(), 3);
+    }
 }

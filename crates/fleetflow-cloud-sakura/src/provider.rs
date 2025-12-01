@@ -151,6 +151,7 @@ impl SakuraCloudProvider {
     }
 
     /// Parse server configuration from ResourceConfig
+    // TODO: この関数は将来のサーバー管理機能で使用予定
     #[allow(dead_code)]
     fn parse_server_config(&self, config: &ResourceConfig) -> Result<ServerResourceConfig> {
         let core = config.get_config::<i32>("core").unwrap_or(1);
@@ -170,6 +171,7 @@ impl SakuraCloudProvider {
     }
 }
 
+// TODO: この構造体は将来のサーバー管理機能で使用予定
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 struct ServerResourceConfig {
