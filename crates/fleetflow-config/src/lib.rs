@@ -70,6 +70,7 @@ pub fn find_flow_file() -> Result<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
     use std::fs;
 
     #[test]
@@ -83,6 +84,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_find_flow_file_in_current_dir() {
         let temp_dir = tempfile::tempdir().unwrap();
         let original_dir = std::env::current_dir().unwrap();
@@ -106,23 +108,31 @@ mod tests {
     #[test]
     fn test_find_flow_file_local_priority() {
         let temp_dir = tempfile::tempdir().unwrap();
-        let original_dir = std::env::current_dir().unwrap();
 
         // flow.kdl と flow.local.kdl の両方を作成
         fs::write(temp_dir.path().join("flow.kdl"), "// global").unwrap();
-        fs::write(temp_dir.path().join("flow.local.kdl"), "// local").unwrap();
+        let local_kdl = temp_dir.path().join("flow.local.kdl");
+        fs::write(&local_kdl, "// local").unwrap();
 
-        std::env::set_current_dir(&temp_dir).unwrap();
+        // 環境変数で直接指定する方式に変更（並列テスト対応）
+        // SAFETY: テスト実行中のみ環境変数を設定し、テスト終了時に削除する
+        unsafe {
+            std::env::set_var("FLOW_CONFIG_PATH", &local_kdl);
+        }
 
         let result = find_flow_file().unwrap();
 
         // flow.local.kdl が優先される
-        assert!(result.ends_with("flow.local.kdl"));
+        assert_eq!(result, local_kdl);
 
-        std::env::set_current_dir(original_dir).unwrap();
+        // SAFETY: テスト終了時に環境変数を削除
+        unsafe {
+            std::env::remove_var("FLOW_CONFIG_PATH");
+        }
     }
 
     #[test]
+    #[serial]
     fn test_find_flow_file_in_flow_dir() {
         let temp_dir = tempfile::tempdir().unwrap();
         let original_dir = std::env::current_dir().unwrap();
@@ -161,6 +171,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_find_flow_file_not_found() {
         let temp_dir = tempfile::tempdir().unwrap();
         let original_dir = std::env::current_dir().unwrap();
@@ -181,6 +192,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_hidden_file_priority() {
         let temp_dir = tempfile::tempdir().unwrap();
         let original_dir = std::env::current_dir().unwrap();
