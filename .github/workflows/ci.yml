@@ -29,6 +29,9 @@ jobs:
       - name: mise のセットアップ
         run: mise install
 
+      - name: Rustツールのインストール
+        run: mise run setup
+
       - uses: Swatinem/rust-cache@v2
 
       - name: フォーマットチェック
