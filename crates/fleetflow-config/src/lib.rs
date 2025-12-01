@@ -101,8 +101,8 @@ mod tests {
         let flow_file = result.unwrap();
         assert!(flow_file.ends_with("flow.kdl"));
 
-        // 元のディレクトリに戻る
-        std::env::set_current_dir(original_dir).unwrap();
+        // 元のディレクトリに戻る（エラーは無視）
+        let _ = std::env::set_current_dir(original_dir);
     }
 
     #[test]
@@ -147,7 +147,7 @@ mod tests {
         let result = find_flow_file().unwrap();
         assert!(result.ends_with(".fleetflow/flow.kdl"));
 
-        std::env::set_current_dir(original_dir).unwrap();
+        let _ = std::env::set_current_dir(original_dir);
     }
 
     #[test]
@@ -188,7 +188,7 @@ mod tests {
             panic!("Expected FlowFileNotFound error");
         }
 
-        std::env::set_current_dir(original_dir).unwrap();
+        let _ = std::env::set_current_dir(original_dir);
     }
 
     #[test]
@@ -208,6 +208,6 @@ mod tests {
         // .flow.local.kdl が優先される
         assert!(result.ends_with(".flow.local.kdl"));
 
-        std::env::set_current_dir(original_dir).unwrap();
+        let _ = std::env::set_current_dir(original_dir);
     }
 }
