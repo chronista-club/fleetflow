@@ -30,8 +30,8 @@ fn parse_bool_with_hint(node: &KdlNode, key: &str) -> Option<bool> {
     }
 
     // 文字列 "true" / "false" が使用されていないかチェック
-    if let Some(entry) = node.get(key) {
-        if let Some(str_value) = entry.as_string() {
+    if let Some(entry) = node.get(key)
+        && let Some(str_value) = entry.as_string() {
             match str_value {
                 "true" => {
                     eprintln!(
@@ -52,7 +52,6 @@ fn parse_bool_with_hint(node: &KdlNode, key: &str) -> Option<bool> {
                 _ => {}
             }
         }
-    }
 
     None
 }

@@ -135,10 +135,10 @@ fn test_parse_service_with_volumes() {
     let vol1 = &service.volumes[0];
     assert_eq!(vol1.host.to_str().unwrap(), "./data");
     assert_eq!(vol1.container.to_str().unwrap(), "/var/lib/postgresql/data");
-    assert_eq!(vol1.read_only, false);
+    assert!(!vol1.read_only);
 
     let vol2 = &service.volumes[1];
-    assert_eq!(vol2.read_only, true);
+    assert!(vol2.read_only);
 }
 
 // Issue #13: 文字列 "true"/"false" でも動作する（警告は出る）
@@ -158,7 +158,7 @@ fn test_parse_volume_with_string_bool() {
     // 文字列 "true" でも警告付きで動作する
     assert_eq!(service.volumes.len(), 1);
     let vol = &service.volumes[0];
-    assert_eq!(vol.read_only, true);
+    assert!(vol.read_only);
 }
 
 #[test]

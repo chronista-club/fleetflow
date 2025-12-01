@@ -94,6 +94,67 @@ fleetflow cloud dns add --subdomain mcp-prod --ip 203.0.113.1
 fleetflow cloud dns remove --subdomain mcp-prod
 ```
 
+## DNSエイリアス機能
+
+### 概要
+
+サーバー設定に`dns_aliases`を追加することで、メインのDNSレコード(`{service}-{stage}.{domain}`)に加えて、任意のCNAMEエイリアスを自動作成できます。
+
+### KDL設定
+
+```kdl
+server "creo-vps" {
+    provider "sakura-cloud"
+    plan "4core-8gb"
+
+    // DNSエイリアスを指定
+    dns_aliases "app" "api" "www"
+
+    // ...
+}
+```
+
+### 動作
+
+1. **cloud up時**:
+   - メインのAレコード作成: `vps-prod.example.com` → `203.0.113.1`
+   - CNAMEエイリアス作成:
+     - `app.example.com` → `vps-prod.example.com`
+     - `api.example.com` → `vps-prod.example.com`
+     - `www.example.com` → `vps-prod.example.com`
+
+2. **cloud down時**:
+   - CNAMEエイリアスを削除
+   - メインのAレコードを削除
+
+### 使用例
+
+```kdl
+provider "sakura-cloud" {
+    zone "tk1a"
+}
+
+server "creo-vps" {
+    provider "sakura-cloud"
+    plan "4core-8gb"
+    disk_size 100
+    os "ubuntu-24.04"
+
+    // アプリケーションへのアクセスを複数のサブドメインで可能に
+    dns_aliases "app" "api" "www"
+}
+
+stage "production" {
+    servers "creo-vps"
+}
+```
+
+結果:
+- `vps-production.example.com` (Aレコード) → サーバーIP
+- `app.example.com` (CNAME) → `vps-production.example.com`
+- `api.example.com` (CNAME) → `vps-production.example.com`
+- `www.example.com` (CNAME) → `vps-production.example.com`
+
 ## KDL設定 (将来拡張)
 
 ```kdl

@@ -43,5 +43,5 @@ pub use action::{Action, ActionType, ApplyResult, Plan, PlanSummary};
 pub use error::{CloudError, Result};
 pub use provider::{AuthStatus, CloudProvider, ResourceConfig, ResourceSet, RetryConfig};
 pub use state::{
-    GlobalState, ProviderState, ResourceState, ResourceStatus, StateManager, StateLock,
+    GlobalState, ProviderState, ResourceState, ResourceStatus, StateLock, StateManager,
 };

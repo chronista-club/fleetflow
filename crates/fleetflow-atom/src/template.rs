@@ -150,8 +150,8 @@ pub fn extract_variables(kdl_content: &str) -> Result<Variables> {
 
     // variables ノードを探す
     for node in doc.nodes() {
-        if node.name().value() == "variables" {
-            if let Some(children) = node.children() {
+        if node.name().value() == "variables"
+            && let Some(children) = node.children() {
                 for var_node in children.nodes() {
                     let key = var_node.name().value().to_string();
 
@@ -162,7 +162,6 @@ pub fn extract_variables(kdl_content: &str) -> Result<Variables> {
                     }
                 }
             }
-        }
     }
 
     Ok(variables)
@@ -256,7 +255,7 @@ replicas 1
     #[test]
     fn test_for_loop() {
         let mut processor = TemplateProcessor::new();
-        let services = vec!["api", "worker", "scheduler"];
+        let services = ["api", "worker", "scheduler"];
         processor.add_variable(
             "services",
             serde_json::Value::Array(

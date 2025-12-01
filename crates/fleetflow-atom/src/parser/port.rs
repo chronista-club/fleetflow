@@ -16,7 +16,11 @@ pub fn parse_port(node: &KdlNode) -> Option<Port> {
         .map(|v| v as u16)
         .or_else(|| {
             // フォールバック: 位置引数
-            node.entries().first()?.value().as_integer().map(|v| v as u16)
+            node.entries()
+                .first()?
+                .value()
+                .as_integer()
+                .map(|v| v as u16)
         })?;
 
     let container = node

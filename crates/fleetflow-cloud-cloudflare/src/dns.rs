@@ -138,22 +138,23 @@ impl CloudflareDns {
             return Err(CloudflareError::ApiError(error_msg));
         }
 
-        Ok(api_response.result.into_iter().next().map(|r| DnsRecordInfo {
-            id: r.id,
-            name: r.name,
-            record_type: r.r#type,
-            content: r.content,
-            ttl: Some(r.ttl),
-            proxied: r.proxied,
-        }))
+        Ok(api_response
+            .result
+            .into_iter()
+            .next()
+            .map(|r| DnsRecordInfo {
+                id: r.id,
+                name: r.name,
+                record_type: r.r#type,
+                content: r.content,
+                ttl: Some(r.ttl),
+                proxied: r.proxied,
+            }))
     }
 
     /// Create a new DNS A record
     pub async fn create_record(&self, subdomain: &str, ip: &str) -> Result<DnsRecordInfo> {
-        let url = format!(
-            "{}/zones/{}/dns_records",
-            CLOUDFLARE_API_BASE, self.zone_id
-        );
+        let url = format!("{}/zones/{}/dns_records", CLOUDFLARE_API_BASE, self.zone_id);
 
         let request_body = CreateDnsRecordRequest {
             r#type: "A".to_string(),
@@ -266,7 +267,10 @@ impl CloudflareDns {
     pub async fn ensure_record(&self, subdomain: &str, ip: &str) -> Result<DnsRecordInfo> {
         if let Some(existing) = self.find_record(subdomain).await? {
             if existing.content == ip {
-                tracing::debug!("DNS record already exists with correct IP: {}", existing.name);
+                tracing::debug!(
+                    "DNS record already exists with correct IP: {}",
+                    existing.name
+                );
                 return Ok(existing);
             }
             tracing::info!(
@@ -278,7 +282,12 @@ impl CloudflareDns {
             return self.update_record(&existing.id, ip).await;
         }
 
-        tracing::info!("Creating DNS record: {}.{} -> {}", subdomain, self.domain, ip);
+        tracing::info!(
+            "Creating DNS record: {}.{} -> {}",
+            subdomain,
+            self.domain,
+            ip
+        );
         self.create_record(subdomain, ip).await
     }
 
@@ -289,6 +298,185 @@ impl CloudflareDns {
             self.delete_record(&record.id).await?;
         } else {
             tracing::debug!("DNS record not found, nothing to delete: {}", subdomain);
+        }
+        Ok(())
+    }
+
+    // ============ CNAME Record Management ============
+
+    /// Find a CNAME record by subdomain
+    pub async fn find_cname_record(&self, subdomain: &str) -> Result<Option<DnsRecordInfo>> {
+        let full_name = self.full_domain(subdomain);
+        let url = format!(
+            "{}/zones/{}/dns_records?type=CNAME&name={}",
+            CLOUDFLARE_API_BASE, self.zone_id, full_name
+        );
+
+        let response = self
+            .client
+            .get(&url)
+            .bearer_auth(&self.api_token)
+            .send()
+            .await?;
+
+        let api_response: ApiResponse<Vec<ApiDnsRecord>> = response.json().await?;
+
+        if !api_response.success {
+            let error_msg = api_response
+                .errors
+                .first()
+                .map(|e| e.message.clone())
+                .unwrap_or_else(|| "Unknown error".to_string());
+            return Err(CloudflareError::ApiError(error_msg));
+        }
+
+        Ok(api_response
+            .result
+            .into_iter()
+            .next()
+            .map(|r| DnsRecordInfo {
+                id: r.id,
+                name: r.name,
+                record_type: r.r#type,
+                content: r.content,
+                ttl: Some(r.ttl),
+                proxied: r.proxied,
+            }))
+    }
+
+    /// Create a new CNAME record
+    /// `target` should be a full domain name (e.g., "server-prod.example.com")
+    pub async fn create_cname_record(
+        &self,
+        subdomain: &str,
+        target: &str,
+    ) -> Result<DnsRecordInfo> {
+        let url = format!("{}/zones/{}/dns_records", CLOUDFLARE_API_BASE, self.zone_id);
+
+        let request_body = CreateDnsRecordRequest {
+            r#type: "CNAME".to_string(),
+            name: subdomain.to_string(),
+            content: target.to_string(),
+            ttl: 1, // Auto
+            proxied: false,
+        };
+
+        let response = self
+            .client
+            .post(&url)
+            .bearer_auth(&self.api_token)
+            .json(&request_body)
+            .send()
+            .await?;
+
+        let api_response: ApiResponse<ApiDnsRecord> = response.json().await?;
+
+        if !api_response.success {
+            let error_msg = api_response
+                .errors
+                .first()
+                .map(|e| e.message.clone())
+                .unwrap_or_else(|| "Unknown error".to_string());
+            return Err(CloudflareError::ApiError(error_msg));
+        }
+
+        let r = api_response.result;
+        Ok(DnsRecordInfo {
+            id: r.id,
+            name: r.name,
+            record_type: r.r#type,
+            content: r.content,
+            ttl: Some(r.ttl),
+            proxied: r.proxied,
+        })
+    }
+
+    /// Update an existing CNAME record
+    pub async fn update_cname_record(
+        &self,
+        record_id: &str,
+        target: &str,
+    ) -> Result<DnsRecordInfo> {
+        let url = format!(
+            "{}/zones/{}/dns_records/{}",
+            CLOUDFLARE_API_BASE, self.zone_id, record_id
+        );
+
+        let request_body = UpdateDnsRecordRequest {
+            content: target.to_string(),
+        };
+
+        let response = self
+            .client
+            .patch(&url)
+            .bearer_auth(&self.api_token)
+            .json(&request_body)
+            .send()
+            .await?;
+
+        let api_response: ApiResponse<ApiDnsRecord> = response.json().await?;
+
+        if !api_response.success {
+            let error_msg = api_response
+                .errors
+                .first()
+                .map(|e| e.message.clone())
+                .unwrap_or_else(|| "Unknown error".to_string());
+            return Err(CloudflareError::ApiError(error_msg));
+        }
+
+        let r = api_response.result;
+        Ok(DnsRecordInfo {
+            id: r.id,
+            name: r.name,
+            record_type: r.r#type,
+            content: r.content,
+            ttl: Some(r.ttl),
+            proxied: r.proxied,
+        })
+    }
+
+    /// Ensure a CNAME record exists with the specified target (create or update)
+    /// `target` should be a full domain name (e.g., "server-prod.example.com")
+    pub async fn ensure_cname_record(
+        &self,
+        subdomain: &str,
+        target: &str,
+    ) -> Result<DnsRecordInfo> {
+        if let Some(existing) = self.find_cname_record(subdomain).await? {
+            if existing.content == target {
+                tracing::debug!(
+                    "CNAME record already exists with correct target: {} -> {}",
+                    existing.name,
+                    target
+                );
+                return Ok(existing);
+            }
+            tracing::info!(
+                "Updating CNAME record {} from {} to {}",
+                existing.name,
+                existing.content,
+                target
+            );
+            return self.update_cname_record(&existing.id, target).await;
+        }
+
+        tracing::info!(
+            "Creating CNAME record: {}.{} -> {}",
+            subdomain,
+            self.domain,
+            target
+        );
+        self.create_cname_record(subdomain, target).await
+    }
+
+    /// Remove a CNAME record if it exists
+    pub async fn remove_cname_record(&self, subdomain: &str) -> Result<()> {
+        if let Some(record) = self.find_cname_record(subdomain).await? {
+            tracing::info!("Deleting CNAME record: {}", record.name);
+            self.delete_record(&record.id).await?;
+        } else {
+            tracing::debug!("CNAME record not found, nothing to delete: {}", subdomain);
         }
         Ok(())
     }
@@ -356,7 +544,10 @@ mod tests {
         };
         let dns = CloudflareDns::new(config);
 
-        assert_eq!(dns.generate_subdomain("creo-mcp-server", "prod"), "mcp-prod");
+        assert_eq!(
+            dns.generate_subdomain("creo-mcp-server", "prod"),
+            "mcp-prod"
+        );
         assert_eq!(dns.generate_subdomain("creo-api-server", "dev"), "api-dev");
         assert_eq!(
             dns.generate_subdomain("creo-memory-viewer", "prod"),

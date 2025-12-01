@@ -90,8 +90,10 @@ pub fn parse_service(node: &KdlNode) -> Result<(String, Service)> {
                 "dockerfile" => {
                     if let Some(path) = child.entries().first().and_then(|e| e.value().as_string())
                     {
-                        service.build.get_or_insert_with(Default::default).dockerfile =
-                            Some(PathBuf::from(path));
+                        service
+                            .build
+                            .get_or_insert_with(Default::default)
+                            .dockerfile = Some(PathBuf::from(path));
                     }
                 }
                 "context" => {
@@ -125,8 +127,7 @@ pub fn parse_service(node: &KdlNode) -> Result<(String, Service)> {
                     }
                 }
                 "image_tag" => {
-                    if let Some(tag) = child.entries().first().and_then(|e| e.value().as_string())
-                    {
+                    if let Some(tag) = child.entries().first().and_then(|e| e.value().as_string()) {
                         service.build.get_or_insert_with(Default::default).image_tag =
                             Some(tag.to_string());
                     }
@@ -135,6 +136,12 @@ pub fn parse_service(node: &KdlNode) -> Result<(String, Service)> {
                 "build" => {
                     if let Some(build_children) = child.children() {
                         service.build = Some(parse_build_config(build_children));
+                    }
+                }
+                // ヘルスチェックブロック
+                "healthcheck" => {
+                    if let Some(healthcheck_children) = child.children() {
+                        service.healthcheck = Some(parse_healthcheck(healthcheck_children));
                     }
                 }
                 _ => {}
@@ -200,6 +207,67 @@ pub fn parse_build_config(doc: &KdlDocument) -> BuildConfig {
     }
 
     config
+}
+
+/// ヘルスチェックブロックをパース
+pub fn parse_healthcheck(doc: &KdlDocument) -> crate::model::HealthCheck {
+    use crate::model::HealthCheck;
+
+    let mut test = Vec::new();
+    let mut interval = 30;
+    let mut timeout = 3;
+    let mut retries = 3;
+    let mut start_period = 10;
+
+    for node in doc.nodes() {
+        match node.name().value() {
+            "test" => {
+                // テストコマンドを配列として取得
+                test = node
+                    .entries()
+                    .iter()
+                    .filter_map(|e| e.value().as_string().map(|s| s.to_string()))
+                    .collect();
+            }
+            "interval" => {
+                if let Some(entry) = node.entries().first()
+                    && let Some(value) = entry.value().as_integer()
+                {
+                    interval = value as u64;
+                }
+            }
+            "timeout" => {
+                if let Some(entry) = node.entries().first()
+                    && let Some(value) = entry.value().as_integer()
+                {
+                    timeout = value as u64;
+                }
+            }
+            "retries" => {
+                if let Some(entry) = node.entries().first()
+                    && let Some(value) = entry.value().as_integer()
+                {
+                    retries = value as u64;
+                }
+            }
+            "start_period" => {
+                if let Some(entry) = node.entries().first()
+                    && let Some(value) = entry.value().as_integer()
+                {
+                    start_period = value as u64;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    HealthCheck {
+        test,
+        interval,
+        timeout,
+        retries,
+        start_period,
+    }
 }
 
 /// サービス名からイメージ名を推測

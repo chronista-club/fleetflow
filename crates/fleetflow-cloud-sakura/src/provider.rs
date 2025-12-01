@@ -18,10 +18,7 @@ fn parse_plan(plan: &Option<String>) -> (i32, i32) {
                 .trim_end_matches("core")
                 .parse::<i32>()
                 .unwrap_or(1);
-            let memory = parts[1]
-                .trim_end_matches("gb")
-                .parse::<i32>()
-                .unwrap_or(1);
+            let memory = parts[1].trim_end_matches("gb").parse::<i32>().unwrap_or(1);
             return (core, memory);
         }
     }
@@ -42,6 +39,7 @@ pub struct CreateServerOptions {
     pub disk_size: Option<i32>,
     pub os: Option<String>,
     pub ssh_keys: Vec<String>,
+    pub startup_scripts: Vec<String>,
     pub tags: Vec<String>,
 }
 
@@ -75,8 +73,16 @@ impl SakuraCloudProvider {
     }
 
     /// Find server by FleetFlow tag (for idempotent operations)
-    pub async fn find_server_by_tag(&self, project: &str, server_name: &str) -> Result<Option<SimpleServerInfo>> {
-        match self.usacloud.find_server_by_fleetflow_tag(project, server_name).await {
+    pub async fn find_server_by_tag(
+        &self,
+        project: &str,
+        server_name: &str,
+    ) -> Result<Option<SimpleServerInfo>> {
+        match self
+            .usacloud
+            .find_server_by_fleetflow_tag(project, server_name)
+            .await
+        {
             Ok(Some(server)) => Ok(Some(server.into())),
             Ok(None) => Ok(None),
             Err(e) => Err(e),
@@ -93,11 +99,32 @@ impl SakuraCloudProvider {
             None
         } else {
             let all_keys = self.usacloud.list_ssh_keys().await?;
-            let ids: Vec<String> = options.ssh_keys.iter()
+            let ids: Vec<String> = options
+                .ssh_keys
+                .iter()
                 .filter_map(|name| {
-                    all_keys.iter()
+                    all_keys
+                        .iter()
                         .find(|k| k.name == *name)
                         .map(|k| k.id_str())
+                })
+                .collect();
+            if ids.is_empty() { None } else { Some(ids) }
+        };
+
+        // Look up startup script (note) IDs
+        let note_ids = if options.startup_scripts.is_empty() {
+            None
+        } else {
+            let all_notes = self.usacloud.list_notes().await?;
+            let ids: Vec<String> = options
+                .startup_scripts
+                .iter()
+                .filter_map(|name| {
+                    all_notes
+                        .iter()
+                        .find(|n| n.name == *name)
+                        .map(|n| n.id_str())
                 })
                 .collect();
             if ids.is_empty() { None } else { Some(ids) }
@@ -110,6 +137,7 @@ impl SakuraCloudProvider {
             disk_size: options.disk_size,
             os_type: options.os.clone(),
             ssh_key_ids,
+            note_ids,
             tags: options.tags.clone(),
         };
 
@@ -123,13 +151,10 @@ impl SakuraCloudProvider {
     }
 
     /// Parse server configuration from ResourceConfig
+    #[allow(dead_code)]
     fn parse_server_config(&self, config: &ResourceConfig) -> Result<ServerResourceConfig> {
-        let core = config
-            .get_config::<i32>("core")
-            .unwrap_or(1);
-        let memory = config
-            .get_config::<i32>("memory")
-            .unwrap_or(1);
+        let core = config.get_config::<i32>("core").unwrap_or(1);
+        let memory = config.get_config::<i32>("memory").unwrap_or(1);
         let disk_size = config.get_config::<i32>("disk_size");
         let os_type = config.get_config::<String>("os_type");
         let ssh_key = config.get_config::<String>("ssh_key");
@@ -146,6 +171,7 @@ impl SakuraCloudProvider {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct ServerResourceConfig {
     name: String,
     core: i32,
@@ -198,7 +224,7 @@ impl CloudProvider for SakuraCloudProvider {
                 ResourceStatus::Stopped
             };
 
-            let mut resource = ResourceState::new(&server.id_str(), "server").with_status(status);
+            let mut resource = ResourceState::new(server.id_str(), "server").with_status(status);
 
             resource.set_attribute("name", serde_json::json!(server.name));
 
@@ -296,6 +322,7 @@ impl CloudProvider for SakuraCloudProvider {
                         disk_size: Some(20),
                         os_type: Some("ubuntu2404".to_string()),
                         ssh_key_ids: None,
+                        note_ids: None,
                         tags: Vec::new(),
                     };
 

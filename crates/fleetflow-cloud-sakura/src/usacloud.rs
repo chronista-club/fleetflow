@@ -20,10 +20,7 @@ impl Usacloud {
     /// Check if usacloud is installed and authenticated
     pub async fn check_auth(&self) -> Result<UsacloudAuth> {
         // Check if usacloud exists
-        let which = Command::new("which")
-            .arg("usacloud")
-            .output()
-            .await?;
+        let which = Command::new("which").arg("usacloud").output().await?;
 
         if !which.status.success() {
             return Err(SakuraError::UsacloudNotFound);
@@ -108,7 +105,11 @@ impl Usacloud {
     }
 
     /// Find a single server by FleetFlow tag
-    pub async fn find_server_by_fleetflow_tag(&self, project: &str, server_name: &str) -> Result<Option<ServerInfo>> {
+    pub async fn find_server_by_fleetflow_tag(
+        &self,
+        project: &str,
+        server_name: &str,
+    ) -> Result<Option<ServerInfo>> {
         let tag = format!("fleetflow:{}:{}", project, server_name);
         let servers = self.find_servers_by_tag(&tag).await?;
         Ok(servers.into_iter().next())
@@ -169,6 +170,14 @@ impl Usacloud {
         if let Some(ref ssh_key_ids) = config.ssh_key_ids {
             for id in ssh_key_ids {
                 args.push("--disk-edit-ssh-key-ids");
+                args.push(id.as_str());
+            }
+        }
+
+        // Add startup script note IDs (usacloud uses --disk-edit-note-ids)
+        if let Some(ref note_ids) = config.note_ids {
+            for id in note_ids {
+                args.push("--disk-edit-note-ids");
                 args.push(id.as_str());
             }
         }
@@ -249,6 +258,26 @@ impl Usacloud {
         let key: SshKeyInfo = serde_json::from_str(&output)?;
         Ok(key)
     }
+
+    /// List notes (startup scripts) - global resource, no zone needed
+    pub async fn list_notes(&self) -> Result<Vec<NoteInfo>> {
+        let output = self
+            .run_command_global(&["note", "list", "--output-type", "json"])
+            .await?;
+
+        if output.trim().is_empty() || output.trim() == "[]" {
+            return Ok(Vec::new());
+        }
+
+        let notes: Vec<NoteInfo> = serde_json::from_str(&output)?;
+        Ok(notes)
+    }
+
+    /// Find a note by name
+    pub async fn find_note_by_name(&self, name: &str) -> Result<Option<NoteInfo>> {
+        let notes = self.list_notes().await?;
+        Ok(notes.into_iter().find(|n| n.name == name))
+    }
 }
 
 /// Authentication status from usacloud
@@ -326,6 +355,7 @@ pub struct CreateServerConfig {
     pub disk_size: Option<i32>,
     pub os_type: Option<String>,
     pub ssh_key_ids: Option<Vec<String>>,
+    pub note_ids: Option<Vec<String>>,
     pub tags: Vec<String>,
 }
 
@@ -359,6 +389,29 @@ impl SshKeyInfo {
     }
 }
 
+/// Note (startup script) information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NoteInfo {
+    #[serde(rename = "ID")]
+    pub id: u64,
+
+    #[serde(rename = "Name")]
+    pub name: String,
+
+    #[serde(rename = "Class")]
+    pub class: Option<String>,
+
+    #[serde(rename = "Scope")]
+    pub scope: Option<String>,
+}
+
+impl NoteInfo {
+    /// Get ID as string
+    pub fn id_str(&self) -> String {
+        self.id.to_string()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -366,7 +419,7 @@ mod tests {
     #[test]
     fn test_server_info_ip() {
         let server = ServerInfo {
-            id: "123".to_string(),
+            id: 123,
             name: "test".to_string(),
             cpu: Some(4),
             memory_mb: Some(4096),

@@ -22,6 +22,8 @@ pub struct Service {
     pub depends_on: Vec<String>,
     /// ビルド設定
     pub build: Option<BuildConfig>,
+    /// ヘルスチェック設定
+    pub healthcheck: Option<HealthCheck>,
 }
 
 /// ビルド設定
@@ -42,4 +44,36 @@ pub struct BuildConfig {
     pub no_cache: bool,
     /// イメージタグの明示的指定
     pub image_tag: Option<String>,
+}
+
+/// ヘルスチェック設定
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HealthCheck {
+    /// テストコマンド (CMD-SHELL形式またはCMD形式)
+    pub test: Vec<String>,
+    /// チェック間隔（秒）
+    #[serde(default = "default_interval")]
+    pub interval: u64,
+    /// タイムアウト（秒）
+    #[serde(default = "default_timeout")]
+    pub timeout: u64,
+    /// リトライ回数
+    #[serde(default = "default_retries")]
+    pub retries: u64,
+    /// 起動待機時間（秒）
+    #[serde(default = "default_start_period")]
+    pub start_period: u64,
+}
+
+fn default_interval() -> u64 {
+    30
+}
+fn default_timeout() -> u64 {
+    3
+}
+fn default_retries() -> u64 {
+    3
+}
+fn default_start_period() -> u64 {
+    10
 }

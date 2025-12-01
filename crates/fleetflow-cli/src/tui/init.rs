@@ -127,8 +127,8 @@ pub fn run_init_wizard() -> io::Result<Option<(String, String)>> {
     let result = loop {
         terminal.draw(|f| draw_ui(f, &state))?;
 
-        if let Event::Key(key) = event::read()? {
-            if key.kind == KeyEventKind::Press {
+        if let Event::Key(key) = event::read()?
+            && key.kind == KeyEventKind::Press {
                 match key.code {
                     KeyCode::Char('q') | KeyCode::Esc => {
                         break None;
@@ -163,7 +163,6 @@ pub fn run_init_wizard() -> io::Result<Option<(String, String)>> {
                     _ => {}
                 }
             }
-        }
     };
 
     restore_terminal(&mut terminal)?;
@@ -266,11 +265,9 @@ fn draw_template_selection(frame: &mut Frame, area: Rect, state: &InitWizardStat
 }
 
 fn draw_path_selection(frame: &mut Frame, area: Rect, state: &InitWizardState) {
-    let paths = vec![
-        ("./flow.kdl", "カレントディレクトリ (推奨)"),
+    let paths = [("./flow.kdl", "カレントディレクトリ (推奨)"),
         ("./.fleetflow/flow.kdl", ".fleetflowディレクトリ内"),
-        ("~/.config/fleetflow/flow.kdl", "グローバル設定"),
-    ];
+        ("~/.config/fleetflow/flow.kdl", "グローバル設定")];
 
     let items: Vec<ListItem> = paths
         .iter()

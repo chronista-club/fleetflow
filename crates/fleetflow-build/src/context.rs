@@ -1,8 +1,8 @@
 use crate::error::{BuildError, Result};
-use flate2::write::GzEncoder;
 use flate2::Compression;
+use flate2::write::GzEncoder;
 use std::fs::File;
-use std::io::{Read, Write};
+use std::io::Read;
 use std::path::Path;
 use tar::Builder;
 
@@ -11,10 +11,7 @@ pub struct ContextBuilder;
 impl ContextBuilder {
     /// ビルドコンテキストをtar.gzアーカイブとして作成
     pub fn create_context(context_path: &Path, dockerfile_path: &Path) -> Result<Vec<u8>> {
-        tracing::debug!(
-            "Creating build context from: {}",
-            context_path.display()
-        );
+        tracing::debug!("Creating build context from: {}", context_path.display());
 
         // tarアーカイブの作成
         let mut archive_data = Vec::new();
@@ -24,7 +21,7 @@ impl ContextBuilder {
 
             // コンテキストディレクトリを再帰的に追加
             tar.append_dir_all(".", context_path)
-                .map_err(|e| BuildError::Io(e))?;
+                .map_err(BuildError::Io)?;
 
             // Dockerfileを "Dockerfile" として追加
             let mut dockerfile_file = File::open(dockerfile_path)?;
@@ -40,15 +37,12 @@ impl ContextBuilder {
             header.set_cksum();
 
             tar.append(&header, &dockerfile_content[..])
-                .map_err(|e| BuildError::Io(e))?;
+                .map_err(BuildError::Io)?;
 
-            tar.finish().map_err(|e| BuildError::Io(e))?;
+            tar.finish().map_err(BuildError::Io)?;
         }
 
-        tracing::debug!(
-            "Build context created: {} bytes",
-            archive_data.len()
-        );
+        tracing::debug!("Build context created: {} bytes", archive_data.len());
 
         // コンテキストサイズの警告
         Self::check_context_size(archive_data.len());
@@ -97,7 +91,7 @@ mod tests {
         assert!(result.is_ok());
 
         let archive = result.unwrap();
-        assert!(archive.len() > 0);
+        assert!(!archive.is_empty());
 
         // tarアーカイブとして展開できるか確認
         let extract_dir = tempdir().unwrap();

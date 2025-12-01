@@ -1,7 +1,7 @@
 use crate::error::{BuildError, Result};
 use fleetflow_atom::Service;
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 pub struct BuildResolver {
     project_root: PathBuf,
@@ -26,8 +26,8 @@ impl BuildResolver {
         service: &Service,
     ) -> Result<Option<PathBuf>> {
         // 明示的な指定がある場合
-        if let Some(build) = &service.build {
-            if let Some(dockerfile) = &build.dockerfile {
+        if let Some(build) = &service.build
+            && let Some(dockerfile) = &build.dockerfile {
                 let path = self.project_root.join(dockerfile);
                 if path.exists() {
                     return Ok(Some(path));
@@ -35,7 +35,6 @@ impl BuildResolver {
                     return Err(BuildError::DockerfileNotFound(path));
                 }
             }
-        }
 
         // 規約ベースの検索
         let candidates = vec![
@@ -135,11 +134,10 @@ impl BuildResolver {
         stage_name: &str,
     ) -> String {
         // 明示的なタグ指定
-        if let Some(build) = &service.build {
-            if let Some(tag) = &build.image_tag {
+        if let Some(build) = &service.build
+            && let Some(tag) = &build.image_tag {
                 return tag.clone();
             }
-        }
 
         // 自動生成タグ: {project}-{service}:{stage}
         format!("{}-{}:{}", project_name, service_name, stage_name)
@@ -178,11 +176,13 @@ mod tests {
 
         let resolver = BuildResolver::new(temp_dir.path().to_path_buf());
 
-        let mut service = Service::default();
-        service.build = Some(BuildConfig {
-            dockerfile: Some(PathBuf::from("custom.dockerfile")),
+        let service = Service {
+            build: Some(BuildConfig {
+                dockerfile: Some(PathBuf::from("custom.dockerfile")),
+                ..Default::default()
+            }),
             ..Default::default()
-        });
+        };
 
         let result = resolver.resolve_dockerfile("test", &service).unwrap();
         assert_eq!(result, Some(dockerfile_path));
@@ -226,7 +226,9 @@ mod tests {
         let resolver = BuildResolver::new(temp_dir.path().to_path_buf());
         let service = Service::default();
 
-        let result = resolver.resolve_dockerfile("nonexistent", &service).unwrap();
+        let result = resolver
+            .resolve_dockerfile("nonexistent", &service)
+            .unwrap();
         assert_eq!(result, None);
     }
 
@@ -248,11 +250,13 @@ mod tests {
     fn test_resolve_image_tag_explicit() {
         let resolver = BuildResolver::new(PathBuf::from("/tmp"));
 
-        let mut service = Service::default();
-        service.build = Some(BuildConfig {
-            image_tag: Some("myapp:v1.0.0".to_string()),
+        let service = Service {
+            build: Some(BuildConfig {
+                image_tag: Some("myapp:v1.0.0".to_string()),
+                ..Default::default()
+            }),
             ..Default::default()
-        });
+        };
 
         let tag = resolver.resolve_image_tag("api", &service, "project", "local");
         assert_eq!(tag, "myapp:v1.0.0");
@@ -285,11 +289,13 @@ mod tests {
 
         let resolver = BuildResolver::new(temp_dir.path().to_path_buf());
 
-        let mut service = Service::default();
-        service.build = Some(BuildConfig {
-            context: Some(PathBuf::from("backend")),
+        let service = Service {
+            build: Some(BuildConfig {
+                context: Some(PathBuf::from("backend")),
+                ..Default::default()
+            }),
             ..Default::default()
-        });
+        };
 
         let context = resolver.resolve_context(&service).unwrap();
         assert_eq!(context, ctx_dir);
