@@ -61,10 +61,31 @@ fleetflow-cli
 pub struct DnsRecord {
     pub id: String,           // Cloudflare record ID
     pub name: String,         // 完全なサブドメイン (mcp-prod.example.com)
-    pub content: String,      // IPアドレス
-    pub record_type: String,  // "A"
+    pub content: String,      // IPアドレス or CNAME target
+    pub record_type: String,  // "A" or "CNAME"
     pub proxied: bool,        // false (DNS Only)
     pub ttl: u32,             // 1 = Auto
+}
+```
+
+### ServerResource (DNS Aliases)
+
+```rust
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ServerResource {
+    pub provider: String,
+    pub plan: Option<String>,
+    pub disk_size: Option<u32>,
+    pub ssh_keys: Vec<String>,
+    pub os: Option<String>,
+    pub startup_script: Option<String>,
+    pub tags: Vec<String>,
+
+    /// DNSエイリアス（CNAME）の一覧
+    /// 例: ["app", "api"] -> app.{domain} と api.{domain} が {server-hostname}.{domain} を参照
+    pub dns_aliases: Vec<String>,
+
+    pub config: HashMap<String, String>,
 }
 ```
 
@@ -165,7 +186,7 @@ impl CloudDnsManager {
         format!("{}-{}", short_name, stage)
     }
 
-    /// DNSレコードを作成または更新
+    /// DNSレコード(A)を作成または更新
     pub async fn ensure_record(&self, subdomain: &str, ip: &str) -> Result<DnsRecord, DnsError> {
         // 既存レコードを検索
         if let Some(existing) = self.find_record(subdomain).await? {
@@ -180,9 +201,32 @@ impl CloudDnsManager {
         self.create_record(subdomain, ip).await
     }
 
-    /// DNSレコードを削除
+    /// DNSレコード(A)を削除
     pub async fn remove_record(&self, subdomain: &str) -> Result<(), DnsError> {
         if let Some(record) = self.find_record(subdomain).await? {
+            self.delete_record(&record.id).await?;
+        }
+        Ok(())
+    }
+
+    /// CNAMEレコードを作成または更新
+    pub async fn ensure_cname_record(&self, subdomain: &str, target: &str) -> Result<DnsRecord, DnsError> {
+        // 既存CNAMEレコードを検索
+        if let Some(existing) = self.find_cname_record(subdomain).await? {
+            // ターゲットが同じなら何もしない
+            if existing.content == target {
+                return Ok(existing);
+            }
+            // ターゲットが違えば更新
+            return self.update_cname_record(&existing.id, target).await;
+        }
+        // 新規作成
+        self.create_cname_record(subdomain, target).await
+    }
+
+    /// CNAMEレコードを削除
+    pub async fn remove_cname_record(&self, subdomain: &str) -> Result<(), DnsError> {
+        if let Some(record) = self.find_cname_record(subdomain).await? {
             self.delete_record(&record.id).await?;
         }
         Ok(())

@@ -30,27 +30,27 @@ fn parse_bool_with_hint(node: &KdlNode, key: &str) -> Option<bool> {
     }
 
     // 文字列 "true" / "false" が使用されていないかチェック
-    if let Some(entry) = node.get(key) {
-        if let Some(str_value) = entry.as_string() {
-            match str_value {
-                "true" => {
-                    eprintln!(
-                        "Warning: '{key}=\"true\"' is a string, not a boolean.\n\
+    if let Some(entry) = node.get(key)
+        && let Some(str_value) = entry.as_string()
+    {
+        match str_value {
+            "true" => {
+                eprintln!(
+                    "Warning: '{key}=\"true\"' is a string, not a boolean.\n\
                          Hint: In KDL v2, use '#true' for boolean values.\n\
                          Example: {key}=#true"
-                    );
-                    return Some(true);
-                }
-                "false" => {
-                    eprintln!(
-                        "Warning: '{key}=\"false\"' is a string, not a boolean.\n\
+                );
+                return Some(true);
+            }
+            "false" => {
+                eprintln!(
+                    "Warning: '{key}=\"false\"' is a string, not a boolean.\n\
                          Hint: In KDL v2, use '#false' for boolean values.\n\
                          Example: {key}=#false"
-                    );
-                    return Some(false);
-                }
-                _ => {}
+                );
+                return Some(false);
             }
+            _ => {}
         }
     }
 

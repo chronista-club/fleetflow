@@ -42,6 +42,10 @@ pub struct ServerResource {
     /// タグ
     pub tags: Vec<String>,
 
+    /// DNSエイリアス（CNAME）の一覧
+    /// 例: ["app", "api"] -> app.{domain} と api.{domain} が {server-hostname}.{domain} を参照
+    pub dns_aliases: Vec<String>,
+
     /// 追加設定
     pub config: HashMap<String, String>,
 }

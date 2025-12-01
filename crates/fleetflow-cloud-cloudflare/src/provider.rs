@@ -12,6 +12,8 @@ use fleetflow_cloud::{
 /// Cloudflare provider
 pub struct CloudflareProvider {
     wrangler: Wrangler,
+    // TODO: このフィールドは将来のアカウント管理機能で使用予定
+    #[allow(dead_code)]
     account_id: Option<String>,
 }
 
@@ -38,9 +40,7 @@ impl CloudProvider for CloudflareProvider {
         match self.wrangler.check_auth().await {
             Ok(auth) => {
                 if auth.authenticated {
-                    let account_info = auth
-                        .account_id
-                        .unwrap_or_else(|| "Unknown".to_string());
+                    let account_info = auth.account_id.unwrap_or_else(|| "Unknown".to_string());
                     Ok(AuthStatus::ok(account_info))
                 } else {
                     Ok(AuthStatus::failed("wrangler が認証されていません"))
@@ -115,54 +115,50 @@ impl CloudProvider for CloudflareProvider {
 
         for action in &plan.actions {
             match action.action_type {
-                ActionType::Create => {
-                    match action.resource_type.as_str() {
-                        "r2-bucket" => {
-                            tracing::info!("Creating R2 bucket: {}", action.resource_id);
-                            match self.wrangler.create_r2_bucket(&action.resource_id).await {
-                                Ok(_bucket) => {
-                                    result.add_success(
-                                        action.id.clone(),
-                                        format!("R2バケット {} を作成しました", action.resource_id),
-                                    );
-                                }
-                                Err(e) => {
-                                    result.add_failure(action.id.clone(), e.to_string());
-                                }
+                ActionType::Create => match action.resource_type.as_str() {
+                    "r2-bucket" => {
+                        tracing::info!("Creating R2 bucket: {}", action.resource_id);
+                        match self.wrangler.create_r2_bucket(&action.resource_id).await {
+                            Ok(_bucket) => {
+                                result.add_success(
+                                    action.id.clone(),
+                                    format!("R2バケット {} を作成しました", action.resource_id),
+                                );
+                            }
+                            Err(e) => {
+                                result.add_failure(action.id.clone(), e.to_string());
                             }
                         }
-                        _ => {
-                            result.add_failure(
-                                action.id.clone(),
-                                format!("未対応のリソースタイプ: {}", action.resource_type),
-                            );
-                        }
                     }
-                }
-                ActionType::Delete => {
-                    match action.resource_type.as_str() {
-                        "r2-bucket" => {
-                            tracing::info!("Deleting R2 bucket: {}", action.resource_id);
-                            match self.wrangler.delete_r2_bucket(&action.resource_id).await {
-                                Ok(()) => {
-                                    result.add_success(
-                                        action.id.clone(),
-                                        format!("R2バケット {} を削除しました", action.resource_id),
-                                    );
-                                }
-                                Err(e) => {
-                                    result.add_failure(action.id.clone(), e.to_string());
-                                }
+                    _ => {
+                        result.add_failure(
+                            action.id.clone(),
+                            format!("未対応のリソースタイプ: {}", action.resource_type),
+                        );
+                    }
+                },
+                ActionType::Delete => match action.resource_type.as_str() {
+                    "r2-bucket" => {
+                        tracing::info!("Deleting R2 bucket: {}", action.resource_id);
+                        match self.wrangler.delete_r2_bucket(&action.resource_id).await {
+                            Ok(()) => {
+                                result.add_success(
+                                    action.id.clone(),
+                                    format!("R2バケット {} を削除しました", action.resource_id),
+                                );
+                            }
+                            Err(e) => {
+                                result.add_failure(action.id.clone(), e.to_string());
                             }
                         }
-                        _ => {
-                            result.add_failure(
-                                action.id.clone(),
-                                format!("未対応のリソースタイプ: {}", action.resource_type),
-                            );
-                        }
                     }
-                }
+                    _ => {
+                        result.add_failure(
+                            action.id.clone(),
+                            format!("未対応のリソースタイプ: {}", action.resource_type),
+                        );
+                    }
+                },
                 ActionType::Update => {
                     result.add_success(action.id.clone(), "更新は未実装です".to_string());
                 }

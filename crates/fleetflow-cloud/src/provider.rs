@@ -141,7 +141,9 @@ impl ResourceConfig {
 
     /// Get a configuration value as a specific type
     pub fn get_config<T: serde::de::DeserializeOwned>(&self, key: &str) -> Option<T> {
-        self.config.get(key).and_then(|v| serde_json::from_value(v.clone()).ok())
+        self.config
+            .get(key)
+            .and_then(|v| serde_json::from_value(v.clone()).ok())
     }
 }
 

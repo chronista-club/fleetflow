@@ -108,6 +108,14 @@ pub fn parse_server(node: &KdlNode) -> Result<(String, ServerResource)> {
                         .filter_map(|e| e.value().as_string().map(|s| s.to_string()))
                         .collect();
                 }
+                "dns_alias" | "dns_aliases" => {
+                    // 複数のDNSエイリアスを引数として受け取る
+                    server.dns_aliases = child
+                        .entries()
+                        .iter()
+                        .filter_map(|e| e.value().as_string().map(|s| s.to_string()))
+                        .collect();
+                }
                 // 追加設定はconfigに保存
                 other => {
                     if let Some(value) = child.entries().first().and_then(|e| e.value().as_string())
@@ -162,5 +170,71 @@ mod tests {
         assert_eq!(server.disk_size, Some(100));
         assert_eq!(server.os, Some("ubuntu-24.04".to_string()));
         assert_eq!(server.ssh_keys.len(), 2);
+    }
+
+    #[test]
+    fn test_parse_server_with_dns_aliases() {
+        let kdl = r#"
+            server "creo-vps" {
+                provider "sakura-cloud"
+                plan "4core-8gb"
+                dns_aliases "app" "api" "www"
+            }
+        "#;
+        let doc: kdl::KdlDocument = kdl.parse().unwrap();
+        let node = doc.nodes().first().unwrap();
+
+        let (name, server) = parse_server(node).unwrap();
+        assert_eq!(name, "creo-vps");
+        assert_eq!(server.provider, "sakura-cloud");
+        assert_eq!(server.plan, Some("4core-8gb".to_string()));
+        assert_eq!(server.dns_aliases, vec!["app", "api", "www"]);
+    }
+
+    #[test]
+    fn test_parse_server_with_empty_dns_aliases() {
+        let kdl = r#"
+            server "creo-vps" {
+                provider "sakura-cloud"
+            }
+        "#;
+        let doc: kdl::KdlDocument = kdl.parse().unwrap();
+        let node = doc.nodes().first().unwrap();
+
+        let (_, server) = parse_server(node).unwrap();
+        // dns_aliasesが指定されていない場合は空配列
+        assert!(server.dns_aliases.is_empty());
+    }
+
+    #[test]
+    fn test_parse_server_with_single_dns_alias() {
+        let kdl = r#"
+            server "creo-vps" {
+                provider "sakura-cloud"
+                dns_aliases "app"
+            }
+        "#;
+        let doc: kdl::KdlDocument = kdl.parse().unwrap();
+        let node = doc.nodes().first().unwrap();
+
+        let (_, server) = parse_server(node).unwrap();
+        assert_eq!(server.dns_aliases, vec!["app"]);
+    }
+
+    #[test]
+    fn test_parse_server_with_duplicate_dns_aliases() {
+        // 重複した場合もそのまま保持（重複排除はアプリケーション層の責務）
+        let kdl = r#"
+            server "creo-vps" {
+                provider "sakura-cloud"
+                dns_aliases "app" "app" "api"
+            }
+        "#;
+        let doc: kdl::KdlDocument = kdl.parse().unwrap();
+        let node = doc.nodes().first().unwrap();
+
+        let (_, server) = parse_server(node).unwrap();
+        assert_eq!(server.dns_aliases, vec!["app", "app", "api"]);
+        assert_eq!(server.dns_aliases.len(), 3);
     }
 }

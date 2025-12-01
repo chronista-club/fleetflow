@@ -21,10 +21,7 @@ impl Wrangler {
     /// Check if wrangler is installed and authenticated
     pub async fn check_auth(&self) -> Result<WranglerAuth> {
         // Check if wrangler exists
-        let which = Command::new("which")
-            .arg("wrangler")
-            .output()
-            .await?;
+        let which = Command::new("which").arg("wrangler").output().await?;
 
         if !which.status.success() {
             return Err(CloudflareError::WranglerNotFound);
@@ -72,9 +69,7 @@ impl Wrangler {
 
     /// Create an R2 bucket
     pub async fn create_r2_bucket(&self, name: &str) -> Result<R2BucketInfo> {
-        let _output = self
-            .run_command(&["r2", "bucket", "create", name])
-            .await?;
+        let _output = self.run_command(&["r2", "bucket", "create", name]).await?;
         // TODO: Parse output when implementing
         Ok(R2BucketInfo {
             name: name.to_string(),

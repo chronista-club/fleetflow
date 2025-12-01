@@ -51,15 +51,15 @@ fn print_loaded_config_files(project_root: &std::path::Path) {
 
     let flow_local_kdl = project_root.join("flow.local.kdl");
     if flow_local_kdl.exists() {
-        println!("  • {} (ローカルオーバーライド)", flow_local_kdl.display().to_string().cyan());
+        println!(
+            "  • {} (ローカルオーバーライド)",
+            flow_local_kdl.display().to_string().cyan()
+        );
     }
 }
 
 /// Dockerイメージを自動的にpull
-async fn pull_image(
-    docker: &bollard::Docker,
-    image: &str,
-) -> anyhow::Result<()> {
+async fn pull_image(docker: &bollard::Docker, image: &str) -> anyhow::Result<()> {
     use futures_util::stream::StreamExt;
 
     let (image_name, tag) = parse_image_tag(image);
@@ -67,13 +67,19 @@ async fn pull_image(
     println!("  ℹ イメージが見つかりません: {}", image.cyan());
     println!("  ↓ イメージをダウンロード中...");
 
+    #[allow(deprecated)]
     let options = bollard::image::CreateImageOptions {
         from_image: image_name,
         tag,
         ..Default::default()
     };
 
-    let mut stream = docker.create_image(Some(options), None, None::<bollard::auth::DockerCredentials>);
+    #[allow(deprecated)]
+    let mut stream = docker.create_image(
+        Some(options),
+        None,
+        None::<bollard::auth::DockerCredentials>,
+    );
 
     while let Some(info) = stream.next().await {
         match info {
@@ -98,7 +104,10 @@ async fn pull_image(
             }
             Err(e) => {
                 println!();
-                return Err(anyhow::anyhow!("イメージのダウンロードに失敗しました: {}", e));
+                return Err(anyhow::anyhow!(
+                    "イメージのダウンロードに失敗しました: {}",
+                    e
+                ));
             }
             _ => {}
         }
@@ -383,20 +392,18 @@ async fn main() -> anyhow::Result<()> {
             println!();
             println!("{}", format!("🌐 ネットワーク: {}", network_name).blue());
 
-            match docker
-                .create_network(bollard::network::CreateNetworkOptions {
-                    name: network_name.as_str(),
-                    driver: "bridge",
-                    ..Default::default()
-                })
-                .await
-            {
+            let network_config = bollard::models::NetworkCreateRequest {
+                name: network_name.clone(),
+                driver: Some("bridge".to_string()),
+                ..Default::default()
+            };
+
+            match docker.create_network(network_config).await {
                 Ok(_) => {
                     println!("  ✓ ネットワーク作成完了");
                 }
                 Err(bollard::errors::Error::DockerResponseServerError {
-                    status_code: 409,
-                    ..
+                    status_code: 409, ..
                 }) => {
                     println!("  ℹ ネットワークは既に存在します");
                 }
@@ -456,6 +463,7 @@ async fn main() -> anyhow::Result<()> {
                     }) => {
                         // コンテナが既に存在する場合
                         println!("  ℹ コンテナは既に存在します");
+                        #[allow(deprecated)]
                         let container_name = &create_options.name;
 
                         // 既存コンテナを起動
@@ -484,16 +492,21 @@ async fn main() -> anyhow::Result<()> {
                         ..
                     }) => {
                         // イメージが見つからない場合は自動的にpull
-                        let image = container_config.image.as_ref().ok_or_else(|| {
-                            anyhow::anyhow!("イメージ名が指定されていません")
-                        })?;
+                        #[allow(deprecated)]
+                        let image = container_config
+                            .image
+                            .as_ref()
+                            .ok_or_else(|| anyhow::anyhow!("イメージ名が指定されていません"))?;
 
                         // イメージをpull
                         pull_image(&docker, image).await?;
 
                         // pull成功後、再度コンテナ作成を試行
                         match docker
-                            .create_container(Some(create_options.clone()), container_config.clone())
+                            .create_container(
+                                Some(create_options.clone()),
+                                container_config.clone(),
+                            )
                             .await
                         {
                             Ok(response) => {
@@ -607,13 +620,25 @@ async fn main() -> anyhow::Result<()> {
                 let container_name = format!("{}-{}-{}", config.name, stage_name, service_name);
 
                 // コンテナを停止
-                match docker.stop_container(&container_name, None::<bollard::query_parameters::StopContainerOptions>).await {
+                match docker
+                    .stop_container(
+                        &container_name,
+                        None::<bollard::query_parameters::StopContainerOptions>,
+                    )
+                    .await
+                {
                     Ok(_) => {
                         println!("  ✓ 停止完了");
 
                         // --remove フラグが指定されている場合は削除
                         if remove {
-                            match docker.remove_container(&container_name, None::<bollard::query_parameters::RemoveContainerOptions>).await {
+                            match docker
+                                .remove_container(
+                                    &container_name,
+                                    None::<bollard::query_parameters::RemoveContainerOptions>,
+                                )
+                                .await
+                            {
                                 Ok(_) => println!("  ✓ 削除完了"),
                                 Err(e) => println!("  ⚠ 削除エラー: {}", e),
                             }
@@ -627,7 +652,13 @@ async fn main() -> anyhow::Result<()> {
 
                         // --remove フラグが指定されている場合は削除
                         if remove {
-                            match docker.remove_container(&container_name, None::<bollard::query_parameters::RemoveContainerOptions>).await {
+                            match docker
+                                .remove_container(
+                                    &container_name,
+                                    None::<bollard::query_parameters::RemoveContainerOptions>,
+                                )
+                                .await
+                            {
                                 Ok(_) => println!("  ✓ 削除完了"),
                                 Err(e) => println!("  ⚠ 削除エラー: {}", e),
                             }
@@ -649,7 +680,10 @@ async fn main() -> anyhow::Result<()> {
             if remove {
                 let network_name = fleetflow_container::get_network_name(&config.name, &stage_name);
                 println!();
-                println!("{}", format!("🌐 ネットワーク削除: {}", network_name).yellow());
+                println!(
+                    "{}",
+                    format!("🌐 ネットワーク削除: {}", network_name).yellow()
+                );
 
                 match docker.remove_network(&network_name).await {
                     Ok(_) => {
@@ -718,12 +752,14 @@ async fn main() -> anyhow::Result<()> {
                 Some(filter_map)
             };
 
+            #[allow(deprecated)]
             let options = bollard::container::ListContainersOptions {
                 all,
                 filters: filters.unwrap_or_default(),
                 ..Default::default()
             };
 
+            #[allow(deprecated)]
             let containers = docker.list_containers(Some(options)).await?;
 
             println!();
@@ -825,7 +861,7 @@ async fn main() -> anyhow::Result<()> {
             println!();
 
             // 複数サービスの場合は色を割り当て
-            let colors = vec![
+            let colors = [
                 colored::Color::Cyan,
                 colored::Color::Green,
                 colored::Color::Yellow,
@@ -847,6 +883,7 @@ async fn main() -> anyhow::Result<()> {
                     );
                 }
 
+                #[allow(deprecated)]
                 let options = bollard::container::LogsOptions::<String> {
                     follow,
                     stdout: true,
@@ -912,16 +949,20 @@ async fn main() -> anyhow::Result<()> {
             }
         }
         Commands::Restart { service, stage } => {
-            println!("{}", format!("サービス '{}' を再起動中...", service).green());
+            println!(
+                "{}",
+                format!("サービス '{}' を再起動中...", service).green()
+            );
 
             // ステージ名の決定
             let stage_name = determine_stage_name(stage, &config)?;
             println!("ステージ: {}", stage_name.cyan());
 
             // サービスの存在確認
-            let service_def = config.services.get(&service).ok_or_else(|| {
-                anyhow::anyhow!("サービス '{}' が見つかりません", service)
-            })?;
+            let service_def = config
+                .services
+                .get(&service)
+                .ok_or_else(|| anyhow::anyhow!("サービス '{}' が見つかりません", service))?;
 
             // Docker接続
             let docker = init_docker_with_error_handling().await?;
@@ -932,13 +973,15 @@ async fn main() -> anyhow::Result<()> {
             // コンテナの停止
             println!("  ↓ コンテナを停止中...");
             match docker
-                .stop_container(&container_name, None::<bollard::query_parameters::StopContainerOptions>)
+                .stop_container(
+                    &container_name,
+                    None::<bollard::query_parameters::StopContainerOptions>,
+                )
                 .await
             {
                 Ok(_) => println!("  ✓ コンテナを停止しました"),
                 Err(bollard::errors::Error::DockerResponseServerError {
-                    status_code: 404,
-                    ..
+                    status_code: 404, ..
                 }) => {
                     println!("  ℹ コンテナは実行されていません");
                 }
@@ -948,17 +991,22 @@ async fn main() -> anyhow::Result<()> {
             // コンテナの起動
             println!("  ↑ コンテナを起動中...");
             match docker
-                .start_container(&container_name, None::<bollard::query_parameters::StartContainerOptions>)
+                .start_container(
+                    &container_name,
+                    None::<bollard::query_parameters::StartContainerOptions>,
+                )
                 .await
             {
                 Ok(_) => {
                     println!("  ✓ コンテナを起動しました");
                     println!();
-                    println!("{}", format!("✓ '{}' を再起動しました", service).green().bold());
+                    println!(
+                        "{}",
+                        format!("✓ '{}' を再起動しました", service).green().bold()
+                    );
                 }
                 Err(bollard::errors::Error::DockerResponseServerError {
-                    status_code: 404,
-                    ..
+                    status_code: 404, ..
                 }) => {
                     // コンテナが存在しない場合は作成して起動
                     println!("  ℹ コンテナが存在しないため、新規作成します");
@@ -973,6 +1021,7 @@ async fn main() -> anyhow::Result<()> {
                         );
 
                     // イメージ名の取得
+                    #[allow(deprecated)]
                     let image = container_config.image.as_ref().ok_or_else(|| {
                         anyhow::anyhow!("サービス '{}' のイメージ設定が見つかりません", service)
                     })?;
@@ -996,12 +1045,18 @@ async fn main() -> anyhow::Result<()> {
 
                     // コンテナ起動
                     docker
-                        .start_container(&container_name, None::<bollard::query_parameters::StartContainerOptions>)
+                        .start_container(
+                            &container_name,
+                            None::<bollard::query_parameters::StartContainerOptions>,
+                        )
                         .await?;
 
                     println!("  ✓ コンテナを作成・起動しました");
                     println!();
-                    println!("{}", format!("✓ '{}' を起動しました", service).green().bold());
+                    println!(
+                        "{}",
+                        format!("✓ '{}' を起動しました", service).green().bold()
+                    );
                 }
                 Err(e) => return Err(e.into()),
             }
@@ -1014,9 +1069,10 @@ async fn main() -> anyhow::Result<()> {
             println!("ステージ: {}", stage_name.cyan());
 
             // サービスの存在確認
-            config.services.get(&service).ok_or_else(|| {
-                anyhow::anyhow!("サービス '{}' が見つかりません", service)
-            })?;
+            config
+                .services
+                .get(&service)
+                .ok_or_else(|| anyhow::anyhow!("サービス '{}' が見つかりません", service))?;
 
             // Docker接続
             let docker = init_docker_with_error_handling().await?;
@@ -1026,19 +1082,27 @@ async fn main() -> anyhow::Result<()> {
 
             // コンテナの停止
             match docker
-                .stop_container(&container_name, None::<bollard::query_parameters::StopContainerOptions>)
+                .stop_container(
+                    &container_name,
+                    None::<bollard::query_parameters::StopContainerOptions>,
+                )
                 .await
             {
                 Ok(_) => {
                     println!();
-                    println!("{}", format!("✓ '{}' を停止しました", service).green().bold());
+                    println!(
+                        "{}",
+                        format!("✓ '{}' を停止しました", service).green().bold()
+                    );
                 }
                 Err(bollard::errors::Error::DockerResponseServerError {
-                    status_code: 404,
-                    ..
+                    status_code: 404, ..
                 }) => {
                     println!();
-                    println!("{}", format!("ℹ コンテナ '{}' は存在しません", service).dimmed());
+                    println!(
+                        "{}",
+                        format!("ℹ コンテナ '{}' は存在しません", service).dimmed()
+                    );
                 }
                 Err(e) => return Err(e.into()),
             }
@@ -1051,9 +1115,10 @@ async fn main() -> anyhow::Result<()> {
             println!("ステージ: {}", stage_name.cyan());
 
             // サービスの存在確認
-            let service_def = config.services.get(&service).ok_or_else(|| {
-                anyhow::anyhow!("サービス '{}' が見つかりません", service)
-            })?;
+            let service_def = config
+                .services
+                .get(&service)
+                .ok_or_else(|| anyhow::anyhow!("サービス '{}' が見つかりません", service))?;
 
             // Docker接続
             let docker = init_docker_with_error_handling().await?;
@@ -1063,16 +1128,21 @@ async fn main() -> anyhow::Result<()> {
 
             // コンテナの起動
             match docker
-                .start_container(&container_name, None::<bollard::query_parameters::StartContainerOptions>)
+                .start_container(
+                    &container_name,
+                    None::<bollard::query_parameters::StartContainerOptions>,
+                )
                 .await
             {
                 Ok(_) => {
                     println!();
-                    println!("{}", format!("✓ '{}' を起動しました", service).green().bold());
+                    println!(
+                        "{}",
+                        format!("✓ '{}' を起動しました", service).green().bold()
+                    );
                 }
                 Err(bollard::errors::Error::DockerResponseServerError {
-                    status_code: 404,
-                    ..
+                    status_code: 404, ..
                 }) => {
                     // コンテナが存在しない場合は作成して起動
                     println!("  ℹ コンテナが存在しないため、新規作成します");
@@ -1087,6 +1157,7 @@ async fn main() -> anyhow::Result<()> {
                         );
 
                     // イメージ名の取得
+                    #[allow(deprecated)]
                     let image = container_config.image.as_ref().ok_or_else(|| {
                         anyhow::anyhow!("サービス '{}' のイメージ設定が見つかりません", service)
                     })?;
@@ -1110,12 +1181,18 @@ async fn main() -> anyhow::Result<()> {
 
                     // コンテナ起動
                     docker
-                        .start_container(&container_name, None::<bollard::query_parameters::StartContainerOptions>)
+                        .start_container(
+                            &container_name,
+                            None::<bollard::query_parameters::StartContainerOptions>,
+                        )
                         .await?;
 
                     println!("  ✓ コンテナを作成・起動しました");
                     println!();
-                    println!("{}", format!("✓ '{}' を起動しました", service).green().bold());
+                    println!(
+                        "{}",
+                        format!("✓ '{}' を起動しました", service).green().bold()
+                    );
                 }
                 Err(e) => return Err(e.into()),
             }
@@ -1208,10 +1285,13 @@ async fn main() -> anyhow::Result<()> {
 }
 
 /// クラウドコマンドを処理
-async fn handle_cloud_command(cmd: CloudCommands, config: &fleetflow_atom::Flow) -> anyhow::Result<()> {
-    use fleetflow_cloud_sakura::SakuraCloudProvider;
+async fn handle_cloud_command(
+    cmd: CloudCommands,
+    config: &fleetflow_atom::Flow,
+) -> anyhow::Result<()> {
     use fleetflow_cloud::CloudProvider;
     use fleetflow_cloud_cloudflare::{CloudflareDns, DnsConfig};
+    use fleetflow_cloud_sakura::SakuraCloudProvider;
 
     match cmd {
         CloudCommands::Auth => {
@@ -1244,7 +1324,11 @@ async fn handle_cloud_command(cmd: CloudCommands, config: &fleetflow_atom::Flow)
                         }
                     }
                 } else {
-                    println!("  {} プロバイダー '{}' はサポートされていません", "!".yellow(), name);
+                    println!(
+                        "  {} プロバイダー '{}' はサポートされていません",
+                        "!".yellow(),
+                        name
+                    );
                 }
             }
 
@@ -1261,7 +1345,11 @@ async fn handle_cloud_command(cmd: CloudCommands, config: &fleetflow_atom::Flow)
                 if let Some(stage_config) = config.stages.get(stage_name) {
                     stage_config.servers.iter().map(|s| s.as_str()).collect()
                 } else {
-                    println!("{} ステージ '{}' が見つかりません", "✗".red().bold(), stage_name);
+                    println!(
+                        "{} ステージ '{}' が見つかりません",
+                        "✗".red().bold(),
+                        stage_name
+                    );
                     return Ok(());
                 }
             } else {
@@ -1288,13 +1376,21 @@ async fn handle_cloud_command(cmd: CloudCommands, config: &fleetflow_atom::Flow)
             }
         }
         CloudCommands::Up { stage, yes } => {
-            println!("{}", format!("ステージ '{}' のクラウドリソースを作成中...", stage).blue());
+            println!(
+                "{}",
+                format!("ステージ '{}' のクラウドリソースを作成中...", stage).blue()
+            );
 
-            let stage_config = config.stages.get(&stage)
+            let stage_config = config
+                .stages
+                .get(&stage)
                 .ok_or_else(|| anyhow::anyhow!("ステージ '{}' が見つかりません", stage))?;
 
             if stage_config.servers.is_empty() {
-                println!("{}", "このステージにはサーバーリソースがありません。".yellow());
+                println!(
+                    "{}",
+                    "このステージにはサーバーリソースがありません。".yellow()
+                );
                 return Ok(());
             }
 
@@ -1311,15 +1407,18 @@ async fn handle_cloud_command(cmd: CloudCommands, config: &fleetflow_atom::Flow)
 
             // 各サーバーを作成
             for server_name in &stage_config.servers {
-                let server = config.servers.get(server_name)
-                    .ok_or_else(|| anyhow::anyhow!("サーバー '{}' の定義が見つかりません", server_name))?;
+                let server = config.servers.get(server_name).ok_or_else(|| {
+                    anyhow::anyhow!("サーバー '{}' の定義が見つかりません", server_name)
+                })?;
 
                 println!("\n{} {} を処理中...", "▶".cyan(), server_name.bold());
 
                 // プロバイダー別の処理
                 if server.provider == "sakura-cloud" {
                     // プロバイダー設定からzoneを取得
-                    let zone = config.providers.get("sakura-cloud")
+                    let zone = config
+                        .providers
+                        .get("sakura-cloud")
                         .and_then(|p| p.zone.as_deref())
                         .unwrap_or("tk1a");
 
@@ -1331,7 +1430,14 @@ async fn handle_cloud_command(cmd: CloudCommands, config: &fleetflow_atom::Flow)
                         Ok(Some(existing)) => {
                             println!("  {} サーバーは既に存在します", "✓".green().bold());
                             println!("    ID: {}", existing.id.cyan());
-                            println!("    状態: {}", if existing.is_running { "起動中".green() } else { "停止中".yellow() });
+                            println!(
+                                "    状態: {}",
+                                if existing.is_running {
+                                    "起動中".green()
+                                } else {
+                                    "停止中".yellow()
+                                }
+                            );
                             if let Some(ip) = &existing.ip_address {
                                 println!("    IP: {}", ip.cyan());
 
@@ -1341,7 +1447,40 @@ async fn handle_cloud_command(cmd: CloudCommands, config: &fleetflow_atom::Flow)
                                     let subdomain = dns.generate_subdomain(server_name, &stage);
                                     match dns.ensure_record(&subdomain, ip).await {
                                         Ok(record) => {
-                                            println!("    {} DNS: {}", "✓".green().bold(), record.name.cyan());
+                                            println!(
+                                                "    {} DNS: {}",
+                                                "✓".green().bold(),
+                                                record.name.cyan()
+                                            );
+
+                                            // DNSエイリアス（CNAME）の設定
+                                            if !server.dns_aliases.is_empty() {
+                                                println!("    ↓ DNSエイリアスを確認・設定中...");
+                                                for alias in &server.dns_aliases {
+                                                    let target = dns.full_domain(&subdomain);
+                                                    match dns
+                                                        .ensure_cname_record(alias, &target)
+                                                        .await
+                                                    {
+                                                        Ok(cname_record) => {
+                                                            println!(
+                                                                "      {} CNAME: {} -> {}",
+                                                                "✓".green().bold(),
+                                                                cname_record.name.cyan(),
+                                                                target.dimmed()
+                                                            );
+                                                        }
+                                                        Err(e) => {
+                                                            println!(
+                                                                "      {} CNAME設定エラー ({}): {}",
+                                                                "⚠".yellow(),
+                                                                alias,
+                                                                e
+                                                            );
+                                                        }
+                                                    }
+                                                }
+                                            }
                                         }
                                         Err(e) => {
                                             println!("    {} DNS設定エラー: {}", "⚠".yellow(), e);
@@ -1389,7 +1528,41 @@ async fn handle_cloud_command(cmd: CloudCommands, config: &fleetflow_atom::Flow)
                                     println!("  ↓ DNSレコードを設定中...");
                                     match dns.ensure_record(&subdomain, ip).await {
                                         Ok(record) => {
-                                            println!("  {} DNS: {}", "✓".green().bold(), record.name.cyan());
+                                            println!(
+                                                "  {} DNS: {}",
+                                                "✓".green().bold(),
+                                                record.name.cyan()
+                                            );
+
+                                            // DNSエイリアス（CNAME）の設定
+                                            if !server.dns_aliases.is_empty() {
+                                                println!("  ↓ DNSエイリアスを設定中...");
+                                                for alias in &server.dns_aliases {
+                                                    // CNAMEのターゲットは server-stage.domain の形式
+                                                    let target = dns.full_domain(&subdomain);
+                                                    match dns
+                                                        .ensure_cname_record(alias, &target)
+                                                        .await
+                                                    {
+                                                        Ok(cname_record) => {
+                                                            println!(
+                                                                "    {} CNAME: {} -> {}",
+                                                                "✓".green().bold(),
+                                                                cname_record.name.cyan(),
+                                                                target.dimmed()
+                                                            );
+                                                        }
+                                                        Err(e) => {
+                                                            println!(
+                                                                "    {} CNAME設定エラー ({}): {}",
+                                                                "⚠".yellow(),
+                                                                alias,
+                                                                e
+                                                            );
+                                                        }
+                                                    }
+                                                }
+                                            }
                                         }
                                         Err(e) => {
                                             println!("  {} DNS設定エラー: {}", "⚠".yellow(), e);
@@ -1403,20 +1576,35 @@ async fn handle_cloud_command(cmd: CloudCommands, config: &fleetflow_atom::Flow)
                         }
                     }
                 } else {
-                    println!("  {} プロバイダー '{}' はサポートされていません", "!".yellow(), server.provider);
+                    println!(
+                        "  {} プロバイダー '{}' はサポートされていません",
+                        "!".yellow(),
+                        server.provider
+                    );
                 }
             }
 
-            println!("\n{}", "✓ クラウドリソースの処理が完了しました".green().bold());
+            println!(
+                "\n{}",
+                "✓ クラウドリソースの処理が完了しました".green().bold()
+            );
         }
         CloudCommands::Down { stage, yes } => {
-            println!("{}", format!("ステージ '{}' のクラウドリソースを削除中...", stage).blue());
+            println!(
+                "{}",
+                format!("ステージ '{}' のクラウドリソースを削除中...", stage).blue()
+            );
 
-            let stage_config = config.stages.get(&stage)
+            let stage_config = config
+                .stages
+                .get(&stage)
                 .ok_or_else(|| anyhow::anyhow!("ステージ '{}' が見つかりません", stage))?;
 
             if stage_config.servers.is_empty() {
-                println!("{}", "このステージにはサーバーリソースがありません。".yellow());
+                println!(
+                    "{}",
+                    "このステージにはサーバーリソースがありません。".yellow()
+                );
                 return Ok(());
             }
 
@@ -1433,15 +1621,18 @@ async fn handle_cloud_command(cmd: CloudCommands, config: &fleetflow_atom::Flow)
 
             // 各サーバーを削除
             for server_name in &stage_config.servers {
-                let server = config.servers.get(server_name)
-                    .ok_or_else(|| anyhow::anyhow!("サーバー '{}' の定義が見つかりません", server_name))?;
+                let server = config.servers.get(server_name).ok_or_else(|| {
+                    anyhow::anyhow!("サーバー '{}' の定義が見つかりません", server_name)
+                })?;
 
                 println!("\n{} {} を削除中...", "▶".cyan(), server_name.bold());
 
                 // プロバイダー別の処理
                 if server.provider == "sakura-cloud" {
                     // プロバイダー設定からzoneを取得
-                    let zone = config.providers.get("sakura-cloud")
+                    let zone = config
+                        .providers
+                        .get("sakura-cloud")
                         .and_then(|p| p.zone.as_deref())
                         .unwrap_or("tk1a");
 
@@ -1451,16 +1642,52 @@ async fn handle_cloud_command(cmd: CloudCommands, config: &fleetflow_atom::Flow)
                     println!("  ↓ サーバーを検索中...");
                     match provider.find_server_by_tag(&config.name, server_name).await {
                         Ok(Some(existing)) => {
-                            println!("  ℹ サーバー発見: {} (ID: {})", server_name, existing.id.cyan());
+                            println!(
+                                "  ℹ サーバー発見: {} (ID: {})",
+                                server_name,
+                                existing.id.cyan()
+                            );
 
                             // DNS削除（環境変数が設定されている場合）
                             if let Ok(dns_config) = DnsConfig::from_env() {
                                 let dns = CloudflareDns::new(dns_config);
+
+                                // DNSエイリアス（CNAME）の削除
+                                if !server.dns_aliases.is_empty() {
+                                    println!("  ↓ DNSエイリアスを削除中...");
+                                    for alias in &server.dns_aliases {
+                                        match dns.remove_cname_record(alias).await {
+                                            Ok(_) => {
+                                                println!(
+                                                    "    {} CNAME削除: {}.{}",
+                                                    "✓".green().bold(),
+                                                    alias,
+                                                    dns.domain()
+                                                );
+                                            }
+                                            Err(e) => {
+                                                println!(
+                                                    "    {} CNAME削除エラー ({}): {}",
+                                                    "⚠".yellow(),
+                                                    alias,
+                                                    e
+                                                );
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // メインのAレコードを削除
                                 let subdomain = dns.generate_subdomain(server_name, &stage);
                                 println!("  ↓ DNSレコードを削除中...");
                                 match dns.remove_record(&subdomain).await {
                                     Ok(_) => {
-                                        println!("  {} DNS削除: {}.{}", "✓".green().bold(), subdomain, dns.domain());
+                                        println!(
+                                            "  {} DNS削除: {}.{}",
+                                            "✓".green().bold(),
+                                            subdomain,
+                                            dns.domain()
+                                        );
                                     }
                                     Err(e) => {
                                         println!("  {} DNS削除エラー: {}", "⚠".yellow(), e);
@@ -1480,18 +1707,28 @@ async fn handle_cloud_command(cmd: CloudCommands, config: &fleetflow_atom::Flow)
                             }
                         }
                         Ok(None) => {
-                            println!("  {} サーバーが見つかりません（既に削除済み？）", "ℹ".yellow());
+                            println!(
+                                "  {} サーバーが見つかりません（既に削除済み？）",
+                                "ℹ".yellow()
+                            );
                         }
                         Err(e) => {
                             println!("  {} サーバー検索エラー: {}", "✗".red().bold(), e);
                         }
                     }
                 } else {
-                    println!("  {} プロバイダー '{}' はサポートされていません", "!".yellow(), server.provider);
+                    println!(
+                        "  {} プロバイダー '{}' はサポートされていません",
+                        "!".yellow(),
+                        server.provider
+                    );
                 }
             }
 
-            println!("\n{}", "✓ クラウドリソースの削除処理が完了しました".green().bold());
+            println!(
+                "\n{}",
+                "✓ クラウドリソースの削除処理が完了しました".green().bold()
+            );
         }
     }
 

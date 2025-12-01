@@ -26,8 +26,7 @@ impl BuildProgress {
     }
 
     pub fn finish_success(&self) {
-        self.progress_bar
-            .finish_with_message("Build completed ✓");
+        self.progress_bar.finish_with_message("Build completed ✓");
     }
 
     pub fn finish_error(&self, error: &str) {

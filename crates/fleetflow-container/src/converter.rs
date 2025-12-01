@@ -1,5 +1,8 @@
 //! FlowConfig から Docker API パラメータへの変換
 
+// Bollard 0.19.4 の非推奨APIを一時的に使用（BOLLARD_API_MAPPING.md参照）
+#![allow(deprecated)]
+
 use bollard::container::{Config, CreateContainerOptions, NetworkingConfig};
 use bollard::models::{EndpointSettings, HostConfig, PortBinding};
 use fleetflow_atom::{Flow, Service};
@@ -104,15 +107,11 @@ pub fn service_to_container_config_with_network(
     // ネットワーク名
     let network_name = get_network_name(project_name, stage_name);
 
-    // HostConfig設定（ネットワーク対応 #14）
+    // HostConfig設定
+    // 注意: network_modeはNetworkingConfigと併用できないため設定しない
     let host_config = Some(HostConfig {
         port_bindings: Some(port_bindings),
         binds: Some(binds),
-        network_mode: if use_network {
-            Some(network_name.clone())
-        } else {
-            None
-        },
         ..Default::default()
     });
 
@@ -147,6 +146,18 @@ pub fn service_to_container_config_with_network(
         None
     };
 
+    // ヘルスチェック設定
+    let healthcheck = service.healthcheck.as_ref().map(|hc| {
+        bollard::models::HealthConfig {
+            test: Some(hc.test.clone()),
+            interval: Some(hc.interval as i64 * 1_000_000_000), // 秒 → ナノ秒
+            timeout: Some(hc.timeout as i64 * 1_000_000_000),
+            retries: Some(hc.retries as i64),
+            start_period: Some(hc.start_period as i64 * 1_000_000_000),
+            start_interval: None,
+        }
+    });
+
     // コンテナ設定
     let config = Config {
         image: Some(image),
@@ -158,6 +169,7 @@ pub fn service_to_container_config_with_network(
             // コマンドをスペースで分割
             c.split_whitespace().map(String::from).collect()
         }),
+        healthcheck,
         networking_config,
         ..Default::default()
     };
@@ -193,7 +205,8 @@ mod tests {
             ..Default::default()
         };
 
-        let (config, options) = service_to_container_config("postgres", &service, "local", "vantage");
+        let (config, options) =
+            service_to_container_config("postgres", &service, "local", "vantage");
 
         assert_eq!(config.image, Some("postgres:16".to_string()));
         assert_eq!(options.name, "vantage-local-postgres");
@@ -407,10 +420,7 @@ mod tests {
             labels.get("fleetflow.project"),
             Some(&"vantage".to_string())
         );
-        assert_eq!(
-            labels.get("fleetflow.stage"),
-            Some(&"local".to_string())
-        );
+        assert_eq!(labels.get("fleetflow.stage"), Some(&"local".to_string()));
         assert_eq!(
             labels.get("fleetflow.service"),
             Some(&"postgres".to_string())
@@ -425,8 +435,7 @@ mod tests {
         let service = Service::default();
 
         // localステージ
-        let (config_local, _) =
-            service_to_container_config("api", &service, "local", "myapp");
+        let (config_local, _) = service_to_container_config("api", &service, "local", "myapp");
         let labels_local = config_local.labels.unwrap();
         assert_eq!(
             labels_local.get("com.docker.compose.project"),
@@ -473,5 +482,53 @@ mod tests {
             labels_b.get("fleetflow.project"),
             Some(&"project-b".to_string())
         );
+    }
+
+    #[test]
+    fn test_service_to_container_config_with_healthcheck() {
+        use fleetflow_atom::HealthCheck;
+
+        let service = Service {
+            healthcheck: Some(HealthCheck {
+                test: vec![
+                    "CMD-SHELL".to_string(),
+                    "curl -f http://localhost:3000/health || exit 1".to_string(),
+                ],
+                interval: 30,
+                timeout: 5,
+                retries: 3,
+                start_period: 10,
+            }),
+            ..Default::default()
+        };
+
+        let (config, _) = service_to_container_config("api", &service, "local", "test");
+
+        let healthcheck = config.healthcheck.unwrap();
+        assert_eq!(
+            healthcheck.test,
+            Some(vec![
+                "CMD-SHELL".to_string(),
+                "curl -f http://localhost:3000/health || exit 1".to_string()
+            ])
+        );
+        // 秒 → ナノ秒変換を確認
+        assert_eq!(healthcheck.interval, Some(30_000_000_000));
+        assert_eq!(healthcheck.timeout, Some(5_000_000_000));
+        assert_eq!(healthcheck.retries, Some(3));
+        assert_eq!(healthcheck.start_period, Some(10_000_000_000));
+    }
+
+    #[test]
+    fn test_service_to_container_config_without_healthcheck() {
+        let service = Service {
+            healthcheck: None,
+            ..Default::default()
+        };
+
+        let (config, _) = service_to_container_config("api", &service, "local", "test");
+
+        // HealthCheckが設定されていない場合はNone
+        assert!(config.healthcheck.is_none());
     }
 }

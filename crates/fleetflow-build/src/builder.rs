@@ -1,6 +1,9 @@
+// Bollard 0.19.4 の非推奨APIを一時的に使用（BOLLARD_API_MAPPING.md参照）
+#![allow(deprecated)]
+
 use crate::error::{BuildError, Result};
-use bollard::image::BuildImageOptions;
 use bollard::Docker;
+use bollard::image::BuildImageOptions;
 use colored::Colorize;
 use futures_util::stream::StreamExt;
 use std::collections::HashMap;
@@ -38,9 +41,9 @@ impl ImageBuilder {
             buildargs: build_args_refs,
             target: target.unwrap_or(""),
             nocache: no_cache,
-            rm: true,     // 中間コンテナを削除
+            rm: true,      // 中間コンテナを削除
             forcerm: true, // ビルド失敗時も中間コンテナを削除
-            pull: true,   // ベースイメージを常にpull
+            pull: true,    // ベースイメージを常にpull
             ..Default::default()
         };
 
@@ -107,8 +110,7 @@ impl ImageBuilder {
         match self.docker.inspect_image(image_tag).await {
             Ok(_) => Ok(true),
             Err(bollard::errors::Error::DockerResponseServerError {
-                status_code: 404,
-                ..
+                status_code: 404, ..
             }) => Ok(false),
             Err(e) => Err(BuildError::DockerConnection(e)),
         }
@@ -151,7 +153,11 @@ mod tests {
         // クリーンアップ
         builder
             .docker
-            .remove_image("fleetflow-test:latest", None, None)
+            .remove_image(
+                "fleetflow-test:latest",
+                None::<bollard::query_parameters::RemoveImageOptions>,
+                None,
+            )
             .await
             .ok();
     }

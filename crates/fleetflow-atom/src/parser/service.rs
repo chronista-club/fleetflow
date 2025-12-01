@@ -90,8 +90,10 @@ pub fn parse_service(node: &KdlNode) -> Result<(String, Service)> {
                 "dockerfile" => {
                     if let Some(path) = child.entries().first().and_then(|e| e.value().as_string())
                     {
-                        service.build.get_or_insert_with(Default::default).dockerfile =
-                            Some(PathBuf::from(path));
+                        service
+                            .build
+                            .get_or_insert_with(Default::default)
+                            .dockerfile = Some(PathBuf::from(path));
                     }
                 }
                 "context" => {
@@ -125,8 +127,7 @@ pub fn parse_service(node: &KdlNode) -> Result<(String, Service)> {
                     }
                 }
                 "image_tag" => {
-                    if let Some(tag) = child.entries().first().and_then(|e| e.value().as_string())
-                    {
+                    if let Some(tag) = child.entries().first().and_then(|e| e.value().as_string()) {
                         service.build.get_or_insert_with(Default::default).image_tag =
                             Some(tag.to_string());
                     }
@@ -135,6 +136,12 @@ pub fn parse_service(node: &KdlNode) -> Result<(String, Service)> {
                 "build" => {
                     if let Some(build_children) = child.children() {
                         service.build = Some(parse_build_config(build_children));
+                    }
+                }
+                // ヘルスチェックブロック
+                "healthcheck" => {
+                    if let Some(healthcheck_children) = child.children() {
+                        service.healthcheck = Some(parse_healthcheck(healthcheck_children));
                     }
                 }
                 _ => {}
@@ -202,8 +209,150 @@ pub fn parse_build_config(doc: &KdlDocument) -> BuildConfig {
     config
 }
 
+/// ヘルスチェックブロックをパース
+pub fn parse_healthcheck(doc: &KdlDocument) -> crate::model::HealthCheck {
+    use crate::model::HealthCheck;
+
+    let mut test = Vec::new();
+    let mut interval = 30;
+    let mut timeout = 3;
+    let mut retries = 3;
+    let mut start_period = 10;
+
+    for node in doc.nodes() {
+        match node.name().value() {
+            "test" => {
+                // テストコマンドを配列として取得
+                test = node
+                    .entries()
+                    .iter()
+                    .filter_map(|e| e.value().as_string().map(|s| s.to_string()))
+                    .collect();
+            }
+            "interval" => {
+                if let Some(entry) = node.entries().first()
+                    && let Some(value) = entry.value().as_integer()
+                {
+                    interval = value as u64;
+                }
+            }
+            "timeout" => {
+                if let Some(entry) = node.entries().first()
+                    && let Some(value) = entry.value().as_integer()
+                {
+                    timeout = value as u64;
+                }
+            }
+            "retries" => {
+                if let Some(entry) = node.entries().first()
+                    && let Some(value) = entry.value().as_integer()
+                {
+                    retries = value as u64;
+                }
+            }
+            "start_period" => {
+                if let Some(entry) = node.entries().first()
+                    && let Some(value) = entry.value().as_integer()
+                {
+                    start_period = value as u64;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    HealthCheck {
+        test,
+        interval,
+        timeout,
+        retries,
+        start_period,
+    }
+}
+
 /// サービス名からイメージ名を推測
 pub fn infer_image_name(service_name: &str, version: Option<&str>) -> String {
     let tag = version.unwrap_or("latest");
     format!("{}:{}", service_name, tag)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use kdl::KdlDocument;
+
+    #[test]
+    fn test_parse_healthcheck_defaults() {
+        let kdl = r#"
+            healthcheck {
+                test "CMD-SHELL" "curl -f http://localhost:3000/health || exit 1"
+            }
+        "#;
+        let doc: KdlDocument = kdl.parse().unwrap();
+        let node = doc.nodes().first().unwrap();
+
+        let healthcheck = parse_healthcheck(node.children().unwrap());
+
+        assert_eq!(
+            healthcheck.test,
+            vec![
+                "CMD-SHELL".to_string(),
+                "curl -f http://localhost:3000/health || exit 1".to_string()
+            ]
+        );
+        assert_eq!(healthcheck.interval, 30);
+        assert_eq!(healthcheck.timeout, 3);
+        assert_eq!(healthcheck.retries, 3);
+        assert_eq!(healthcheck.start_period, 10);
+    }
+
+    #[test]
+    fn test_parse_healthcheck_custom_values() {
+        let kdl = r#"
+            healthcheck {
+                test "CMD" "python" "healthcheck.py"
+                interval 60
+                timeout 10
+                retries 5
+                start_period 30
+            }
+        "#;
+        let doc: KdlDocument = kdl.parse().unwrap();
+        let node = doc.nodes().first().unwrap();
+
+        let healthcheck = parse_healthcheck(node.children().unwrap());
+
+        assert_eq!(
+            healthcheck.test,
+            vec![
+                "CMD".to_string(),
+                "python".to_string(),
+                "healthcheck.py".to_string()
+            ]
+        );
+        assert_eq!(healthcheck.interval, 60);
+        assert_eq!(healthcheck.timeout, 10);
+        assert_eq!(healthcheck.retries, 5);
+        assert_eq!(healthcheck.start_period, 30);
+    }
+
+    #[test]
+    fn test_parse_healthcheck_minimal() {
+        let kdl = r#"
+            healthcheck {
+                test "NONE"
+            }
+        "#;
+        let doc: KdlDocument = kdl.parse().unwrap();
+        let node = doc.nodes().first().unwrap();
+
+        let healthcheck = parse_healthcheck(node.children().unwrap());
+
+        assert_eq!(healthcheck.test, vec!["NONE".to_string()]);
+        // デフォルト値が使われる
+        assert_eq!(healthcheck.interval, 30);
+        assert_eq!(healthcheck.timeout, 3);
+        assert_eq!(healthcheck.retries, 3);
+        assert_eq!(healthcheck.start_period, 10);
+    }
 }

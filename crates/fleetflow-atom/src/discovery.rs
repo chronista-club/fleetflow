@@ -311,7 +311,10 @@ mod tests {
 
         // .fleetflow/ ディレクトリに flow.kdl を配置
         fs::create_dir_all(project_root.join(".fleetflow"))?;
-        fs::write(project_root.join(".fleetflow/flow.kdl"), "// root in .fleetflow")?;
+        fs::write(
+            project_root.join(".fleetflow/flow.kdl"),
+            "// root in .fleetflow",
+        )?;
         fs::write(
             project_root.join(".fleetflow/flow.local.kdl"),
             "// local override",
@@ -321,19 +324,23 @@ mod tests {
 
         // .fleetflow/flow.kdl が発見される
         assert!(discovered.root.is_some());
-        assert!(discovered
-            .root
-            .as_ref()
-            .unwrap()
-            .ends_with(".fleetflow/flow.kdl"));
+        assert!(
+            discovered
+                .root
+                .as_ref()
+                .unwrap()
+                .ends_with(".fleetflow/flow.kdl")
+        );
 
         // .fleetflow/flow.local.kdl が発見される
         assert!(discovered.local_override.is_some());
-        assert!(discovered
-            .local_override
-            .as_ref()
-            .unwrap()
-            .ends_with(".fleetflow/flow.local.kdl"));
+        assert!(
+            discovered
+                .local_override
+                .as_ref()
+                .unwrap()
+                .ends_with(".fleetflow/flow.local.kdl")
+        );
 
         Ok(())
     }
@@ -346,19 +353,24 @@ mod tests {
         // 両方に flow.kdl を配置
         fs::write(project_root.join("flow.kdl"), "// root")?;
         fs::create_dir_all(project_root.join(".fleetflow"))?;
-        fs::write(project_root.join(".fleetflow/flow.kdl"), "// root in .fleetflow")?;
+        fs::write(
+            project_root.join(".fleetflow/flow.kdl"),
+            "// root in .fleetflow",
+        )?;
 
         let discovered = discover_files(project_root)?;
 
         // ./flow.kdl が優先される
         assert!(discovered.root.is_some());
         assert!(discovered.root.as_ref().unwrap().ends_with("flow.kdl"));
-        assert!(!discovered
-            .root
-            .as_ref()
-            .unwrap()
-            .to_string_lossy()
-            .contains(".fleetflow"));
+        assert!(
+            !discovered
+                .root
+                .as_ref()
+                .unwrap()
+                .to_string_lossy()
+                .contains(".fleetflow")
+        );
 
         Ok(())
     }
