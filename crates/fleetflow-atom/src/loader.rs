@@ -2,7 +2,7 @@
 //!
 //! ファイル発見、テンプレート展開、パースを統合
 
-use crate::discovery::{DiscoveredFiles, discover_files, find_project_root};
+use crate::discovery::{DiscoveredFiles, discover_files, discover_files_with_stage, find_project_root};
 use crate::error::{FlowError, Result};
 use crate::model::Flow;
 use crate::parser::parse_kdl_string;
@@ -31,9 +31,21 @@ pub fn load_project() -> Result<Flow> {
 /// 指定されたルートディレクトリからプロジェクトをロード
 #[instrument(skip(project_root), fields(project_root = %project_root.display()))]
 pub fn load_project_from_root(project_root: &Path) -> Result<Flow> {
+    load_project_from_root_with_stage(project_root, None)
+}
+
+/// ステージ指定でプロジェクトをロード
+///
+/// stage が指定されている場合、flow.{stage}.kdl も読み込んでマージします。
+/// 読み込み順序: flow.kdl → flow.{stage}.kdl → flow.local.kdl
+#[instrument(skip(project_root), fields(project_root = %project_root.display()))]
+pub fn load_project_from_root_with_stage(
+    project_root: &Path,
+    stage: Option<&str>,
+) -> Result<Flow> {
     // 1. ファイル発見
     debug!("Step 1: Discovering files");
-    let discovered = discover_files(project_root)?;
+    let discovered = discover_files_with_stage(project_root, stage)?;
 
     // 2. 変数収集とテンプレート準備
     debug!("Step 2: Preparing template processor");
@@ -89,10 +101,15 @@ fn prepare_template_processor(discovered: &DiscoveredFiles) -> Result<TemplatePr
         all_variables.extend(vars);
     }
 
-    // 3. 環境変数を追加
+    // 3. 環境変数を追加（FLOW_*, CI_*, APP_* プレフィックスのみ）
     processor.add_env_variables();
 
-    // 4. 収集した変数を追加
+    // 4. .env ファイルから変数を追加（プレフィックス制限なし）
+    if let Some(env_file) = &discovered.env_file {
+        processor.add_env_file_variables(env_file)?;
+    }
+
+    // 5. 収集した変数を追加（最も優先度が高い）
     processor.add_variables(all_variables);
 
     Ok(processor)
@@ -107,6 +124,11 @@ fn expand_all_files(
     let file_count = discovered.services.len()
         + discovered.stages.len()
         + if discovered.root.is_some() { 1 } else { 0 }
+        + if discovered.stage_override.is_some() {
+            1
+        } else {
+            0
+        }
         + if discovered.local_override.is_some() {
             1
         } else {
@@ -120,7 +142,8 @@ fn expand_all_files(
     // 1. flow.kdl（グローバル設定）
     // 2. services/**/*.kdl
     // 3. stages/**/*.kdl
-    // 4. flow.local.kdl（オーバーライド）
+    // 4. flow.{stage}.kdl（ステージオーバーライド）
+    // 5. flow.local.kdl（ローカルオーバーライド）
 
     // 1. flow.kdl
     if let Some(root_file) = &discovered.root {
@@ -143,7 +166,14 @@ fn expand_all_files(
         expanded.push('\n');
     }
 
-    // 4. flow.local.kdl（オーバーライド）
+    // 4. flow.{stage}.kdl（ステージオーバーライド）
+    if let Some(stage_file) = &discovered.stage_override {
+        let rendered = processor.render_file(stage_file)?;
+        expanded.push_str(&rendered);
+        expanded.push('\n');
+    }
+
+    // 5. flow.local.kdl（ローカルオーバーライド）
     if let Some(local_file) = &discovered.local_override {
         let rendered = processor.render_file(local_file)?;
         expanded.push_str(&rendered);
@@ -212,6 +242,12 @@ pub fn load_project_with_debug(project_root: &Path) -> Result<Flow> {
         for var in &discovered.variables {
             println!("  ✓ {}", var.display());
         }
+    }
+
+    // .env ファイルの表示
+    if let Some(env_file) = &discovered.env_file {
+        println!("\n🔐 環境変数ファイル");
+        println!("  ✓ {}", env_file.display());
     }
 
     println!("\n📖 変数収集");
@@ -393,6 +429,127 @@ service "api" {
         // flow.local.kdl の定義が優先される
         let api = &config.services["api"];
         assert_eq!(api.version.as_ref().unwrap(), "16");
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_load_project_with_stage_override() -> Result<()> {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let project_root = temp_dir.path();
+
+        // flow.kdl（ベース）
+        fs::write(
+            project_root.join("flow.kdl"),
+            r#"
+service "api" {
+    image "myapp"
+    version "1.0.0"
+}
+"#,
+        )?;
+
+        // flow.prod.kdl（ステージオーバーライド）
+        fs::write(
+            project_root.join("flow.prod.kdl"),
+            r#"
+service "api" {
+    image "myapp"
+    version "2.0.0"
+}
+"#,
+        )?;
+
+        // ステージ指定なし
+        let config_no_stage = load_project_from_root(project_root)?;
+        let api = &config_no_stage.services["api"];
+        assert_eq!(api.version.as_ref().unwrap(), "1.0.0");
+
+        // ステージ指定あり（prod）
+        let config_prod = load_project_from_root_with_stage(project_root, Some("prod"))?;
+        let api = &config_prod.services["api"];
+        assert_eq!(api.version.as_ref().unwrap(), "2.0.0");
+        assert_eq!(api.image.as_ref().unwrap(), "myapp"); // 上書きされた値
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_load_project_with_stage_and_local_override() -> Result<()> {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let project_root = temp_dir.path();
+
+        // flow.kdl（ベース）
+        fs::write(
+            project_root.join("flow.kdl"),
+            r#"
+service "api" {
+    image "myapp"
+    version "1.0.0"
+}
+"#,
+        )?;
+
+        // flow.prod.kdl（ステージオーバーライド）
+        fs::write(
+            project_root.join("flow.prod.kdl"),
+            r#"
+service "api" {
+    image "myapp"
+    version "2.0.0"
+}
+"#,
+        )?;
+
+        // flow.local.kdl（ローカルオーバーライド）
+        // これはステージオーバーライドより優先される
+        fs::write(
+            project_root.join("flow.local.kdl"),
+            r#"
+service "api" {
+    image "myapp"
+    version "local-dev"
+}
+"#,
+        )?;
+
+        let config = load_project_from_root_with_stage(project_root, Some("prod"))?;
+        let api = &config.services["api"];
+
+        // flow.local.kdl が最後に読み込まれるので "local-dev" になる
+        assert_eq!(api.version.as_ref().unwrap(), "local-dev");
+        assert_eq!(api.image.as_ref().unwrap(), "myapp");
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_load_project_with_env_file() -> Result<()> {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let project_root = temp_dir.path();
+
+        // .env
+        fs::write(
+            project_root.join(".env"),
+            r#"
+REGISTRY=ghcr.io/myorg
+IMAGE_TAG=v1.2.3
+"#,
+        )?;
+
+        // flow.kdl
+        fs::write(
+            project_root.join("flow.kdl"),
+            r#"
+service "api" {
+    image "{{ REGISTRY }}/api:{{ IMAGE_TAG }}"
+}
+"#,
+        )?;
+
+        let config = load_project_from_root(project_root)?;
+        let api = &config.services["api"];
+        assert_eq!(api.image.as_ref().unwrap(), "ghcr.io/myorg/api:v1.2.3");
 
         Ok(())
     }

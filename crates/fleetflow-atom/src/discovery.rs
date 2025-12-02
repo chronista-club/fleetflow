@@ -20,6 +20,10 @@ pub struct DiscoveredFiles {
     pub variables: Vec<PathBuf>,
     /// ローカルオーバーライドファイル (flow.local.kdl)
     pub local_override: Option<PathBuf>,
+    /// ステージ固有オーバーライドファイル (flow.{stage}.kdl)
+    pub stage_override: Option<PathBuf>,
+    /// 環境変数ファイル (.env)
+    pub env_file: Option<PathBuf>,
 }
 
 /// プロジェクトルートを検出
@@ -75,6 +79,17 @@ pub fn find_project_root() -> Result<PathBuf> {
 /// プロジェクトルートからファイルを自動発見
 #[tracing::instrument(skip(project_root), fields(project_root = %project_root.display()))]
 pub fn discover_files(project_root: &Path) -> Result<DiscoveredFiles> {
+    discover_files_with_stage(project_root, None)
+}
+
+/// ステージ指定でプロジェクトルートからファイルを自動発見
+///
+/// stage が指定されている場合、flow.{stage}.kdl も検出します。
+#[tracing::instrument(skip(project_root), fields(project_root = %project_root.display()))]
+pub fn discover_files_with_stage(
+    project_root: &Path,
+    stage: Option<&str>,
+) -> Result<DiscoveredFiles> {
     debug!("Starting file discovery");
     let mut discovered = DiscoveredFiles::default();
 
@@ -119,6 +134,20 @@ pub fn discover_files(project_root: &Path) -> Result<DiscoveredFiles> {
         );
     }
 
+    // flow.{stage}.kdl または .fleetflow/flow.{stage}.kdl（ステージ指定時のみ）
+    if let Some(stage_name) = stage {
+        let stage_file = project_root.join(format!("flow.{}.kdl", stage_name));
+        let fleetflow_stage_file =
+            project_root.join(format!(".fleetflow/flow.{}.kdl", stage_name));
+        if stage_file.exists() {
+            debug!(file = %stage_file.display(), stage = %stage_name, "Found stage override file");
+            discovered.stage_override = Some(stage_file);
+        } else if fleetflow_stage_file.exists() {
+            debug!(file = %fleetflow_stage_file.display(), stage = %stage_name, "Found stage override file in .fleetflow/");
+            discovered.stage_override = Some(fleetflow_stage_file);
+        }
+    }
+
     // flow.local.kdl または .fleetflow/flow.local.kdl
     let local_override = project_root.join("flow.local.kdl");
     let fleetflow_local_override = project_root.join(".fleetflow/flow.local.kdl");
@@ -126,6 +155,17 @@ pub fn discover_files(project_root: &Path) -> Result<DiscoveredFiles> {
         discovered.local_override = Some(local_override);
     } else if fleetflow_local_override.exists() {
         discovered.local_override = Some(fleetflow_local_override);
+    }
+
+    // .env または .fleetflow/.env
+    let env_file = project_root.join(".env");
+    let fleetflow_env_file = project_root.join(".fleetflow/.env");
+    if env_file.exists() {
+        debug!(file = %env_file.display(), "Found .env file");
+        discovered.env_file = Some(env_file);
+    } else if fleetflow_env_file.exists() {
+        debug!(file = %fleetflow_env_file.display(), "Found .env file in .fleetflow/");
+        discovered.env_file = Some(fleetflow_env_file);
     }
 
     Ok(discovered)

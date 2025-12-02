@@ -88,6 +88,50 @@ impl TemplateProcessor {
         // 実装は後で追加
     }
 
+    /// .env ファイルから変数を読み込んで追加
+    ///
+    /// .env ファイルの変数はプレフィックス制限なしで全て読み込まれます。
+    /// これは .env が明示的に配置されたファイルであるためです。
+    #[tracing::instrument(skip(self))]
+    pub fn add_env_file_variables(&mut self, env_file_path: &Path) -> Result<()> {
+        let content = std::fs::read_to_string(env_file_path).map_err(|e| FlowError::IoError {
+            path: env_file_path.to_path_buf(),
+            message: e.to_string(),
+        })?;
+
+        let mut count = 0;
+        for line in content.lines() {
+            let line = line.trim();
+
+            // 空行とコメント行をスキップ
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+
+            // KEY=VALUE 形式をパース
+            if let Some((key, value)) = line.split_once('=') {
+                let key = key.trim();
+                let value = value.trim();
+
+                // クォートを除去（"value" や 'value' の場合）
+                let value = strip_quotes(value);
+
+                debug!(key = %key, "Adding variable from .env file");
+                self.context
+                    .insert(key, &serde_json::Value::String(value.to_string()));
+                count += 1;
+            }
+        }
+
+        info!(
+            env_file = %env_file_path.display(),
+            variable_count = count,
+            "Loaded variables from .env file"
+        );
+
+        Ok(())
+    }
+
     /// 文字列をテンプレートとして展開
     pub fn render_str(&mut self, template: &str) -> Result<String> {
         self.tera
@@ -166,6 +210,19 @@ pub fn extract_variables(kdl_content: &str) -> Result<Variables> {
     }
 
     Ok(variables)
+}
+
+/// クォートを除去するヘルパー関数
+///
+/// "value" → value
+/// 'value' → value
+/// value → value
+fn strip_quotes(s: &str) -> &str {
+    if (s.starts_with('"') && s.ends_with('"')) || (s.starts_with('\'') && s.ends_with('\'')) {
+        &s[1..s.len() - 1]
+    } else {
+        s
+    }
 }
 
 /// KDL値をJSON値に変換
@@ -365,5 +422,67 @@ variables {
             std::env::remove_var("SECRET_KEY");
             std::env::remove_var("HOME");
         }
+    }
+
+    #[test]
+    fn test_env_file_variables() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let env_file = temp_dir.path().join(".env");
+
+        // .env ファイルを作成
+        std::fs::write(
+            &env_file,
+            r#"
+# コメント行
+AUTH0_DOMAIN=my-tenant.auth0.com
+AUTH0_CLIENT_ID=abc123
+DATABASE_URL="postgres://localhost/db"
+EMPTY_VALUE=
+QUOTED_SINGLE='single quoted'
+
+# 空行の後
+API_KEY=secret-key-123
+"#,
+        )
+        .unwrap();
+
+        let mut processor = TemplateProcessor::new();
+        processor.add_env_file_variables(&env_file).unwrap();
+
+        // 変数が正しく読み込まれていることを確認
+        assert_eq!(
+            processor.render_str("{{ AUTH0_DOMAIN }}").unwrap(),
+            "my-tenant.auth0.com"
+        );
+        assert_eq!(
+            processor.render_str("{{ AUTH0_CLIENT_ID }}").unwrap(),
+            "abc123"
+        );
+        // ダブルクォートが除去されている
+        assert_eq!(
+            processor.render_str("{{ DATABASE_URL }}").unwrap(),
+            "postgres://localhost/db"
+        );
+        // シングルクォートが除去されている
+        assert_eq!(
+            processor.render_str("{{ QUOTED_SINGLE }}").unwrap(),
+            "single quoted"
+        );
+        // 空の値
+        assert_eq!(processor.render_str("{{ EMPTY_VALUE }}").unwrap(), "");
+        // プレフィックス制限なしで読み込まれている
+        assert_eq!(
+            processor.render_str("{{ API_KEY }}").unwrap(),
+            "secret-key-123"
+        );
+    }
+
+    #[test]
+    fn test_strip_quotes() {
+        assert_eq!(strip_quotes("\"hello\""), "hello");
+        assert_eq!(strip_quotes("'hello'"), "hello");
+        assert_eq!(strip_quotes("hello"), "hello");
+        assert_eq!(strip_quotes("\"hello"), "\"hello"); // 不完全なクォート
+        assert_eq!(strip_quotes(""), "");
     }
 }
