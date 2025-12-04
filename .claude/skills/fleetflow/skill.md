@@ -1,7 +1,7 @@
 ---
 name: fleetflow
 description: FleetFlow（KDLベースのコンテナオーケストレーションツール）を効果的に使用するためのガイド
-version: 0.2.0
+version: 0.2.4
 ---
 
 # FleetFlow スキル
@@ -27,6 +27,7 @@ FleetFlowは、KDL（KDL Document Language）をベースにした超シンプ�
 | ステージ管理 | local/dev/staging/prod を統一管理 |
 | OrbStack連携 | macOSローカル開発に最適化 |
 | Dockerビルド | Dockerfileからのビルドをサポート |
+| サービスマージ | 複数ファイルでの設定オーバーライド |
 
 ## クイックスタート
 
@@ -49,10 +50,9 @@ stage "local" {
 }
 
 service "db" {
-    image "postgres"
-    version "16"
+    image "postgres:16"  // ⚠️ image は必須
     ports {
-        port host=5432 container=5432
+        port 5432 5432
     }
     env {
         POSTGRES_PASSWORD "postgres"
@@ -96,16 +96,66 @@ stage "local" {             // ステージ定義
 }
 
 service "db" {              // サービス定義
-    image "postgres"
-    version "16"
+    image "postgres:16"     // ⚠️ 必須
     ports { ... }
     env { ... }
     volumes { ... }
     build { ... }           // Dockerビルド設定
+    healthcheck { ... }     // ヘルスチェック設定
 }
 ```
 
 詳細: [reference/kdl-syntax.md](reference/kdl-syntax.md)
+
+## 重要な仕様
+
+### imageフィールドは必須
+
+v0.2.4以降、`image`フィールドは**必須**です。省略するとエラーになります：
+
+```kdl
+// ✅ 正しい定義
+service "db" {
+    image "postgres:16"
+}
+
+// ❌ エラー: imageが必須
+service "db" {
+    version "16"  // これだけではダメ
+}
+// Error: サービス 'db' に image が指定されていません
+```
+
+### サービスマージ機能
+
+複数ファイルで同じサービスを定義すると、設定がマージされます：
+
+```kdl
+// flow.kdl（ベース設定）
+service "api" {
+    image "myapp:latest"
+    ports { port 8080 3000 }
+    env { NODE_ENV "production" }
+}
+
+// flow.local.kdl（ローカルオーバーライド）
+service "api" {
+    env { DATABASE_URL "localhost:5432" }
+}
+
+// 結果:
+// - image: "myapp:latest" (保持)
+// - ports: [8080:3000] (保持)
+// - env: { NODE_ENV: "production", DATABASE_URL: "localhost:5432" } (マージ)
+```
+
+**マージルール**:
+
+| フィールドタイプ | ルール |
+|----------------|--------|
+| `Option<T>` | 後の定義が`Some`なら上書き、`None`なら保持 |
+| `Vec<T>` | 後の定義が空でなければ上書き、空なら保持 |
+| `HashMap<K, V>` | 両方をマージ（後の定義が優先） |
 
 ## コンテナ命名規則
 

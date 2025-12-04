@@ -14,12 +14,8 @@ use cloud::{parse_provider, parse_server};
 use service::parse_service;
 use stage::parse_stage;
 
-// テスト用にre-export
-#[cfg(test)]
-pub(crate) use service::infer_image_name;
-
-use crate::error::Result;
-use crate::model::Flow;
+use crate::error::{FlowError, Result};
+use crate::model::{Flow, Service};
 use kdl::KdlDocument;
 use std::collections::HashMap;
 use std::fs;
@@ -43,7 +39,7 @@ pub fn parse_kdl_string(content: &str, default_name: String) -> Result<Flow> {
     let doc: KdlDocument = content.parse()?;
 
     let mut stages = HashMap::new();
-    let mut services = HashMap::new();
+    let mut services: HashMap<String, Service> = HashMap::new();
     let mut providers = HashMap::new();
     let mut servers = HashMap::new();
     let mut name = default_name;
@@ -64,7 +60,12 @@ pub fn parse_kdl_string(content: &str, default_name: String) -> Result<Flow> {
             }
             "service" => {
                 let (service_name, service) = parse_service(node)?;
-                services.insert(service_name, service);
+                // 既存のサービスがあればマージ、なければ挿入
+                if let Some(existing) = services.get_mut(&service_name) {
+                    existing.merge(service);
+                } else {
+                    services.insert(service_name, service);
+                }
             }
             "provider" => {
                 let (provider_name, provider) = parse_provider(node)?;
@@ -83,6 +84,13 @@ pub fn parse_kdl_string(content: &str, default_name: String) -> Result<Flow> {
             _ => {
                 // 不明なノードはスキップ（projectなどの追加ノードも許可）
             }
+        }
+    }
+
+    // 全てのマージが完了した後にvalidationを行う
+    for (service_name, service) in &services {
+        if service.image.is_none() {
+            return Err(FlowError::MissingImage(service_name.clone()));
         }
     }
 

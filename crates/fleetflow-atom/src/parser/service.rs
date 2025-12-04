@@ -149,10 +149,8 @@ pub fn parse_service(node: &KdlNode) -> Result<(String, Service)> {
         }
     }
 
-    // イメージ名の自動推測
-    if service.image.is_none() {
-        service.image = Some(infer_image_name(&name, service.version.as_deref()));
-    }
+    // 注意: イメージ名の自動推測は parse_kdl_string() で全てのマージが完了した後に行う
+    // ここでは行わない（マージ時に上書きされてしまうため）
 
     Ok((name, service))
 }
@@ -268,12 +266,6 @@ pub fn parse_healthcheck(doc: &KdlDocument) -> crate::model::HealthCheck {
         retries,
         start_period,
     }
-}
-
-/// サービス名からイメージ名を推測
-pub fn infer_image_name(service_name: &str, version: Option<&str>) -> String {
-    let tag = version.unwrap_or("latest");
-    format!("{}:{}", service_name, tag)
 }
 
 #[cfg(test)]

@@ -2,7 +2,7 @@
   "mcpServers": {
     "creo-memories": {
       "type": "http",
-      "url": "http://localhost:12080/mcp"
+      "url": "https://app.creo-memories.in/mcp"
     },
     "surrealdbmcp": {
       "command": "docker",

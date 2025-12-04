@@ -39,17 +39,21 @@ KDLパーサーとコアデータモデル。
 **model/**:
 - `flow.rs` - Flow（設定全体）
 - `stage.rs` - Stage（環境）
-- `service.rs` - Service, BuildConfig
+- `service.rs` - Service, BuildConfig, HealthCheck
 - `port.rs` - Port, Protocol
 - `volume.rs` - Volume
 - `process.rs` - Process, ProcessState
 
 **parser/**:
-- `mod.rs` - メインパース関数
+- `mod.rs` - メインパース関数、サービスマージロジック
 - `stage.rs` - stageノードパース
-- `service.rs` - serviceノードパース
+- `service.rs` - serviceノードパース（image必須バリデーション）
 - `port.rs` - portノードパース
 - `volume.rs` - volumeノードパース
+
+**重要な仕様**:
+- `image`フィールドは必須（v0.2.4以降）
+- 同名サービスは自動マージ（`Service::merge()`）
 
 ### fleetflow-container
 

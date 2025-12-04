@@ -7,6 +7,12 @@
 
 ## [Unreleased]
 
+## [0.2.5] - 2025-12-05
+
+### 変更
+
+- バージョン番号の更新
+
 ## [0.2.0] - 2025-11-28
 
 ### 追加
@@ -88,6 +94,7 @@
 - アーキテクチャと設計ドキュメント
 - MIT OR Apache-2.0のデュアルライセンス
 
-[Unreleased]: https://github.com/chronista-club/fleetflow/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/chronista-club/fleetflow/compare/v0.2.5...HEAD
+[0.2.5]: https://github.com/chronista-club/fleetflow/compare/v0.2.0...v0.2.5
 [0.2.0]: https://github.com/chronista-club/fleetflow/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/chronista-club/fleetflow/releases/tag/v0.1.0

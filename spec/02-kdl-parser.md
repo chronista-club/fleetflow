@@ -9,7 +9,8 @@ KDL（KDL Document Language）形式の設定ファイルをパースし、Fleet
 - [x] KDLファイルとKDL文字列をパース可能にする
 - [x] `service` ノードをパースして `Service` 構造体に変換
 - [x] `environment` ノードをパースして `Environment` 構造体に変換
-- [x] サービス名からイメージ名を自動推測
+- [x] `image` フィールドを必須化（明示的な指定が必要）
+- [x] サービスマージロジック（複数ファイルからの定義をマージ）
 - [ ] `include` ディレクティブのサポート
 - [ ] 変数定義と展開のサポート
 - [ ] 詳細なエラーメッセージの提供
@@ -33,7 +34,7 @@ KDL形式の文字列を直接パースできること。
 ```rust
 let kdl = r#"
 service "postgres" {
-    version "16"
+    image "postgres:16"
 }
 "#;
 let config = parse_kdl_string(kdl)?;
@@ -82,22 +83,57 @@ environment "production" {
 }
 ```
 
-#### FR-005: イメージ名の自動推測
+#### FR-005: イメージフィールドの必須化
 
-`image` が省略された場合、サービス名とバージョンからイメージ名を推測：
+`image` フィールドは必須。省略するとエラーになる：
 
 ```kdl
+// ✅ 正しい定義
 service "postgres" {
-    // image "postgres:latest" が自動的に設定される
+    image "postgres:16"
 }
 
+// ❌ エラー: imageが必須
 service "postgres" {
     version "16"
-    // image "postgres:16" が設定される
 }
+// Error: サービス 'postgres' に image が指定されていません
 ```
 
-#### FR-006: デフォルト値の適用
+**設計理由**:
+- 明示的な指定により、使用するイメージを明確化
+- 自動推測による予期しない動作を防止
+- 設定の可読性と保守性を向上
+
+#### FR-006: サービスマージロジック
+
+複数のファイルで同じサービスを定義した場合、後のファイルの定義が前の定義とマージされる：
+
+```kdl
+// flow.kdl（ベース設定）
+service "api" {
+    image "myapp:latest"
+    ports { port 8080 3000 }
+    env { NODE_ENV "production" }
+}
+
+// flow.local.kdl（ローカルオーバーライド）
+service "api" {
+    env { DATABASE_URL "localhost:5432" }
+}
+
+// 結果:
+// - image: "myapp:latest" (保持)
+// - ports: [8080:3000] (保持)
+// - env: { NODE_ENV: "production", DATABASE_URL: "localhost:5432" } (マージ)
+```
+
+**マージルール**:
+- `Option<T>`: 後の定義が`Some`なら上書き、`None`なら元を保持
+- `Vec<T>`: 後の定義が空でなければ上書き、空なら元を保持
+- `HashMap<K, V>`: 両方をマージ（後の定義が優先）
+
+#### FR-007: デフォルト値の適用
 
 省略可能なフィールドにはデフォルト値を設定：
 
@@ -145,38 +181,40 @@ service "postgres" {
 - `FlowConfig` が正しく生成される
 - すべてのサービス定義が含まれる
 
-### UC-002: イメージ名の自動推測
+### UC-002: サービス定義のマージ
 
 **アクター**: 開発者
 
 **前提条件**:
-- `image` フィールドが省略されたサービス定義
+- 複数のファイルで同じサービスが定義されている
 
 **フロー**:
-1. パーサーがservice定義を処理
-2. `image` フィールドが `None` であることを検出
-3. サービス名とバージョンから推測
-4. `service.image` に設定
+1. パーサーが各ファイルのservice定義を順番に処理
+2. 同名のサービスが既に存在する場合、マージを実行
+3. フィールドタイプに応じたマージルールを適用
+4. 最終的なサービス定義を生成
 
 **期待結果**:
-- `service "postgres"` → `image: Some("postgres:latest")`
-- `service "postgres" { version "16" }` → `image: Some("postgres:16")`
+- ベース設定の値は保持される
+- オーバーライドで指定された値は上書きまたはマージされる
+- 環境変数は両方がマージされる
 
 ### UC-003: エラー検出
 
 **アクター**: 開発者
 
 **前提条件**:
-- 不正なKDLファイル
+- 不正なKDLファイル、または必須フィールドが欠落
 
 **フロー**:
-1. パーサーが不正な構文を検出
+1. パーサーが問題を検出（構文エラー、バリデーションエラー）
 2. `FlowError` を生成
-3. エラーメッセージに行番号と詳細を含める
+3. エラーメッセージに詳細を含める
 
 **期待結果**:
 - わかりやすいエラーメッセージ
 - 問題箇所の特定が容易
+- 例: `Error: サービス 'api' に image が指定されていません`
 
 ## データモデル
 

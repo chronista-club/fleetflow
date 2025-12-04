@@ -77,3 +77,46 @@ fn default_retries() -> u64 {
 fn default_start_period() -> u64 {
     10
 }
+
+impl Service {
+    /// 他のServiceをマージする
+    ///
+    /// otherで定義されたフィールドが優先される（オーバーライド）。
+    /// - Option<T>: otherがSomeならそれを使用、Noneなら元の値を維持
+    /// - Vec<T>: otherが空でなければそれを使用、空なら元の値を維持
+    /// - HashMap<K, V>: 元の値にotherの値をマージ（otherが優先）
+    pub fn merge(&mut self, other: Service) {
+        // Option<T>フィールド: otherがSomeなら上書き
+        if other.image.is_some() {
+            self.image = other.image;
+        }
+        if other.version.is_some() {
+            self.version = other.version;
+        }
+        if other.command.is_some() {
+            self.command = other.command;
+        }
+        if other.build.is_some() {
+            self.build = other.build;
+        }
+        if other.healthcheck.is_some() {
+            self.healthcheck = other.healthcheck;
+        }
+
+        // Vec<T>フィールド: otherが空でなければ上書き
+        if !other.ports.is_empty() {
+            self.ports = other.ports;
+        }
+        if !other.volumes.is_empty() {
+            self.volumes = other.volumes;
+        }
+        if !other.depends_on.is_empty() {
+            self.depends_on = other.depends_on;
+        }
+
+        // HashMap<K, V>フィールド: マージ（otherの値が優先）
+        for (key, value) in other.environment {
+            self.environment.insert(key, value);
+        }
+    }
+}

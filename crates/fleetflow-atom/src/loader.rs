@@ -306,7 +306,7 @@ service "api" {
             base.join("services/postgres.kdl"),
             r#"
 service "postgres" {
-    version "16"
+    image "postgres:16"
 }
 "#,
         )?;
@@ -409,6 +409,7 @@ service "api" {
             project_root.join("services/api.kdl"),
             r#"
 service "api" {
+    image "myapp:15"
     version "15"
 }
 "#,

@@ -41,6 +41,9 @@ pub enum FlowError {
 
     #[error("循環依存が検出されました: {0}")]
     CircularDependency(String),
+
+    #[error("サービス '{0}' に image が指定されていません")]
+    MissingImage(String),
 }
 
 pub type Result<T> = std::result::Result<T, FlowError>;

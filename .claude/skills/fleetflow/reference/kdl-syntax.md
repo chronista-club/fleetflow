@@ -15,8 +15,7 @@ stage "stage-name" {
 
 // サービス詳細定義
 service "service-name" {
-    image "image-name"
-    version "tag"
+    image "image-name:tag"  // ⚠️ 必須
     // ...
 }
 ```
@@ -53,50 +52,66 @@ stage "prod" {
 
 ## サービス定義
 
-### イメージ指定
+### イメージ指定（必須）
+
+```kdl
+service "db" {
+    image "postgres:16"
+    // imageフィールドは必須です
+}
+
+service "custom" {
+    image "ghcr.io/org/app:v1.0.0"
+    // レジストリ付きイメージも使用可能
+}
+```
+
+**重要**: `image`フィールドは**必須**です。省略するとエラーになります：
+
+```kdl
+// ❌ エラー: imageが必須
+service "db" {
+    version "16"
+}
+// Error: サービス 'db' に image が指定されていません
+```
+
+### versionフィールド（オプション）
+
+`version`は別途指定可能ですが、通常は`image`にタグを含めます：
 
 ```kdl
 service "db" {
     image "postgres"
     version "16"
-    // → postgres:16 として解釈
+    // → 内部的に postgres:16 として扱われる
 }
 
-service "custom" {
-    image "ghcr.io/org/app:v1.0.0"
-    // タグ付きイメージはそのまま使用
-}
-
-service "default" {
-    // imageもversionも省略 → サービス名:latest
+// より一般的な書き方
+service "db" {
+    image "postgres:16"
 }
 ```
-
-**解釈ルール**:
-
-| image | version | 結果 |
-|-------|---------|------|
-| あり | あり | `image:version` |
-| あり（タグ含む） | - | そのまま使用 |
-| あり（タグなし） | - | `image:latest` |
-| - | あり | `service-name:version` |
-| - | - | `service-name:latest` |
 
 ### ポート設定
 
 ```kdl
 ports {
-    port host=8080 container=3000
-    port host=5432 container=5432 protocol="tcp"
-    port host=53 container=53 protocol="udp"
+    port 8080 3000
+    port 5432 5432 protocol="tcp"
+    port 53 53 protocol="udp"
+    port 8443 443 host_ip="127.0.0.1"
 }
 ```
 
+**構文**: `port <host_port> <container_port> [options]`
+
 | パラメータ | 必須 | 説明 |
 |-----------|------|------|
-| `host` | ✅ | ホスト側のポート番号 |
-| `container` | ✅ | コンテナ内のポート番号 |
+| 第1引数 | ✅ | ホスト側のポート番号 |
+| 第2引数 | ✅ | コンテナ内のポート番号 |
 | `protocol` | - | `tcp`（デフォルト）または `udp` |
+| `host_ip` | - | バインドするホストIP |
 
 ### 環境変数
 
@@ -110,28 +125,30 @@ env {
 
 - キーと値をペアで指定
 - 複数行で定義可能
+- **マージ時は両方の値が結合される**（後の定義が優先）
 
 ### ボリュームマウント
 
 ```kdl
 volumes {
-    volume host="./data" container="/var/lib/postgresql/data"
-    volume host="/config" container="/etc/config" read_only=true
+    volume "./data" "/var/lib/postgresql/data"
+    volume "/config" "/etc/config" read_only=true
 }
 ```
 
+**構文**: `volume <host_path> <container_path> [options]`
+
 | パラメータ | 必須 | 説明 |
 |-----------|------|------|
-| `host` | ✅ | ホスト側のパス（相対パスは自動で絶対パスに変換） |
-| `container` | ✅ | コンテナ内のパス |
+| 第1引数 | ✅ | ホスト側のパス（相対パスは自動で絶対パスに変換） |
+| 第2引数 | ✅ | コンテナ内のパス |
 | `read_only` | - | 読み取り専用（デフォルト: false） |
 
 ### コマンド実行
 
 ```kdl
 service "db" {
-    image "postgres"
-    version "16"
+    image "postgres:16"
     command "postgres -c max_connections=200"
 }
 ```
@@ -139,10 +156,23 @@ service "db" {
 - コンテナ起動時のコマンドを上書き
 - スペースで自動的に引数分割
 
+### 依存関係
+
+```kdl
+service "web" {
+    image "node:20-alpine"
+    depends_on "db" "redis"
+}
+```
+
+- 起動順序の制御に使用
+- スペース区切りで複数指定可能
+
 ### Dockerビルド設定
 
 ```kdl
 service "api" {
+    image "myapp/api:latest"  // ビルド後のイメージタグ
     build {
         dockerfile "services/api/Dockerfile"
         context "."
@@ -151,7 +181,6 @@ service "api" {
         }
         target "production"
         no_cache false
-        image_tag "myapp/api:latest"
     }
 }
 ```
@@ -163,9 +192,62 @@ service "api" {
 | `args` | ビルド引数 |
 | `target` | マルチステージビルドのターゲット |
 | `no_cache` | キャッシュを使用しない |
-| `image_tag` | イメージタグ |
 
 **規約ベース検出**: `services/{name}/Dockerfile` が自動検出されます。
+
+### ヘルスチェック設定
+
+```kdl
+service "db" {
+    image "postgres:16"
+    healthcheck {
+        test "pg_isready -U postgres"
+        interval 30
+        timeout 3
+        retries 3
+        start_period 10
+    }
+}
+```
+
+| パラメータ | デフォルト | 説明 |
+|-----------|-----------|------|
+| `test` | - | ヘルスチェックコマンド（必須） |
+| `interval` | 30 | チェック間隔（秒） |
+| `timeout` | 3 | タイムアウト（秒） |
+| `retries` | 3 | リトライ回数 |
+| `start_period` | 10 | 起動待機時間（秒） |
+
+## サービスマージ機能
+
+複数ファイルで同じサービスを定義した場合、設定がマージされます：
+
+```kdl
+// flow.kdl（ベース設定）
+service "api" {
+    image "myapp:latest"
+    ports { port 8080 3000 }
+    env { NODE_ENV "production" }
+}
+
+// flow.local.kdl（ローカルオーバーライド）
+service "api" {
+    env { DATABASE_URL "localhost:5432" }
+}
+
+// 結果:
+// - image: "myapp:latest" (保持)
+// - ports: [8080:3000] (保持)
+// - env: { NODE_ENV: "production", DATABASE_URL: "localhost:5432" } (マージ)
+```
+
+**マージルール**:
+
+| フィールドタイプ | ルール | 例 |
+|----------------|--------|-----|
+| `Option<T>` | 後の定義が`Some`なら上書き | image, version, command, build, healthcheck |
+| `Vec<T>` | 後の定義が空でなければ上書き | ports, volumes, depends_on |
+| `HashMap<K, V>` | 両方をマージ（後の定義が優先） | env (environment) |
 
 ## 設定ファイル検索順序
 
@@ -201,10 +283,9 @@ stage "prod" {
 
 // PostgreSQL
 service "db" {
-    image "postgres"
-    version "16-alpine"
+    image "postgres:16-alpine"
     ports {
-        port host=5432 container=5432
+        port 5432 5432
     }
     env {
         POSTGRES_DB "myapp"
@@ -212,25 +293,32 @@ service "db" {
         POSTGRES_PASSWORD "secret"
     }
     volumes {
-        volume host="./data/postgres" container="/var/lib/postgresql/data"
+        volume "./data/postgres" "/var/lib/postgresql/data"
+    }
+    healthcheck {
+        test "pg_isready -U myapp"
+        interval 10
+        timeout 5
+        retries 5
     }
 }
 
 // Redis
 service "redis" {
-    image "redis"
-    version "7-alpine"
+    image "redis:7-alpine"
     ports {
-        port host=6379 container=6379
+        port 6379 6379
+    }
+    healthcheck {
+        test "redis-cli ping"
     }
 }
 
 // Webアプリ
 service "web" {
-    image "node"
-    version "20-alpine"
+    image "node:20-alpine"
     ports {
-        port host=3000 container=3000
+        port 3000 3000
     }
     env {
         NODE_ENV "development"
@@ -238,21 +326,21 @@ service "web" {
         REDIS_URL "redis://redis:6379"
     }
     volumes {
-        volume host="./app" container="/app"
+        volume "./app" "/app"
     }
     command "npm run dev"
+    depends_on "db" "redis"
 }
 
 // CDN（本番のみ）
 service "cdn" {
-    image "nginx"
-    version "alpine"
+    image "nginx:alpine"
     ports {
-        port host=80 container=80
-        port host=443 container=443
+        port 80 80
+        port 443 443
     }
     volumes {
-        volume host="./nginx.conf" container="/etc/nginx/nginx.conf" read_only=true
+        volume "./nginx.conf" "/etc/nginx/nginx.conf" read_only=true
     }
 }
 ```

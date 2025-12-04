@@ -5,6 +5,7 @@ use crate::model::Protocol;
 fn test_parse_simple_service() {
     let kdl = r#"
         service "postgres" {
+            image "postgres:16"
             version "16"
         }
     "#;
@@ -19,17 +20,14 @@ fn test_parse_simple_service() {
 }
 
 #[test]
-fn test_parse_service_without_version() {
+fn test_parse_service_without_image_error() {
     let kdl = r#"
         service "redis" {}
     "#;
 
-    let flow = parse_kdl_string(kdl, "test".to_string()).unwrap();
-    let service = &flow.services["redis"];
-
-    // バージョン未指定 → image は redis:latest
-    assert_eq!(service.image, Some("redis:latest".to_string()));
-    assert_eq!(service.version, None);
+    // imageなしはエラー
+    let result = parse_kdl_string(kdl, "test".to_string());
+    assert!(result.is_err());
 }
 
 #[test]
@@ -51,6 +49,7 @@ fn test_parse_service_with_explicit_image() {
 fn test_parse_service_with_ports() {
     let kdl = r#"
         service "web" {
+            image "nginx:latest"
             ports {
                 port 8080 3000
                 port 8443 3443 protocol="tcp"
@@ -77,6 +76,7 @@ fn test_parse_service_with_ports() {
 fn test_parse_service_with_environment() {
     let kdl = r#"
         service "api" {
+            image "node:20"
             environment {
                 NODE_ENV "production"
                 DATABASE_URL "postgresql://db:5432/mydb"
@@ -100,6 +100,7 @@ fn test_parse_service_with_environment() {
 fn test_parse_service_with_env_alias() {
     let kdl = r#"
         service "api" {
+            image "node:20"
             env {
                 NODE_ENV "development"
                 DEBUG "true"
@@ -120,6 +121,7 @@ fn test_parse_service_with_env_alias() {
 fn test_parse_service_with_volumes() {
     let kdl = r#"
         service "db" {
+            image "postgres:16"
             volumes {
                 volume "./data" "/var/lib/postgresql/data"
                 volume "./config" "/etc/config" read_only=#true
@@ -146,6 +148,7 @@ fn test_parse_service_with_volumes() {
 fn test_parse_volume_with_string_bool() {
     let kdl = r#"
         service "db" {
+            image "postgres:16"
             volumes {
                 volume "./config" "/etc/config" read_only="true"
             }
@@ -165,6 +168,7 @@ fn test_parse_volume_with_string_bool() {
 fn test_parse_service_with_depends_on() {
     let kdl = r#"
         service "api" {
+            image "node:20"
             depends_on "db" "redis"
         }
     "#;
@@ -180,6 +184,10 @@ fn test_parse_service_with_depends_on() {
 #[test]
 fn test_parse_stage() {
     let kdl = r#"
+        service "api" { image "node:20" }
+        service "db" { image "postgres:16" }
+        service "redis" { image "redis:7" }
+
         stage "production" {
             service "api"
             service "db"
@@ -207,10 +215,12 @@ fn test_parse_stage() {
 fn test_parse_multiple_services_and_stages() {
     let kdl = r#"
         service "api" {
+            image "myapp:1.0.0"
             version "1.0.0"
         }
 
         service "db" {
+            image "postgres:16"
             version "16"
         }
 
@@ -231,20 +241,10 @@ fn test_parse_multiple_services_and_stages() {
 }
 
 #[test]
-fn test_infer_image_name() {
-    assert_eq!(infer_image_name("postgres", None), "postgres:latest");
-    assert_eq!(infer_image_name("postgres", Some("16")), "postgres:16");
-    assert_eq!(
-        infer_image_name("node", Some("20-alpine")),
-        "node:20-alpine"
-    );
-    assert_eq!(infer_image_name("redis", Some("7")), "redis:7");
-}
-
-#[test]
 fn test_parse_port_with_host_ip() {
     let kdl = r#"
         service "web" {
+            image "nginx:latest"
             ports {
                 port 5432 5432 host_ip="127.0.0.1"
             }
@@ -259,16 +259,18 @@ fn test_parse_port_with_host_ip() {
 }
 
 #[test]
-fn test_parse_empty_service() {
+fn test_parse_minimal_service() {
     let kdl = r#"
-        service "minimal" {}
+        service "minimal" {
+            image "alpine:latest"
+        }
     "#;
 
     let flow = parse_kdl_string(kdl, "test".to_string()).unwrap();
     let service = &flow.services["minimal"];
 
     // デフォルト値の確認
-    assert_eq!(service.image, Some("minimal:latest".to_string()));
+    assert_eq!(service.image, Some("alpine:latest".to_string()));
     assert_eq!(service.ports.len(), 0);
     assert_eq!(service.environment.len(), 0);
     assert_eq!(service.volumes.len(), 0);
@@ -279,7 +281,7 @@ fn test_parse_empty_service() {
 fn test_invalid_service_no_name() {
     let kdl = r#"
         service {
-            version "1.0"
+            image "myapp:1.0"
         }
     "#;
 
@@ -290,6 +292,7 @@ fn test_invalid_service_no_name() {
 #[test]
 fn test_invalid_stage_no_name() {
     let kdl = r#"
+        service "api" { image "node:20" }
         stage {
             service "api"
         }
@@ -325,7 +328,7 @@ fn test_parse_service_with_command() {
 fn test_parse_service_without_command() {
     let kdl = r#"
         service "postgres" {
-            version "16"
+            image "postgres:16"
         }
     "#;
 
@@ -341,7 +344,7 @@ fn test_parse_project_name() {
         project "my-project"
 
         service "api" {
-            version "1.0"
+            image "myapp:1.0"
         }
     "#;
 
@@ -355,7 +358,7 @@ fn test_parse_project_name() {
 fn test_parse_project_name_fallback() {
     let kdl = r#"
         service "api" {
-            version "1.0"
+            image "myapp:1.0"
         }
     "#;
 
@@ -371,11 +374,11 @@ fn test_parse_full_flow_with_project() {
         project "fleetflow"
 
         service "postgres" {
-            version "16"
+            image "postgres:16"
         }
 
         service "redis" {
-            version "7"
+            image "redis:7"
         }
 
         stage "local" {
@@ -434,6 +437,8 @@ fn test_parse_cloud_server() {
 #[test]
 fn test_parse_stage_with_servers() {
     let kdl = r#"
+        service "api" { image "node:20" }
+
         stage "production" {
             server "vps-01"
             service "api"
@@ -485,4 +490,232 @@ fn test_parse_full_cloud_config() {
     let stage = &flow.stages["production"];
     assert_eq!(stage.servers.len(), 1);
     assert_eq!(stage.services.len(), 1);
+}
+
+// Issue: サービスマージロジックのテスト
+// 複数のファイルで同じサービスを定義した場合、マージされることを確認
+
+#[test]
+fn test_service_merge_environment() {
+    // flow.kdl と flow.local.kdl を結合したような状態をシミュレート
+    let kdl = r#"
+        service "api" {
+            image "myapp:latest"
+            env {
+                NODE_ENV "production"
+                LOG_LEVEL "info"
+                DATABASE_URL "postgresql://db:5432/mydb"
+            }
+        }
+
+        service "api" {
+            env {
+                DATABASE_URL "postgresql://localhost:5432/mydb_dev"
+            }
+        }
+    "#;
+
+    let flow = parse_kdl_string(kdl, "test".to_string()).unwrap();
+    let service = &flow.services["api"];
+
+    // image は保持される
+    assert_eq!(service.image, Some("myapp:latest".to_string()));
+
+    // environment はマージされる（後の定義が優先）
+    assert_eq!(service.environment.len(), 3);
+    assert_eq!(service.environment["NODE_ENV"], "production"); // 保持
+    assert_eq!(service.environment["LOG_LEVEL"], "info"); // 保持
+    assert_eq!(
+        service.environment["DATABASE_URL"],
+        "postgresql://localhost:5432/mydb_dev"
+    ); // オーバーライド
+}
+
+#[test]
+fn test_service_merge_ports_preserved() {
+    let kdl = r#"
+        service "api" {
+            image "myapp:latest"
+            ports {
+                port 8080 3000
+                port 8443 3443
+            }
+        }
+
+        service "api" {
+            env {
+                DEBUG "true"
+            }
+        }
+    "#;
+
+    let flow = parse_kdl_string(kdl, "test".to_string()).unwrap();
+    let service = &flow.services["api"];
+
+    // image は保持される
+    assert_eq!(service.image, Some("myapp:latest".to_string()));
+
+    // ports は空でなければ保持される（後の定義にportsがないので元が残る）
+    assert_eq!(service.ports.len(), 2);
+    assert_eq!(service.ports[0].host, 8080);
+    assert_eq!(service.ports[1].host, 8443);
+
+    // environment はマージされる
+    assert_eq!(service.environment.len(), 1);
+    assert_eq!(service.environment["DEBUG"], "true");
+}
+
+#[test]
+fn test_service_merge_ports_overwritten() {
+    let kdl = r#"
+        service "api" {
+            image "myapp:latest"
+            ports {
+                port 8080 3000
+                port 8443 3443
+            }
+        }
+
+        service "api" {
+            ports {
+                port 9000 3000
+            }
+        }
+    "#;
+
+    let flow = parse_kdl_string(kdl, "test".to_string()).unwrap();
+    let service = &flow.services["api"];
+
+    // image は保持される
+    assert_eq!(service.image, Some("myapp:latest".to_string()));
+
+    // ports は後の定義で上書き（空でないので）
+    assert_eq!(service.ports.len(), 1);
+    assert_eq!(service.ports[0].host, 9000);
+}
+
+#[test]
+fn test_service_merge_version_override() {
+    let kdl = r#"
+        service "api" {
+            image "myapp:latest"
+            version "1.0.0"
+            ports {
+                port 8080 3000
+            }
+            env {
+                NODE_ENV "production"
+            }
+        }
+
+        service "api" {
+            version "local"
+        }
+    "#;
+
+    let flow = parse_kdl_string(kdl, "test".to_string()).unwrap();
+    let service = &flow.services["api"];
+
+    // version は上書き
+    assert_eq!(service.version, Some("local".to_string()));
+
+    // image は保持（version が変わっても image はそのまま）
+    assert_eq!(service.image, Some("myapp:latest".to_string()));
+
+    // ports, env も保持
+    assert_eq!(service.ports.len(), 1);
+    assert_eq!(service.environment.len(), 1);
+}
+
+#[test]
+fn test_service_merge_volumes_preserved() {
+    let kdl = r#"
+        service "db" {
+            image "postgres:16"
+            volumes {
+                volume "./data" "/var/lib/postgresql/data"
+            }
+        }
+
+        service "db" {
+            env {
+                POSTGRES_PASSWORD "secret"
+            }
+        }
+    "#;
+
+    let flow = parse_kdl_string(kdl, "test".to_string()).unwrap();
+    let service = &flow.services["db"];
+
+    // volumes は保持される
+    assert_eq!(service.volumes.len(), 1);
+    assert_eq!(service.volumes[0].host.to_str().unwrap(), "./data");
+
+    // environment はマージされる
+    assert_eq!(service.environment.len(), 1);
+    assert_eq!(service.environment["POSTGRES_PASSWORD"], "secret");
+}
+
+#[test]
+fn test_service_merge_depends_on_preserved() {
+    let kdl = r#"
+        service "api" {
+            image "myapp:latest"
+            depends_on "db" "redis"
+        }
+
+        service "api" {
+            env {
+                API_KEY "test"
+            }
+        }
+    "#;
+
+    let flow = parse_kdl_string(kdl, "test".to_string()).unwrap();
+    let service = &flow.services["api"];
+
+    // depends_on は保持される
+    assert_eq!(service.depends_on.len(), 2);
+    assert!(service.depends_on.contains(&"db".to_string()));
+    assert!(service.depends_on.contains(&"redis".to_string()));
+
+    // environment はマージされる
+    assert_eq!(service.environment["API_KEY"], "test");
+}
+
+#[test]
+fn test_service_merge_multiple_overrides() {
+    // 3回のオーバーライドをシミュレート
+    let kdl = r#"
+        service "api" {
+            image "myapp:latest"
+            env {
+                NODE_ENV "production"
+                LOG_LEVEL "info"
+            }
+        }
+
+        service "api" {
+            env {
+                LOG_LEVEL "debug"
+                DEBUG "true"
+            }
+        }
+
+        service "api" {
+            env {
+                API_KEY "secret"
+            }
+        }
+    "#;
+
+    let flow = parse_kdl_string(kdl, "test".to_string()).unwrap();
+    let service = &flow.services["api"];
+
+    // 全ての環境変数がマージされる
+    assert_eq!(service.environment.len(), 4);
+    assert_eq!(service.environment["NODE_ENV"], "production"); // 1回目から
+    assert_eq!(service.environment["LOG_LEVEL"], "debug"); // 2回目で上書き
+    assert_eq!(service.environment["DEBUG"], "true"); // 2回目で追加
+    assert_eq!(service.environment["API_KEY"], "secret"); // 3回目で追加
 }

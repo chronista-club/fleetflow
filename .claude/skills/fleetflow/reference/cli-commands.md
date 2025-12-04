@@ -143,7 +143,7 @@ fleetflow validate
 
 ```bash
 fleetflow version
-# 出力: fleetflow 0.2.0
+# 出力: fleetflow 0.2.4
 ```
 
 ## 環境変数
