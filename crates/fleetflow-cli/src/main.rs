@@ -550,7 +550,21 @@ async fn main() -> anyhow::Result<()> {
                                 status_code: 304,
                                 ..
                             }) => {
-                                println!("  ℹ コンテナは既に起動しています");
+                                // 既に起動中のコンテナは再起動
+                                println!("  ℹ コンテナは既に起動中、再起動します...");
+                                match docker
+                                    .restart_container(
+                                        container_name,
+                                        None::<bollard::query_parameters::RestartContainerOptions>,
+                                    )
+                                    .await
+                                {
+                                    Ok(_) => println!("  ✓ 再起動完了"),
+                                    Err(e) => {
+                                        eprintln!("  ✗ 再起動エラー: {}", e);
+                                        return Err(anyhow::anyhow!("コンテナ再起動に失敗しました"));
+                                    }
+                                }
                             }
                             Err(e) => {
                                 eprintln!("  ✗ 起動エラー: {}", e);
