@@ -287,6 +287,23 @@ enum Commands {
     Validate,
     /// バージョン情報を表示
     Version,
+    /// Dockerイメージをビルド
+    Build {
+        /// ステージ名
+        stage: String,
+        /// ビルド対象のサービス（省略時は全サービス）
+        #[arg(short = 'n', long)]
+        service: Option<String>,
+        /// ビルド後にレジストリにプッシュ
+        #[arg(long)]
+        push: bool,
+        /// イメージタグを指定（--pushと併用）
+        #[arg(long)]
+        tag: Option<String>,
+        /// キャッシュを使用しない
+        #[arg(long)]
+        no_cache: bool,
+    },
     /// クラウドリソースを管理
     #[command(subcommand)]
     Cloud(CloudCommands),
@@ -1320,6 +1337,15 @@ async fn main() -> anyhow::Result<()> {
             // すでに上で処理済み
             unreachable!()
         }
+        Commands::Build {
+            stage,
+            service,
+            push,
+            tag,
+            no_cache,
+        } => {
+            handle_build_command(&project_root, &config, &stage, service.as_deref(), push, tag.as_deref(), no_cache).await?;
+        }
         Commands::Cloud(cloud_cmd) => {
             handle_cloud_command(cloud_cmd, &config).await?;
         }
@@ -1774,6 +1800,224 @@ async fn handle_cloud_command(
                 "✓ クラウドリソースの削除処理が完了しました".green().bold()
             );
         }
+    }
+
+    Ok(())
+}
+
+/// ビルドコマンドを処理
+async fn handle_build_command(
+    project_root: &std::path::Path,
+    config: &fleetflow_atom::Flow,
+    stage_name: &str,
+    service_filter: Option<&str>,
+    push: bool,
+    cli_tag: Option<&str>,
+    no_cache: bool,
+) -> anyhow::Result<()> {
+    use fleetflow_build::{
+        resolve_tag, BuildResolver, ContextBuilder, ImageBuilder, ImagePusher,
+    };
+    use std::collections::HashMap;
+
+    println!("{}", "Dockerイメージをビルド中...".green());
+    print_loaded_config_files(project_root);
+    println!("ステージ: {}", stage_name.cyan());
+
+    // ステージの取得
+    let stage_config = config
+        .stages
+        .get(stage_name)
+        .ok_or_else(|| anyhow::anyhow!("ステージ '{}' が見つかりません", stage_name))?;
+
+    // ビルド対象のサービスを決定
+    let target_services: Vec<&String> = if let Some(filter) = service_filter {
+        // 特定のサービスのみ
+        if !stage_config.services.contains(&filter.to_string()) {
+            return Err(anyhow::anyhow!(
+                "サービス '{}' はステージ '{}' に含まれていません",
+                filter,
+                stage_name
+            ));
+        }
+        stage_config
+            .services
+            .iter()
+            .filter(|s| *s == filter)
+            .collect()
+    } else {
+        // 全サービス
+        stage_config.services.iter().collect()
+    };
+
+    // ビルド可能なサービスをフィルタ（build設定があるもののみ）
+    let buildable_services: Vec<(&String, &fleetflow_atom::Service)> = target_services
+        .iter()
+        .filter_map(|service_name| {
+            config.services.get(*service_name).and_then(|service| {
+                // build設定があるサービスのみビルド対象
+                if service.build.is_some() {
+                    Some((*service_name, service))
+                } else {
+                    None
+                }
+            })
+        })
+        .collect();
+
+    if buildable_services.is_empty() {
+        println!(
+            "{}",
+            "ビルド対象のサービスがありません（build 設定が必要です）".yellow()
+        );
+        return Ok(());
+    }
+
+    println!();
+    println!(
+        "{}",
+        format!("ビルド対象サービス ({} 個):", buildable_services.len()).bold()
+    );
+    for (name, _) in &buildable_services {
+        println!("  • {}", name.cyan());
+    }
+
+    // Docker接続
+    println!();
+    println!("{}", "Dockerに接続中...".blue());
+    let docker = init_docker_with_error_handling().await?;
+
+    // BuildResolver と ImageBuilder を作成
+    let resolver = BuildResolver::new(project_root.to_path_buf());
+    let builder = ImageBuilder::new(docker.clone());
+
+    // プッシュが必要な場合は ImagePusher も作成
+    let pusher = if push {
+        Some(ImagePusher::new(docker.clone()))
+    } else {
+        None
+    };
+
+    // ビルド結果を格納
+    let mut build_results: Vec<(String, String)> = Vec::new();
+
+    // 各サービスをビルド
+    for (service_name, service) in &buildable_services {
+        println!();
+        println!(
+            "{}",
+            format!("🔨 {} をビルド中...", service_name).green().bold()
+        );
+
+        // Dockerfileを解決
+        let dockerfile_path = match resolver.resolve_dockerfile(service_name, service) {
+            Ok(Some(path)) => path,
+            Ok(None) => {
+                println!(
+                    "  {} Dockerfileが見つかりません。スキップします。",
+                    "⚠".yellow()
+                );
+                continue;
+            }
+            Err(e) => {
+                eprintln!("  {} Dockerfile解決エラー: {}", "✗".red().bold(), e);
+                return Err(anyhow::anyhow!("Dockerfile解決に失敗しました"));
+            }
+        };
+
+        // コンテキストを解決
+        let context_path = match resolver.resolve_context(service) {
+            Ok(path) => path,
+            Err(e) => {
+                eprintln!("  {} コンテキスト解決エラー: {}", "✗".red().bold(), e);
+                return Err(anyhow::anyhow!("コンテキスト解決に失敗しました"));
+            }
+        };
+
+        // イメージタグを解決
+        let image_name = service.image.as_deref().unwrap_or_else(|| service_name.as_str());
+        let (base_image, tag) = resolve_tag(cli_tag, image_name);
+        let full_image = format!("{}:{}", base_image, tag);
+
+        // ビルド引数を解決
+        let variables: HashMap<String, String> = std::env::vars().collect();
+        let build_args = resolver.resolve_build_args(service, &variables);
+
+        // ターゲットステージ
+        let target = service.build.as_ref().and_then(|b| b.target.clone());
+
+        println!("  → Dockerfile: {}", dockerfile_path.display().to_string().cyan());
+        println!("  → Context: {}", context_path.display().to_string().cyan());
+        println!("  → Image: {}", full_image.cyan());
+
+        // ビルドコンテキストを作成
+        let context_data = match ContextBuilder::create_context(&context_path, &dockerfile_path) {
+            Ok(data) => data,
+            Err(e) => {
+                eprintln!("  {} コンテキスト作成エラー: {}", "✗".red().bold(), e);
+                return Err(anyhow::anyhow!("ビルドコンテキストの作成に失敗しました"));
+            }
+        };
+
+        // ビルド実行
+        match builder
+            .build_image(context_data, &full_image, build_args, target.as_deref(), no_cache)
+            .await
+        {
+            Ok(_) => {
+                println!("  {} ビルド完了", "✓".green());
+                build_results.push((service_name.to_string(), full_image));
+            }
+            Err(e) => {
+                eprintln!("  {} ビルドエラー: {}", "✗".red().bold(), e);
+                return Err(anyhow::anyhow!("ビルドに失敗しました"));
+            }
+        }
+    }
+
+    // プッシュ処理
+    if let Some(pusher) = pusher {
+        println!();
+        println!("{}", "📤 イメージをプッシュ中...".blue().bold());
+
+        for (service_name, full_image) in &build_results {
+            println!();
+            println!("{}", format!("Pushing {}...", service_name).blue());
+
+            // イメージとタグを分離
+            let (image, tag) = fleetflow_build::split_image_tag(full_image);
+
+            match pusher.push(&image, &tag).await {
+                Ok(pushed_image) => {
+                    println!("  {} {}", "✓".green(), pushed_image.cyan());
+                }
+                Err(e) => {
+                    eprintln!("  {} プッシュエラー: {}", "✗".red().bold(), e);
+                    return Err(anyhow::anyhow!("プッシュに失敗しました"));
+                }
+            }
+        }
+    }
+
+    // 完了メッセージ
+    println!();
+    if push {
+        println!(
+            "{}",
+            "✓ すべてのイメージがビルド＆プッシュされました！".green().bold()
+        );
+    } else {
+        println!(
+            "{}",
+            "✓ すべてのイメージがビルドされました！".green().bold()
+        );
+    }
+
+    // 結果サマリー
+    println!();
+    println!("{}", "結果サマリー:".bold());
+    for (service_name, full_image) in &build_results {
+        println!("  {} {}: {}", "✓".green(), service_name, full_image.cyan());
     }
 
     Ok(())

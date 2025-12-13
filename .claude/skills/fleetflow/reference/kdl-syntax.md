@@ -15,9 +15,13 @@ stage "stage-name" {
 
 // サービス詳細定義
 service "service-name" {
-    image "image-name:tag"  // ⚠️ 必須
+    image "image-name:tag"  // 必須
     // ...
 }
+
+// クラウドインフラ（オプション）
+providers { ... }
+server "server-name" { ... }
 ```
 
 ## プロジェクト宣言
@@ -69,7 +73,7 @@ service "custom" {
 **重要**: `image`フィールドは**必須**です。省略するとエラーになります：
 
 ```kdl
-// ❌ エラー: imageが必須
+// エラー: imageが必須
 service "db" {
     version "16"
 }
@@ -108,8 +112,8 @@ ports {
 
 | パラメータ | 必須 | 説明 |
 |-----------|------|------|
-| 第1引数 | ✅ | ホスト側のポート番号 |
-| 第2引数 | ✅ | コンテナ内のポート番号 |
+| 第1引数 | Yes | ホスト側のポート番号 |
+| 第2引数 | Yes | コンテナ内のポート番号 |
 | `protocol` | - | `tcp`（デフォルト）または `udp` |
 | `host_ip` | - | バインドするホストIP |
 
@@ -140,8 +144,8 @@ volumes {
 
 | パラメータ | 必須 | 説明 |
 |-----------|------|------|
-| 第1引数 | ✅ | ホスト側のパス（相対パスは自動で絶対パスに変換） |
-| 第2引数 | ✅ | コンテナ内のパス |
+| 第1引数 | Yes | ホスト側のパス（相対パスは自動で絶対パスに変換） |
+| 第2引数 | Yes | コンテナ内のパス |
 | `read_only` | - | 読み取り専用（デフォルト: false） |
 
 ### コマンド実行
@@ -173,14 +177,15 @@ service "web" {
 ```kdl
 service "api" {
     image "myapp/api:latest"  // ビルド後のイメージタグ
-    build {
-        dockerfile "services/api/Dockerfile"
-        context "."
-        args {
-            RUST_VERSION "1.75"
-        }
-        target "production"
-        no_cache false
+
+    // 明示的なビルド設定
+    dockerfile "services/api/Dockerfile"
+    context "."
+    target "production"
+
+    build_args {
+        RUST_VERSION "1.75"
+        NODE_VERSION "20"
     }
 }
 ```
@@ -189,11 +194,15 @@ service "api" {
 |-----------|------|
 | `dockerfile` | Dockerfileのパス |
 | `context` | ビルドコンテキスト（デフォルト: プロジェクトルート） |
-| `args` | ビルド引数 |
 | `target` | マルチステージビルドのターゲット |
-| `no_cache` | キャッシュを使用しない |
+| `build_args` | ビルド引数 |
 
 **規約ベース検出**: `services/{name}/Dockerfile` が自動検出されます。
+
+**検索順序**:
+1. `./services/{service-name}/Dockerfile`
+2. `./{service-name}/Dockerfile`
+3. `./Dockerfile.{service-name}`
 
 ### ヘルスチェック設定
 
@@ -217,6 +226,84 @@ service "db" {
 | `timeout` | 3 | タイムアウト（秒） |
 | `retries` | 3 | リトライ回数 |
 | `start_period` | 10 | 起動待機時間（秒） |
+
+## クラウドインフラ定義
+
+### プロバイダー設定
+
+```kdl
+providers {
+    sakura-cloud {
+        zone "tk1a"
+        // 認証はusacloud configから自動取得
+    }
+
+    cloudflare {
+        account-id env="CF_ACCOUNT_ID"
+        // 認証は環境変数から
+    }
+}
+```
+
+### サーバー定義（さくらのクラウド）
+
+```kdl
+server "app-server" {
+    provider "sakura-cloud"
+    plan core=4 memory=4
+    disk size=100 os="ubuntu-24.04"
+    ssh-key "~/.ssh/id_ed25519.pub"
+
+    // DNSエイリアス（オプション）
+    dns_aliases "app" "api" "www"
+
+    // デプロイするサービスグループ
+    deploy-services "app-stack"
+}
+```
+
+| パラメータ | 説明 |
+|-----------|------|
+| `provider` | 使用するクラウドプロバイダー |
+| `plan` | サーバースペック（コア数、メモリ） |
+| `disk` | ディスクサイズとOS |
+| `ssh-key` | SSH公開鍵のパス |
+| `dns_aliases` | DNSエイリアス（CNAMEレコード） |
+| `deploy-services` | デプロイするサービスグループ名 |
+
+### R2バケット（Cloudflare）
+
+```kdl
+r2-bucket "attachments" {
+    provider "cloudflare"
+    location "APAC"
+
+    cors {
+        allowed-origins "https://api.example.com"
+        allowed-methods "GET" "PUT" "POST" "DELETE"
+    }
+
+    custom-domain "cdn.example.com"
+}
+```
+
+### DNS設定（Cloudflare）
+
+```kdl
+dns "example.com" {
+    provider "cloudflare"
+
+    record "api" type="A" {
+        value "xxx.xxx.xxx.xxx"
+        proxied true
+    }
+
+    record "cdn" type="CNAME" {
+        value "bucket.r2.cloudflarestorage.com"
+        proxied true
+    }
+}
+```
 
 ## サービスマージ機能
 
@@ -263,6 +350,8 @@ FleetFlowは以下の優先順位で設定ファイルを検索します：
 4. `~/.config/fleetflow/flow.kdl` (グローバル)
 
 ## 完全な例
+
+### ローカル開発環境
 
 ```kdl
 project "myapp"
@@ -341,6 +430,51 @@ service "cdn" {
     }
     volumes {
         volume "./nginx.conf" "/etc/nginx/nginx.conf" read_only=true
+    }
+}
+```
+
+### クラウドインフラ設定
+
+```kdl
+project "myapp"
+
+providers {
+    sakura-cloud { zone "tk1a" }
+    cloudflare { account-id env="CF_ACCOUNT_ID" }
+}
+
+stage "dev" {
+    // さくらのクラウドでサーバー作成
+    server "app-server" {
+        provider "sakura-cloud"
+        plan core=4 memory=4
+        disk size=100 os="ubuntu-24.04"
+        dns_aliases "app" "api"
+        deploy-services "app-stack"
+    }
+
+    // Cloudflare R2バケット
+    r2-bucket "attachments" {
+        provider "cloudflare"
+        custom-domain "cdn.example.com"
+    }
+
+    // DNS設定
+    dns "example.com" {
+        provider "cloudflare"
+        record "api" type="A" value=server.app-server.ip proxied=true
+    }
+}
+
+service-group "app-stack" {
+    service "api" {
+        image "myapp/api:latest"
+        port 3000
+    }
+    service "db" {
+        image "postgres:16"
+        port 5432
     }
 }
 ```

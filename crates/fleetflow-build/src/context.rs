@@ -1,4 +1,4 @@
-use crate::error::{BuildError, Result};
+use crate::error::{BuildError, BuildResult};
 use flate2::Compression;
 use flate2::write::GzEncoder;
 use std::fs::File;
@@ -10,7 +10,7 @@ pub struct ContextBuilder;
 
 impl ContextBuilder {
     /// ビルドコンテキストをtar.gzアーカイブとして作成
-    pub fn create_context(context_path: &Path, dockerfile_path: &Path) -> Result<Vec<u8>> {
+    pub fn create_context(context_path: &Path, dockerfile_path: &Path) -> BuildResult<Vec<u8>> {
         tracing::debug!("Creating build context from: {}", context_path.display());
 
         // tarアーカイブの作成

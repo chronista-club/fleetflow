@@ -19,6 +19,7 @@ Docker Composeの手軽さはそのままに、より少ない記述で、より
 - **モジュール化**: include機能で設定を分割・再利用
 - **統一管理**: 開発環境から本番環境まで同じツールで
 - **OrbStack連携**: macOSでの開発体験を最適化
+- **クラウド対応**: さくらのクラウド、Cloudflareなど複数プロバイダーをサポート
 
 ## クイックスタート
 
@@ -127,15 +128,21 @@ stage "prd" {
 
 ### 3. Dockerビルド機能
 
-Dockerfileからのイメージビルドをサポート。
+Dockerfileからのイメージビルドをサポート。規約ベースの自動検出と明示的指定の両方に対応。
 
 ```kdl
+// 規約ベース: ./services/api/Dockerfile を自動検出
 service "api" {
-    dockerfile "services/api/Dockerfile"
-    context "."
     build_args {
-        RUST_VERSION "1.75"
+        NODE_VERSION "20"
     }
+}
+
+// 明示的指定
+service "worker" {
+    dockerfile "./backend/worker/Dockerfile"
+    context "./backend"
+    target "production"  // マルチステージビルド対応
 }
 ```
 
@@ -145,6 +152,17 @@ macOSのOrbStackと連携し、プロジェクト・ステージごとにコン�
 
 - コンテナ名: `{project}-{stage}-{service}`
 - OrbStackグループ: `{project}-{stage}`
+
+```
+📁 vantage-local
+  ├── surrealdb
+  ├── qdrant
+  └── api
+
+📁 fleetflow-dev
+  ├── postgres
+  └── redis
+```
 
 ### 5. 自動設定読み込み
 
@@ -158,6 +176,32 @@ project/
 │   ├── main.kdl         # メイン設定
 │   ├── services.kdl     # サービス定義
 │   └── stages.kdl       # ステージ定義
+```
+
+### 6. クラウドインフラ管理
+
+複数のクラウドプロバイダーをKDLで宣言的に管理。
+
+```kdl
+providers {
+    sakura-cloud { zone "tk1a" }
+    cloudflare { account-id env="CF_ACCOUNT_ID" }
+}
+
+stage "dev" {
+    // さくらのクラウドでサーバー作成
+    server "app-server" {
+        provider "sakura-cloud"
+        plan core=4 memory=4
+        disk size=100 os="ubuntu-24.04"
+    }
+
+    // Cloudflare DNSを自動設定
+    dns "example.com" {
+        provider "cloudflare"
+        record "api" type="A" value=server.app-server.ip
+    }
+}
 ```
 
 ## コマンド
@@ -187,6 +231,16 @@ fleetflow ps [--all]
 # 設定を検証
 fleetflow validate
 
+# イメージをビルド
+fleetflow build [service] <stage>
+
+# イメージを再ビルドして再起動
+fleetflow rebuild <service> [stage]
+
+# クラウドインフラ管理
+fleetflow cloud up --stage <stage>
+fleetflow cloud down --stage <stage>
+
 # バージョン表示
 fleetflow version
 ```
@@ -196,17 +250,17 @@ fleetflow version
 ```
 fleetflow/
 ├── crates/
-│   ├── fleetflow-cli/           # CLIエントリーポイント
-│   ├── fleetflow-atom/          # KDLパーサー・データモデル
-│   ├── fleetflow-container/     # コンテナ操作
-│   ├── fleetflow-config/        # 設定管理
-│   ├── fleetflow-build/         # Dockerビルド機能
-│   ├── fleetflow-cloud/         # クラウドインフラ抽象化
-│   ├── fleetflow-cloud-sakura/  # さくらクラウド連携
+│   ├── fleetflow-cli/              # CLIエントリーポイント
+│   ├── fleetflow-atom/             # KDLパーサー・データモデル
+│   ├── fleetflow-container/        # コンテナ操作
+│   ├── fleetflow-config/           # 設定管理
+│   ├── fleetflow-build/            # Dockerビルド機能
+│   ├── fleetflow-cloud/            # クラウドインフラ抽象化
+│   ├── fleetflow-cloud-sakura/     # さくらクラウド連携
 │   └── fleetflow-cloud-cloudflare/ # Cloudflare連携
-├── spec/                        # 仕様書
-├── design/                      # 設計書
-└── guides/                      # 利用ガイド
+├── spec/                           # 仕様書（What & Why）
+├── design/                         # 設計書（How）
+└── guides/                         # 利用ガイド（Usage）
 ```
 
 ## ロードマップ
@@ -222,11 +276,13 @@ fleetflow/
 - [x] Dockerビルド機能（fleetflow-build）
 - [x] 個別サービス操作（start/stop/restart）
 - [x] 複数設定ファイル対応
+- [x] マルチステージビルド対応
 
 ### Phase 3: クラウドインフラ 🚧
 - [x] クラウドプロバイダー抽象化
 - [x] さくらクラウド連携（usacloud）
-- [x] Cloudflare連携（スケルトン）
+- [x] Cloudflare連携
+- [x] DNS自動管理（Cloudflare）
 - [ ] CLI統合
 
 ### Phase 4: 拡張機能
@@ -274,9 +330,16 @@ cargo install --path crates/fleetflow-cli
 
 ## ドキュメント
 
-- [仕様書](spec/) - 機能の詳細仕様
-- [設計書](design/) - 実装の設計詳細
-- [利用ガイド](guides/) - ユースケース別のガイド
+- [仕様書](spec/) - 機能の詳細仕様（What & Why）
+  - [Core Concepts](spec/01-core-concepts.md) - 基本概念
+  - [KDL Parser](spec/02-kdl-parser.md) - パーサー仕様
+  - [CLI Commands](spec/03-cli-commands.md) - コマンド仕様
+  - [OrbStack Integration](spec/06-orbstack-integration.md) - OrbStack連携
+  - [Docker Build](spec/07-docker-build.md) - ビルド機能
+  - [Cloud Infrastructure](spec/08-cloud-infrastructure.md) - クラウドインフラ
+  - [DNS Integration](spec/09-dns-integration.md) - DNS連携
+- [設計書](design/) - 実装の設計詳細（How）
+- [利用ガイド](guides/) - ユースケース別のガイド（Usage）
 
 ## ライセンス
 

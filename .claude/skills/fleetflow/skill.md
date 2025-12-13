@@ -1,7 +1,7 @@
 ---
 name: fleetflow
 description: FleetFlow（KDLベースのコンテナオーケストレーションツール）を効果的に使用するためのガイド
-version: 0.2.4
+version: 0.2.5
 ---
 
 # FleetFlow スキル
@@ -27,7 +27,10 @@ FleetFlowは、KDL（KDL Document Language）をベースにした超シンプ�
 | ステージ管理 | local/dev/staging/prod を統一管理 |
 | OrbStack連携 | macOSローカル開発に最適化 |
 | Dockerビルド | Dockerfileからのビルドをサポート |
+| イメージプッシュ | ビルド後のレジストリプッシュを自動化 |
 | サービスマージ | 複数ファイルでの設定オーバーライド |
+| クラウド対応 | さくらのクラウド、Cloudflareなど複数プロバイダー |
+| DNS自動管理 | Cloudflare DNSとの自動連携 |
 
 ## クイックスタート
 
@@ -50,7 +53,7 @@ stage "local" {
 }
 
 service "db" {
-    image "postgres:16"  // ⚠️ image は必須
+    image "postgres:16"  // image は必須
     ports {
         port 5432 5432
     }
@@ -80,7 +83,12 @@ fleetflow down local    # 停止・削除
 | `start <stage> [service]` | 停止中のサービスを起動 |
 | `stop <stage> [service]` | サービスを停止（コンテナ保持） |
 | `restart <stage> [service]` | サービスを再起動 |
+| `build <stage> [-n service]` | イメージをビルド |
+| `build <stage> --push [--tag <tag>]` | ビルド＆レジストリへプッシュ |
+| `rebuild <service> [stage]` | リビルドして再起動 |
 | `validate` | 設定を検証 |
+| `cloud up --stage <stage>` | クラウド環境を構築 |
+| `cloud down --stage <stage>` | クラウド環境を削除 |
 | `version` | バージョン表示 |
 
 詳細: [reference/cli-commands.md](reference/cli-commands.md)
@@ -96,12 +104,23 @@ stage "local" {             // ステージ定義
 }
 
 service "db" {              // サービス定義
-    image "postgres:16"     // ⚠️ 必須
+    image "postgres:16"     // 必須
     ports { ... }
     env { ... }
     volumes { ... }
     build { ... }           // Dockerビルド設定
     healthcheck { ... }     // ヘルスチェック設定
+}
+
+// クラウドインフラ（オプション）
+providers {
+    sakura-cloud { zone "tk1a" }
+    cloudflare { account-id env="CF_ACCOUNT_ID" }
+}
+
+server "app-server" {       // クラウドサーバー定義
+    provider "sakura-cloud"
+    plan core=4 memory=4
 }
 ```
 
@@ -114,12 +133,12 @@ service "db" {              // サービス定義
 v0.2.4以降、`image`フィールドは**必須**です。省略するとエラーになります：
 
 ```kdl
-// ✅ 正しい定義
+// 正しい定義
 service "db" {
     image "postgres:16"
 }
 
-// ❌ エラー: imageが必須
+// エラー: imageが必須
 service "db" {
     version "16"  // これだけではダメ
 }
@@ -157,6 +176,92 @@ service "api" {
 | `Vec<T>` | 後の定義が空でなければ上書き、空なら保持 |
 | `HashMap<K, V>` | 両方をマージ（後の定義が優先） |
 
+### Dockerビルド機能
+
+規約ベースの自動検出と明示的指定の両方に対応：
+
+```kdl
+// 規約ベース: ./services/api/Dockerfile を自動検出
+service "api" {
+    image "myapp/api:latest"
+    build_args {
+        NODE_VERSION "20"
+    }
+}
+
+// 明示的指定
+service "worker" {
+    image "myapp/worker:latest"
+    dockerfile "./backend/worker/Dockerfile"
+    context "./backend"
+    target "production"  // マルチステージビルド
+}
+```
+
+### イメージプッシュ機能
+
+ビルドしたイメージをレジストリにプッシュ：
+
+```bash
+# ビルドのみ
+fleetflow build local -n api
+
+# ビルド＆プッシュ
+fleetflow build local -n api --push
+
+# タグを指定してビルド＆プッシュ
+fleetflow build local -n api --push --tag v1.0.0
+```
+
+**認証方式**:
+- Docker標準の `~/.docker/config.json` から認証情報を取得
+- credential helper（osxkeychain, desktop など）も自動対応
+- 環境変数 `DOCKER_CONFIG` でパスをカスタマイズ可能
+
+**対応レジストリ**:
+- Docker Hub (docker.io)
+- GitHub Container Registry (ghcr.io)
+- Amazon ECR (*.dkr.ecr.*.amazonaws.com)
+- Google Container Registry (gcr.io)
+- プライベートレジストリ (localhost:5000 など)
+
+**タグ解決の優先順位**:
+1. `--tag` CLIオプション
+2. KDL設定の `image` フィールドのタグ
+3. デフォルト: `latest`
+
+### クラウドインフラ管理
+
+複数のクラウドプロバイダーをKDLで宣言的に管理：
+
+```kdl
+providers {
+    sakura-cloud { zone "tk1a" }
+    cloudflare { account-id env="CF_ACCOUNT_ID" }
+}
+
+stage "dev" {
+    server "app-server" {
+        provider "sakura-cloud"
+        plan core=4 memory=4
+        disk size=100 os="ubuntu-24.04"
+        dns_aliases "app" "api"  // DNSエイリアス
+    }
+}
+```
+
+### DNS自動管理（Cloudflare）
+
+`cloud up`/`cloud down`時にDNSレコードを自動管理：
+
+- サーバー作成時: `{service}-{stage}.{domain}` のAレコードを自動追加
+- サーバー削除時: DNSレコードを自動削除
+- `dns_aliases`でCNAMEエイリアスも自動作成
+
+必要な環境変数:
+- `CLOUDFLARE_API_TOKEN`: Cloudflare APIトークン
+- `CLOUDFLARE_ZONE_ID`: ドメインのZone ID
+
 ## コンテナ命名規則
 
 FleetFlowは以下の命名規則でコンテナを作成します：
@@ -192,10 +297,11 @@ fleetflow/
 
 このスキルは以下の場合に参照してください：
 
-- ✅ プロジェクトにFleetFlowを導入する際
-- ✅ `flow.kdl` 設定ファイルを作成・編集する際
-- ✅ コンテナ環境の構築・管理を行う際
-- ✅ ローカル開発環境のセットアップ時
+- プロジェクトにFleetFlowを導入する際
+- `flow.kdl` 設定ファイルを作成・編集する際
+- コンテナ環境の構築・管理を行う際
+- ローカル開発環境のセットアップ時
+- クラウドインフラを宣言的に管理する際
 
 ## リファレンス
 
