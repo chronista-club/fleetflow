@@ -32,6 +32,13 @@ CLIのエントリーポイント。`clap`を使用したコマンド定義と�
 - ワークフロー制御
 - 出力フォーマット
 
+**主要コマンド**:
+- `up`, `down` - ステージのライフサイクル管理
+- `start`, `stop`, `restart` - サービス単位の操作
+- `build`, `rebuild` - Dockerイメージビルド
+- `cloud up/down` - クラウドインフラ管理
+- `ps`, `logs`, `validate` - 状態確認
+
 ### fleetflow-atom
 
 KDLパーサーとコアデータモデル。
@@ -72,6 +79,11 @@ Dockerイメージのビルド機能。
 - **builder**: Bollard APIでのビルド実行
 - **progress**: 進捗表示
 
+**規約ベース検出**:
+1. `./services/{service-name}/Dockerfile`
+2. `./{service-name}/Dockerfile`
+3. `./Dockerfile.{service-name}`
+
 ### fleetflow-cloud
 
 クラウドインフラ管理の抽象化レイヤー。
@@ -84,9 +96,17 @@ Dockerイメージのビルド機能。
 
 さくらクラウドプロバイダー（usacloud CLI ラッパー）。
 
+- サーバー作成・削除
+- ディスク管理
+- SSH鍵設定
+
 ### fleetflow-cloud-cloudflare
 
-Cloudflareプロバイダー（スケルトン）。
+Cloudflareプロバイダー。
+
+- DNS管理（Aレコード、CNAMEレコード）
+- R2バケット管理（予定）
+- Workers管理（予定）
 
 ## 技術スタック
 
@@ -127,6 +147,26 @@ FleetFlowは主にmacOSのローカル開発環境での利用を想定してお
 - プロジェクト・ステージごとに整理された表示
 - Docker Composeとの互換性
 
+## DNS自動管理
+
+`cloud up`/`cloud down`時にCloudflare DNSを自動管理：
+
+**サブドメイン命名規則**:
+```
+{service}-{stage}.{domain}
+```
+
+例: `api-prod.example.com`
+
+**動作**:
+- `cloud up`: サーバー作成後にAレコードを自動追加
+- `cloud down`: サーバー削除前にDNSレコードを自動削除
+- `dns_aliases`: 追加のCNAMEエイリアスを自動作成
+
+**必要な環境変数**:
+- `CLOUDFLARE_API_TOKEN`
+- `CLOUDFLARE_ZONE_ID`
+
 ## ドキュメント構造
 
 ### spec/ - 仕様書（What & Why）
@@ -139,6 +179,7 @@ FleetFlowは主にmacOSのローカル開発環境での利用を想定してお
 - `06-orbstack-integration.md` - OrbStack連携
 - `07-docker-build.md` - Dockerビルド
 - `08-cloud-infrastructure.md` - クラウドインフラ
+- `09-dns-integration.md` - DNS連携
 
 ### design/ - 設計書（How）
 
@@ -148,6 +189,7 @@ FleetFlowは主にmacOSのローカル開発環境での利用を想定してお
 - `02-orbstack-integration.md` - OrbStack連携設計
 - `03-docker-build.md` - ビルド機能設計
 - `04-cloud-infrastructure.md` - クラウド設計
+- `05-dns-integration.md` - DNS連携設計
 
 ### guides/ - 利用ガイド（Usage）
 
@@ -158,21 +200,23 @@ FleetFlowは主にmacOSのローカル開発環境での利用を想定してお
 
 ## 開発フェーズ
 
-### Phase 1: MVP ✅
+### Phase 1: MVP
 - KDLパーサー
 - 基本CLI（up/down/ps/logs）
 - Docker API統合
 - OrbStack連携
 
-### Phase 2: ビルド機能 ✅
+### Phase 2: ビルド機能
 - Dockerビルド
 - 個別サービス操作
 - 複数設定ファイル対応
+- マルチステージビルド対応
 
-### Phase 3: クラウドインフラ 🚧
+### Phase 3: クラウドインフラ
 - クラウドプロバイダー抽象化
 - さくらクラウド/Cloudflare連携
-- CLI統合（未完了）
+- DNS自動管理
+- CLI統合（進行中）
 
 ### Phase 4: 拡張機能
 - 環境変数参照

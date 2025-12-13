@@ -1,7 +1,7 @@
 // Bollard 0.19.4 の非推奨APIを一時的に使用（BOLLARD_API_MAPPING.md参照）
 #![allow(deprecated)]
 
-use crate::error::{BuildError, Result};
+use crate::error::{BuildError, BuildResult};
 use bollard::Docker;
 use bollard::image::BuildImageOptions;
 use colored::Colorize;
@@ -25,7 +25,7 @@ impl ImageBuilder {
         build_args: HashMap<String, String>,
         target: Option<&str>,
         no_cache: bool,
-    ) -> Result<()> {
+    ) -> BuildResult<()> {
         tracing::info!("Building image: {}", tag);
 
         // ビルドオプションの設定
@@ -78,7 +78,7 @@ impl ImageBuilder {
     }
 
     /// ビルド出力の処理
-    fn handle_build_output(&self, output: bollard::models::BuildInfo) -> Result<()> {
+    fn handle_build_output(&self, output: bollard::models::BuildInfo) -> BuildResult<()> {
         if let Some(stream) = output.stream {
             // ビルドステップの出力
             print!("{}", stream);
@@ -106,7 +106,7 @@ impl ImageBuilder {
     }
 
     /// イメージの存在確認
-    pub async fn image_exists(&self, image_tag: &str) -> Result<bool> {
+    pub async fn image_exists(&self, image_tag: &str) -> BuildResult<bool> {
         match self.docker.inspect_image(image_tag).await {
             Ok(_) => Ok(true),
             Err(bollard::errors::Error::DockerResponseServerError {

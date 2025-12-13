@@ -1,4 +1,4 @@
-use crate::error::{BuildError, Result};
+use crate::error::{BuildError, BuildResult};
 use fleetflow_atom::Service;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -24,7 +24,7 @@ impl BuildResolver {
         &self,
         service_name: &str,
         service: &Service,
-    ) -> Result<Option<PathBuf>> {
+    ) -> BuildResult<Option<PathBuf>> {
         // 明示的な指定がある場合
         if let Some(build) = &service.build
             && let Some(dockerfile) = &build.dockerfile
@@ -63,7 +63,7 @@ impl BuildResolver {
     /// ビルドコンテキストのパスを解決
     ///
     /// デフォルトはプロジェクトルート
-    pub fn resolve_context(&self, service: &Service) -> Result<PathBuf> {
+    pub fn resolve_context(&self, service: &Service) -> BuildResult<PathBuf> {
         let context = if let Some(build) = &service.build {
             if let Some(ctx) = &build.context {
                 self.project_root.join(ctx)

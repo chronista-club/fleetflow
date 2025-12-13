@@ -20,6 +20,7 @@ path = "src/main.rs"
 fleetflow-atom = { version = "0.2.4", path = "../fleetflow-atom" }
 fleetflow-container = { version = "0.2.4", path = "../fleetflow-container" }
 fleetflow-config = { version = "0.2.4", path = "../fleetflow-config" }
+fleetflow-build = { version = "0.2.5", path = "../fleetflow-build" }
 fleetflow-cloud = { version = "0.2.4", path = "../fleetflow-cloud" }
 fleetflow-cloud-sakura = { version = "0.2.4", path = "../fleetflow-cloud-sakura" }
 fleetflow-cloud-cloudflare = { version = "0.2.4", path = "../fleetflow-cloud-cloudflare" }
