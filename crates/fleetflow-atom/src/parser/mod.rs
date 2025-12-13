@@ -14,7 +14,7 @@ use cloud::{parse_provider, parse_server};
 use service::parse_service;
 use stage::parse_stage;
 
-use crate::error::{FlowError, Result};
+use crate::error::Result;
 use crate::model::{Flow, Service};
 use kdl::KdlDocument;
 use std::collections::HashMap;
@@ -87,12 +87,8 @@ pub fn parse_kdl_string(content: &str, default_name: String) -> Result<Flow> {
         }
     }
 
-    // 全てのマージが完了した後にvalidationを行う
-    for (service_name, service) in &services {
-        if service.image.is_none() {
-            return Err(FlowError::MissingImage(service_name.clone()));
-        }
-    }
+    // Note: imageのバリデーションはstageフィルタリング後に行う
+    // （buildのみ指定されたサービスがstageに含まれない場合のエラーを防ぐため）
 
     Ok(Flow {
         name,
