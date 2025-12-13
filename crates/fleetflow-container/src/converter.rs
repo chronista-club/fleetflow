@@ -4,7 +4,7 @@
 #![allow(deprecated)]
 
 use bollard::container::{Config, CreateContainerOptions, NetworkingConfig};
-use bollard::models::{EndpointSettings, HostConfig, PortBinding};
+use bollard::models::{EndpointSettings, HostConfig, PortBinding, RestartPolicy, RestartPolicyNameEnum};
 use fleetflow_atom::{Flow, Service};
 use std::collections::HashMap;
 
@@ -107,11 +107,26 @@ pub fn service_to_container_config_with_network(
     // ネットワーク名
     let network_name = get_network_name(project_name, stage_name);
 
+    // 再起動ポリシーの変換
+    let restart_policy = service.restart.map(|policy| {
+        use fleetflow_atom::RestartPolicy as FlowRestartPolicy;
+        RestartPolicy {
+            name: Some(match policy {
+                FlowRestartPolicy::No => RestartPolicyNameEnum::NO,
+                FlowRestartPolicy::Always => RestartPolicyNameEnum::ALWAYS,
+                FlowRestartPolicy::OnFailure => RestartPolicyNameEnum::ON_FAILURE,
+                FlowRestartPolicy::UnlessStopped => RestartPolicyNameEnum::UNLESS_STOPPED,
+            }),
+            maximum_retry_count: None,
+        }
+    });
+
     // HostConfig設定
     // 注意: network_modeはNetworkingConfigと併用できないため設定しない
     let host_config = Some(HostConfig {
         port_bindings: Some(port_bindings),
         binds: Some(binds),
+        restart_policy,
         ..Default::default()
     });
 

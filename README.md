@@ -19,6 +19,7 @@ Docker Composeの手軽さはそのままに、より少ない記述で、より
 - **モジュール化**: include機能で設定を分割・再利用
 - **統一管理**: 開発環境から本番環境まで同じツールで
 - **OrbStack連携**: macOSでの開発体験を最適化
+- **再起動ポリシー**: ホスト再起動後のコンテナ自動復旧
 - **クラウド対応**: さくらのクラウド、Cloudflareなど複数プロバイダーをサポート
 
 ## クイックスタート
@@ -58,6 +59,7 @@ service "web" {
 
 service "db" {
     image "postgres:16"
+    restart "unless-stopped"
     ports {
         port host=5432 container=5432
     }

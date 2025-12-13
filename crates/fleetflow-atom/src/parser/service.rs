@@ -3,7 +3,7 @@
 use super::port::parse_port;
 use super::volume::parse_volume;
 use crate::error::{FlowError, Result};
-use crate::model::{BuildConfig, Service};
+use crate::model::{BuildConfig, RestartPolicy, Service, WaitConfig};
 use kdl::{KdlDocument, KdlNode};
 use std::path::PathBuf;
 
@@ -144,6 +144,23 @@ pub fn parse_service(node: &KdlNode) -> Result<(String, Service)> {
                         service.healthcheck = Some(parse_healthcheck(healthcheck_children));
                     }
                 }
+                // 再起動ポリシー
+                "restart" => {
+                    if let Some(policy_str) =
+                        child.entries().first().and_then(|e| e.value().as_string())
+                    {
+                        service.restart = RestartPolicy::from_str(policy_str);
+                    }
+                }
+                // 依存サービス待機設定（exponential backoff）
+                "wait_for" => {
+                    if let Some(wait_children) = child.children() {
+                        service.wait_for = Some(parse_wait_config(wait_children));
+                    } else {
+                        // 子ノードがなければデフォルト設定で有効化
+                        service.wait_for = Some(WaitConfig::default());
+                    }
+                }
                 _ => {}
             }
         }
@@ -268,10 +285,130 @@ pub fn parse_healthcheck(doc: &KdlDocument) -> crate::model::HealthCheck {
     }
 }
 
+/// wait_forブロックをパース（exponential backoff設定）
+pub fn parse_wait_config(doc: &KdlDocument) -> WaitConfig {
+    let mut config = WaitConfig::default();
+
+    for node in doc.nodes() {
+        match node.name().value() {
+            "max_retries" => {
+                if let Some(entry) = node.entries().first()
+                    && let Some(value) = entry.value().as_integer()
+                {
+                    config.max_retries = value as u32;
+                }
+            }
+            "initial_delay" => {
+                if let Some(entry) = node.entries().first()
+                    && let Some(value) = entry.value().as_integer()
+                {
+                    config.initial_delay_ms = value as u64;
+                }
+            }
+            "max_delay" => {
+                if let Some(entry) = node.entries().first()
+                    && let Some(value) = entry.value().as_integer()
+                {
+                    config.max_delay_ms = value as u64;
+                }
+            }
+            "multiplier" => {
+                if let Some(entry) = node.entries().first() {
+                    // 整数または浮動小数点数を受け付ける
+                    if let Some(value) = entry.value().as_float() {
+                        config.multiplier = value;
+                    } else if let Some(value) = entry.value().as_integer() {
+                        config.multiplier = value as f64;
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    config
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use kdl::KdlDocument;
+
+    #[test]
+    fn test_parse_restart_policy() {
+        let kdl = r#"
+            service "api" {
+                image "myapp:latest"
+                restart "unless-stopped"
+            }
+        "#;
+        let doc: KdlDocument = kdl.parse().unwrap();
+        let node = doc.nodes().first().unwrap();
+
+        let (name, service) = parse_service(node).unwrap();
+
+        assert_eq!(name, "api");
+        assert_eq!(service.restart, Some(RestartPolicy::UnlessStopped));
+    }
+
+    #[test]
+    fn test_parse_restart_policy_always() {
+        let kdl = r#"
+            service "db" {
+                image "postgres:16"
+                restart "always"
+            }
+        "#;
+        let doc: KdlDocument = kdl.parse().unwrap();
+        let node = doc.nodes().first().unwrap();
+
+        let (_, service) = parse_service(node).unwrap();
+        assert_eq!(service.restart, Some(RestartPolicy::Always));
+    }
+
+    #[test]
+    fn test_parse_restart_policy_on_failure() {
+        let kdl = r#"
+            service "worker" {
+                image "worker:latest"
+                restart "on-failure"
+            }
+        "#;
+        let doc: KdlDocument = kdl.parse().unwrap();
+        let node = doc.nodes().first().unwrap();
+
+        let (_, service) = parse_service(node).unwrap();
+        assert_eq!(service.restart, Some(RestartPolicy::OnFailure));
+    }
+
+    #[test]
+    fn test_parse_restart_policy_no() {
+        let kdl = r#"
+            service "temp" {
+                image "temp:latest"
+                restart "no"
+            }
+        "#;
+        let doc: KdlDocument = kdl.parse().unwrap();
+        let node = doc.nodes().first().unwrap();
+
+        let (_, service) = parse_service(node).unwrap();
+        assert_eq!(service.restart, Some(RestartPolicy::No));
+    }
+
+    #[test]
+    fn test_parse_service_no_restart() {
+        let kdl = r#"
+            service "simple" {
+                image "simple:latest"
+            }
+        "#;
+        let doc: KdlDocument = kdl.parse().unwrap();
+        let node = doc.nodes().first().unwrap();
+
+        let (_, service) = parse_service(node).unwrap();
+        assert_eq!(service.restart, None);
+    }
 
     #[test]
     fn test_parse_healthcheck_defaults() {
@@ -346,5 +483,89 @@ mod tests {
         assert_eq!(healthcheck.timeout, 3);
         assert_eq!(healthcheck.retries, 3);
         assert_eq!(healthcheck.start_period, 10);
+    }
+
+    #[test]
+    fn test_parse_wait_for_default() {
+        let kdl = r#"
+            service "api" {
+                image "myapp:latest"
+                depends_on "db"
+                wait_for
+            }
+        "#;
+        let doc: KdlDocument = kdl.parse().unwrap();
+        let node = doc.nodes().first().unwrap();
+
+        let (_, service) = parse_service(node).unwrap();
+
+        assert!(service.wait_for.is_some());
+        let wait_config = service.wait_for.unwrap();
+        assert_eq!(wait_config.max_retries, 23); // デフォルト値
+        assert_eq!(wait_config.initial_delay_ms, 1000);
+        assert_eq!(wait_config.max_delay_ms, 30000);
+        assert_eq!(wait_config.multiplier, 2.0);
+    }
+
+    #[test]
+    fn test_parse_wait_for_custom() {
+        let kdl = r#"
+            service "api" {
+                image "myapp:latest"
+                depends_on "db"
+                wait_for {
+                    max_retries 10
+                    initial_delay 500
+                    max_delay 60000
+                    multiplier 1.5
+                }
+            }
+        "#;
+        let doc: KdlDocument = kdl.parse().unwrap();
+        let node = doc.nodes().first().unwrap();
+
+        let (_, service) = parse_service(node).unwrap();
+
+        assert!(service.wait_for.is_some());
+        let wait_config = service.wait_for.unwrap();
+        assert_eq!(wait_config.max_retries, 10);
+        assert_eq!(wait_config.initial_delay_ms, 500);
+        assert_eq!(wait_config.max_delay_ms, 60000);
+        assert_eq!(wait_config.multiplier, 1.5);
+    }
+
+    #[test]
+    fn test_parse_service_no_wait_for() {
+        let kdl = r#"
+            service "db" {
+                image "postgres:16"
+            }
+        "#;
+        let doc: KdlDocument = kdl.parse().unwrap();
+        let node = doc.nodes().first().unwrap();
+
+        let (_, service) = parse_service(node).unwrap();
+        assert!(service.wait_for.is_none());
+    }
+
+    #[test]
+    fn test_wait_config_delay_calculation() {
+        let config = WaitConfig {
+            max_retries: 5,
+            initial_delay_ms: 1000,
+            max_delay_ms: 10000,
+            multiplier: 2.0,
+        };
+
+        // 0回目: 1000ms
+        assert_eq!(config.delay_for_attempt(0), 1000);
+        // 1回目: 2000ms
+        assert_eq!(config.delay_for_attempt(1), 2000);
+        // 2回目: 4000ms
+        assert_eq!(config.delay_for_attempt(2), 4000);
+        // 3回目: 8000ms
+        assert_eq!(config.delay_for_attempt(3), 8000);
+        // 4回目: 16000ms -> max_delay(10000ms)でキャップ
+        assert_eq!(config.delay_for_attempt(4), 10000);
     }
 }

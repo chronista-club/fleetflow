@@ -31,6 +31,11 @@ pub enum ContainerError {
 
     #[error("設定エラー: {0}")]
     ConfigError(String),
+
+    #[error(
+        "サービス '{service}' の準備完了を待機中にタイムアウトしました（{max_retries}回リトライ）\n\nヒント:\n  • 依存サービスが正常に起動しているか確認してください\n  • wait_forのmax_retriesを増やしてみてください"
+    )]
+    ServiceWaitTimeout { service: String, max_retries: u32 },
 }
 
 impl From<bollard::errors::Error> for ContainerError {

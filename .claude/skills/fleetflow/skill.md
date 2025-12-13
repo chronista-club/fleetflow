@@ -29,6 +29,8 @@ FleetFlowは、KDL（KDL Document Language）をベースにした超シンプ�
 | Dockerビルド | Dockerfileからのビルドをサポート |
 | イメージプッシュ | ビルド後のレジストリプッシュを自動化 |
 | サービスマージ | 複数ファイルでの設定オーバーライド |
+| 再起動ポリシー | ホスト再起動時のコンテナ自動復旧 |
+| 依存サービス待機 | Exponential Backoffで堅牢な起動順序制御 |
 | クラウド対応 | さくらのクラウド、Cloudflareなど複数プロバイダー |
 | DNS自動管理 | Cloudflare DNSとの自動連携 |
 
@@ -105,6 +107,9 @@ stage "local" {             // ステージ定義
 
 service "db" {              // サービス定義
     image "postgres:16"     // 必須
+    restart "unless-stopped" // 再起動ポリシー
+    depends_on "other"      // 依存サービス
+    wait_for { ... }        // 依存サービス待機設定
     ports { ... }
     env { ... }
     volumes { ... }
@@ -247,6 +252,61 @@ stage "dev" {
         disk size=100 os="ubuntu-24.04"
         dns_aliases "app" "api"  // DNSエイリアス
     }
+}
+```
+
+### 再起動ポリシー
+
+ホスト再起動後にコンテナを自動復旧させる：
+
+```kdl
+service "db" {
+    image "postgres:16"
+    restart "unless-stopped"  // ホスト再起動後も自動起動
+}
+```
+
+**対応する値**:
+
+| 値 | 説明 |
+|----|------|
+| `no` | 再起動しない（デフォルト） |
+| `always` | 常に再起動 |
+| `on-failure` | 異常終了時のみ再起動 |
+| `unless-stopped` | 明示的に停止されない限り再起動（推奨） |
+
+### 依存サービス待機（Exponential Backoff）
+
+K8sのReadiness Probeコンセプトを取り入れた、依存サービスの準備完了待機機能：
+
+```kdl
+service "api" {
+    image "myapp/api:latest"
+    depends_on "db" "redis"
+    wait_for {
+        max_retries 23        // 最大リトライ回数（デフォルト: 23）
+        initial_delay 1000    // 初回待機時間ms（デフォルト: 1000）
+        max_delay 30000       // 最大待機時間ms（デフォルト: 30000）
+        multiplier 2.0        // 待機時間の増加倍率（デフォルト: 2.0）
+    }
+}
+```
+
+**待機時間の計算**（Exponential Backoff）:
+```
+delay = initial_delay * multiplier^attempt
+```
+`max_delay`で上限を設定。デフォルト設定では1秒→2秒→4秒→8秒→...→30秒（上限）で待機。
+
+**デフォルト設定での動作**:
+- 最大約23回のリトライで約7分間の待機が可能
+- `wait_for`のみ指定でデフォルト値が適用される
+
+```kdl
+// デフォルト設定を使用
+service "api" {
+    depends_on "db"
+    wait_for  // 全てデフォルト値で待機
 }
 ```
 

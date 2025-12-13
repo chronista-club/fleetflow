@@ -172,6 +172,65 @@ service "web" {
 - 起動順序の制御に使用
 - スペース区切りで複数指定可能
 
+### 依存サービス待機（Exponential Backoff）
+
+```kdl
+service "api" {
+    image "myapp/api:latest"
+    depends_on "db" "redis"
+    wait_for {
+        max_retries 23        // 最大リトライ回数
+        initial_delay 1000    // 初回待機時間（ミリ秒）
+        max_delay 30000       // 最大待機時間（ミリ秒）
+        multiplier 2.0        // 待機時間の増加倍率
+    }
+}
+```
+
+K8sのReadiness Probeコンセプトを取り入れた、依存サービスの準備完了待機機能です。
+
+| パラメータ | デフォルト | 説明 |
+|-----------|-----------|------|
+| `max_retries` | 23 | 最大リトライ回数 |
+| `initial_delay` | 1000 | 初回待機時間（ミリ秒） |
+| `max_delay` | 30000 | 最大待機時間（ミリ秒） |
+| `multiplier` | 2.0 | 待機時間の増加倍率 |
+
+**待機時間の計算**（Exponential Backoff）:
+```
+delay = initial_delay * multiplier^attempt
+```
+
+デフォルト設定での待機パターン: 1秒→2秒→4秒→8秒→16秒→30秒（上限）...
+
+```kdl
+// デフォルト設定を使用
+service "api" {
+    depends_on "db"
+    wait_for  // 全てデフォルト値
+}
+```
+
+### 再起動ポリシー
+
+```kdl
+service "db" {
+    image "postgres:16"
+    restart "unless-stopped"
+}
+```
+
+**対応する値**:
+
+| 値 | 説明 |
+|----|------|
+| `no` | 再起動しない（デフォルト） |
+| `always` | 常に再起動 |
+| `on-failure` | 異常終了時のみ再起動 |
+| `unless-stopped` | 明示的に停止されない限り再起動 |
+
+**用途**: ホスト再起動後にコンテナを自動復旧させる場合に使用
+
 ### Dockerビルド設定
 
 ```kdl
@@ -373,6 +432,7 @@ stage "prod" {
 // PostgreSQL
 service "db" {
     image "postgres:16-alpine"
+    restart "unless-stopped"
     ports {
         port 5432 5432
     }
@@ -419,6 +479,10 @@ service "web" {
     }
     command "npm run dev"
     depends_on "db" "redis"
+    wait_for {
+        max_retries 10
+        initial_delay 1000
+    }
 }
 
 // CDN（本番のみ）
