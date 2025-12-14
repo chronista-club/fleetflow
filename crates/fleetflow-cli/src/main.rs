@@ -289,6 +289,9 @@ enum Commands {
     Validate,
     /// バージョン情報を表示
     Version,
+    /// FleetFlow自体を最新版に更新
+    #[command(name = "self-update")]
+    SelfUpdate,
     /// Dockerイメージをビルド
     Build {
         /// ステージ名
@@ -352,6 +355,11 @@ async fn main() -> anyhow::Result<()> {
     if matches!(cli.command, Commands::Version) {
         println!("fleetflow {}", env!("CARGO_PKG_VERSION"));
         return Ok(());
+    }
+
+    // SelfUpdateコマンドは設定ファイル不要
+    if matches!(cli.command, Commands::SelfUpdate) {
+        return self_update().await;
     }
 
     // プロジェクトルートを検索
@@ -1433,6 +1441,10 @@ async fn main() -> anyhow::Result<()> {
         Commands::Cloud(cloud_cmd) => {
             handle_cloud_command(cloud_cmd, &config).await?;
         }
+        Commands::SelfUpdate => {
+            // 早期リターンで処理済み（main関数冒頭）
+            unreachable!("SelfUpdate is handled before config loading");
+        }
     }
 
     Ok(())
@@ -2103,6 +2115,169 @@ async fn handle_build_command(
     for (service_name, full_image) in &build_results {
         println!("  {} {}: {}", "✓".green(), service_name, full_image.cyan());
     }
+
+    Ok(())
+}
+
+/// FleetFlow self-update: GitHub Releasesから最新版をダウンロードして更新
+async fn self_update() -> anyhow::Result<()> {
+    use std::process::Command;
+
+    println!("{}", "🔄 FleetFlow self-update".blue().bold());
+    println!();
+
+    let current_version = env!("CARGO_PKG_VERSION");
+    println!("現在のバージョン: {}", current_version.cyan());
+
+    // GitHub APIから最新リリース情報を取得
+    println!("最新バージョンを確認中...");
+
+    let client = reqwest::Client::new();
+    let response = client
+        .get("https://api.github.com/repos/osousa/fleetflow/releases/latest")
+        .header("User-Agent", "fleetflow-cli")
+        .send()
+        .await?;
+
+    if !response.status().is_success() {
+        return Err(anyhow::anyhow!(
+            "GitHubからリリース情報を取得できませんでした: {}",
+            response.status()
+        ));
+    }
+
+    let release: serde_json::Value = response.json().await?;
+    let latest_version = release["tag_name"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("tag_nameが見つかりません"))?
+        .trim_start_matches('v');
+
+    println!("最新バージョン: {}", latest_version.green());
+
+    // バージョン比較
+    if current_version == latest_version {
+        println!();
+        println!("{}", "✓ 既に最新版です！".green().bold());
+        return Ok(());
+    }
+
+    println!();
+    println!(
+        "{}",
+        format!("新しいバージョン {} が利用可能です", latest_version).yellow()
+    );
+
+    // ダウンロードURL決定
+    let os = std::env::consts::OS;
+    let arch = std::env::consts::ARCH;
+
+    let asset_name = match (os, arch) {
+        ("macos", "aarch64") => "fleetflow-darwin-arm64.tar.gz",
+        ("macos", "x86_64") => "fleetflow-darwin-amd64.tar.gz",
+        ("linux", "x86_64") => "fleetflow-linux-amd64.tar.gz",
+        ("linux", "aarch64") => "fleetflow-linux-arm64.tar.gz",
+        _ => {
+            return Err(anyhow::anyhow!(
+                "このプラットフォームはサポートされていません: {}-{}",
+                os,
+                arch
+            ))
+        }
+    };
+
+    // ダウンロードURLを取得
+    let assets = release["assets"]
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("assetsが見つかりません"))?;
+
+    let download_url = assets
+        .iter()
+        .find(|a| a["name"].as_str() == Some(asset_name))
+        .and_then(|a| a["browser_download_url"].as_str())
+        .ok_or_else(|| anyhow::anyhow!("{}が見つかりません", asset_name))?;
+
+    println!("ダウンロード中: {}", asset_name);
+
+    // 一時ディレクトリにダウンロード
+    let temp_dir = std::env::temp_dir().join("fleetflow-update");
+    std::fs::create_dir_all(&temp_dir)?;
+
+    let tar_path = temp_dir.join(asset_name);
+
+    // ダウンロード
+    let response = client.get(download_url).send().await?;
+    let bytes = response.bytes().await?;
+    std::fs::write(&tar_path, &bytes)?;
+
+    println!("展開中...");
+
+    // tar.gzを展開
+    let output = Command::new("tar")
+        .args(["-xzf", tar_path.to_str().unwrap(), "-C", temp_dir.to_str().unwrap()])
+        .output()?;
+
+    if !output.status.success() {
+        return Err(anyhow::anyhow!(
+            "展開に失敗しました: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+
+    // 現在のバイナリパスを取得
+    let current_exe = std::env::current_exe()?;
+    let new_binary = temp_dir.join("fleetflow");
+
+    // バイナリを置換
+    println!("インストール中...");
+
+    // まず古いバイナリをリネーム（バックアップ）
+    let backup_path = current_exe.with_extension("old");
+    if backup_path.exists() {
+        std::fs::remove_file(&backup_path)?;
+    }
+
+    // 新しいバイナリをコピー
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        // 実行権限を付与
+        let mut perms = std::fs::metadata(&new_binary)?.permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&new_binary, perms)?;
+    }
+
+    // self-replaceを使う代わりに、直接コピー
+    // (実行中のバイナリは上書きできないため、/usr/local/bin等にインストールされている場合はsudo必要)
+    match std::fs::copy(&new_binary, &current_exe) {
+        Ok(_) => {
+            println!();
+            println!(
+                "{}",
+                format!("✓ FleetFlow {} に更新しました！", latest_version)
+                    .green()
+                    .bold()
+            );
+        }
+        Err(e) if e.raw_os_error() == Some(26) || e.raw_os_error() == Some(1) => {
+            // Text file busy (26) or Permission denied (1)
+            println!();
+            println!(
+                "{}",
+                "⚠ 実行中のバイナリを直接置換できません。".yellow()
+            );
+            println!("以下のコマンドを実行してください:");
+            println!();
+            println!(
+                "  sudo cp {} {}",
+                new_binary.display(),
+                current_exe.display()
+            );
+        }
+        Err(e) => return Err(e.into()),
+    }
+
+    // クリーンアップ
+    std::fs::remove_dir_all(&temp_dir).ok();
 
     Ok(())
 }

@@ -278,6 +278,40 @@ impl Usacloud {
         let notes = self.list_notes().await?;
         Ok(notes.into_iter().find(|n| n.name == name))
     }
+
+    /// Create a note (startup script) - global resource, no zone needed
+    pub async fn create_note(&self, name: &str, content: &str, class: &str) -> Result<NoteInfo> {
+        let output = self
+            .run_command_global(&[
+                "note",
+                "create",
+                "--name",
+                name,
+                "--content",
+                content,
+                "--class",
+                class,
+                "--output-type",
+                "json",
+            ])
+            .await?;
+
+        let note: NoteInfo = serde_json::from_str(&output)?;
+        Ok(note)
+    }
+
+    /// Get or create a note by name
+    pub async fn get_or_create_note(
+        &self,
+        name: &str,
+        content: &str,
+        class: &str,
+    ) -> Result<NoteInfo> {
+        if let Some(note) = self.find_note_by_name(name).await? {
+            return Ok(note);
+        }
+        self.create_note(name, content, class).await
+    }
 }
 
 /// Authentication status from usacloud

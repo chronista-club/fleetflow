@@ -41,3 +41,6 @@ base64.workspace = true
 # TUI dependencies
 ratatui.workspace = true
 crossterm.workspace = true
+
+# Self-update
+reqwest = { version = "0.12", features = ["json"] }

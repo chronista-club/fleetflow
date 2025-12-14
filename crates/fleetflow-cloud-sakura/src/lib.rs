@@ -34,8 +34,10 @@
 
 pub mod error;
 pub mod provider;
+pub mod startup_scripts;
 pub mod usacloud;
 
 pub use error::{Result, SakuraError};
 pub use provider::{CreateServerOptions, SakuraCloudProvider, SimpleServerInfo};
+pub use startup_scripts::{get_builtin_script, is_builtin_script};
 pub use usacloud::{CreateServerConfig, NoteInfo, ServerInfo, SshKeyInfo, Usacloud};

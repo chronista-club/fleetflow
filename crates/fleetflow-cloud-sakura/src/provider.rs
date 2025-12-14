@@ -113,20 +113,27 @@ impl SakuraCloudProvider {
         };
 
         // Look up startup script (note) IDs
+        // Built-in scripts are automatically created if not present
         let note_ids = if options.startup_scripts.is_empty() {
             None
         } else {
-            let all_notes = self.usacloud.list_notes().await?;
-            let ids: Vec<String> = options
-                .startup_scripts
-                .iter()
-                .filter_map(|name| {
-                    all_notes
-                        .iter()
-                        .find(|n| n.name == *name)
-                        .map(|n| n.id_str())
-                })
-                .collect();
+            let mut ids: Vec<String> = Vec::new();
+            for name in &options.startup_scripts {
+                // Check if it's a built-in script
+                if let Some(content) = crate::startup_scripts::get_builtin_script(name) {
+                    // Get or create the built-in script
+                    let note = self
+                        .usacloud
+                        .get_or_create_note(name, content, "shell")
+                        .await?;
+                    ids.push(note.id_str());
+                } else {
+                    // Look up existing script by name
+                    if let Some(note) = self.usacloud.find_note_by_name(name).await? {
+                        ids.push(note.id_str());
+                    }
+                }
+            }
             if ids.is_empty() { None } else { Some(ids) }
         };
 
