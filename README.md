@@ -27,10 +27,6 @@ Docker Composeの手軽さはそのままに、より少ない記述で、より
 ### インストール
 
 ```bash
-# cargoでインストール
-cargo install fleetflow
-
-# または、GitHubから直接インストール
 cargo install --git https://github.com/chronista-club/fleetflow
 ```
 

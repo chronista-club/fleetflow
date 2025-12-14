@@ -18,7 +18,7 @@ FleetFlowは、KDL（KDL Document Language）をベースにした、革新的�
 ## 📦 インストール
 
 ```bash
-cargo install fleetflow
+cargo install --git https://github.com/chronista-club/fleetflow
 ```
 
 ## 🚀 クイックスタート

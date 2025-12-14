@@ -39,8 +39,6 @@ FleetFlowは、KDL（KDL Document Language）をベースにした超シンプ�
 ### インストール
 
 ```bash
-cargo install fleetflow
-# または
 cargo install --git https://github.com/chronista-club/fleetflow
 ```
 
