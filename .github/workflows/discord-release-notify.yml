@@ -1,0 +1,75 @@
+# 新しいリリースをDiscordに通知
+name: Discord Release Notification
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g., v0.2.10)'
+        required: true
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get release info (manual trigger)
+        if: github.event_name == 'workflow_dispatch'
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          RELEASE=$(gh api repos/${{ github.repository }}/releases/tags/${{ inputs.tag }})
+          echo "tag_name=$(echo $RELEASE | jq -r .tag_name)" >> $GITHUB_OUTPUT
+          echo "name=$(echo $RELEASE | jq -r .name)" >> $GITHUB_OUTPUT
+          echo "html_url=$(echo $RELEASE | jq -r .html_url)" >> $GITHUB_OUTPUT
+          echo "published_at=$(echo $RELEASE | jq -r .published_at)" >> $GITHUB_OUTPUT
+          # bodyはマルチラインなのでファイル経由で渡す
+          echo $RELEASE | jq -r '.body // ""' > /tmp/release_body.txt
+
+      - name: Send Discord Notification
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          TAG_NAME: ${{ github.event.release.tag_name || steps.release.outputs.tag_name }}
+          RELEASE_NAME: ${{ github.event.release.name || steps.release.outputs.name }}
+          HTML_URL: ${{ github.event.release.html_url || steps.release.outputs.html_url }}
+          PUBLISHED_AT: ${{ github.event.release.published_at || steps.release.outputs.published_at }}
+          RELEASE_BODY: ${{ github.event.release.body }}
+        run: |
+          # リリースノート本文を取得（手動実行時はファイルから、自動時は環境変数から）
+          if [ -f /tmp/release_body.txt ]; then
+            BODY=$(cat /tmp/release_body.txt)
+          else
+            BODY="${RELEASE_BODY}"
+          fi
+
+          # Discordの制限（2048文字）に収める & JSONエスケープ
+          BODY_ESCAPED=$(echo "$BODY" | head -c 1800 | jq -Rs '.')
+          # 前後のクォートを削除
+          BODY_ESCAPED=${BODY_ESCAPED:1:-1}
+
+          # リリースノートスレッドに投稿
+          RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -H "Content-Type: application/json" \
+            -d "{
+              \"embeds\": [{
+                \"title\": \"🚀 ${TAG_NAME} - ${RELEASE_NAME}\",
+                \"url\": \"${HTML_URL}\",
+                \"color\": 3447003,
+                \"description\": \"${BODY_ESCAPED}\",
+                \"footer\": {
+                  \"text\": \"FleetFlow\"
+                },
+                \"timestamp\": \"${PUBLISHED_AT}\"
+              }]
+            }" \
+            "$DISCORD_WEBHOOK?thread_id=1449862839043883018")
+
+          echo "Discord Response: $RESPONSE"
+
+          # エラーチェック
+          HTTP_STATUS=$(echo "$RESPONSE" | grep "HTTP_STATUS" | cut -d: -f2)
+          if [ "$HTTP_STATUS" -ge 400 ]; then
+            echo "Error: Discord returned HTTP $HTTP_STATUS"
+            exit 1
+          fi
