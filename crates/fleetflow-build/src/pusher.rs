@@ -4,8 +4,8 @@
 
 use crate::auth::RegistryAuth;
 use crate::error::{BuildError, BuildResult};
-use bollard::models::PushImageInfo;
 use bollard::Docker;
+use bollard::models::PushImageInfo;
 use colored::Colorize;
 use futures_util::StreamExt;
 use std::io::Write;
@@ -49,7 +49,9 @@ impl ImagePusher {
 
         // プッシュオプション（新しいAPI）
         #[allow(deprecated)]
-        let options = bollard::image::PushImageOptions::<String> { tag: tag.to_string() };
+        let options = bollard::image::PushImageOptions::<String> {
+            tag: tag.to_string(),
+        };
 
         println!("  → {}", full_image.cyan());
 

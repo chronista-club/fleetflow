@@ -566,19 +566,26 @@ async fn main() -> anyhow::Result<()> {
                     let build_args = resolver.resolve_build_args(service, &variables);
                     let target = service.build.as_ref().and_then(|b| b.target.clone());
 
-                    println!("  → Dockerfile: {}", dockerfile_path.display().to_string().cyan());
+                    println!(
+                        "  → Dockerfile: {}",
+                        dockerfile_path.display().to_string().cyan()
+                    );
                     println!("  → Context: {}", context_path.display().to_string().cyan());
                     println!("  → Image: {}", image.cyan());
 
-                    let context_data = match ContextBuilder::create_context(&context_path, &dockerfile_path) {
-                        Ok(data) => data,
-                        Err(e) => {
-                            return Err(anyhow::anyhow!("コンテキスト作成エラー: {}", e));
-                        }
-                    };
+                    let context_data =
+                        match ContextBuilder::create_context(&context_path, &dockerfile_path) {
+                            Ok(data) => data,
+                            Err(e) => {
+                                return Err(anyhow::anyhow!("コンテキスト作成エラー: {}", e));
+                            }
+                        };
 
                     let builder = ImageBuilder::new(docker.clone());
-                    match builder.build_image(context_data, image, build_args, target.as_deref(), false).await {
+                    match builder
+                        .build_image(context_data, image, build_args, target.as_deref(), false)
+                        .await
+                    {
                         Ok(_) => {
                             println!("  {} ビルド完了", "✓".green());
                         }
@@ -646,7 +653,9 @@ async fn main() -> anyhow::Result<()> {
                                     Ok(_) => println!("  ✓ 再起動完了"),
                                     Err(e) => {
                                         eprintln!("  ✗ 再起動エラー: {}", e);
-                                        return Err(anyhow::anyhow!("コンテナ再起動に失敗しました"));
+                                        return Err(anyhow::anyhow!(
+                                            "コンテナ再起動に失敗しました"
+                                        ));
                                     }
                                 }
                             }
@@ -675,18 +684,19 @@ async fn main() -> anyhow::Result<()> {
                             // BuildResolver を使ってDockerfileとコンテキストを解決
                             let resolver = BuildResolver::new(project_root.to_path_buf());
 
-                            let dockerfile_path = match resolver.resolve_dockerfile(service_name, service) {
-                                Ok(Some(path)) => path,
-                                Ok(None) => {
-                                    return Err(anyhow::anyhow!(
-                                        "Dockerfileが見つかりません: サービス '{}'",
-                                        service_name
-                                    ));
-                                }
-                                Err(e) => {
-                                    return Err(anyhow::anyhow!("Dockerfile解決エラー: {}", e));
-                                }
-                            };
+                            let dockerfile_path =
+                                match resolver.resolve_dockerfile(service_name, service) {
+                                    Ok(Some(path)) => path,
+                                    Ok(None) => {
+                                        return Err(anyhow::anyhow!(
+                                            "Dockerfileが見つかりません: サービス '{}'",
+                                            service_name
+                                        ));
+                                    }
+                                    Err(e) => {
+                                        return Err(anyhow::anyhow!("Dockerfile解決エラー: {}", e));
+                                    }
+                                };
 
                             let context_path = match resolver.resolve_context(service) {
                                 Ok(path) => path,
@@ -702,12 +712,18 @@ async fn main() -> anyhow::Result<()> {
                             // ターゲットステージ
                             let target = service.build.as_ref().and_then(|b| b.target.clone());
 
-                            println!("  → Dockerfile: {}", dockerfile_path.display().to_string().cyan());
+                            println!(
+                                "  → Dockerfile: {}",
+                                dockerfile_path.display().to_string().cyan()
+                            );
                             println!("  → Context: {}", context_path.display().to_string().cyan());
                             println!("  → Image: {}", image.cyan());
 
                             // ビルドコンテキストを作成
-                            let context_data = match ContextBuilder::create_context(&context_path, &dockerfile_path) {
+                            let context_data = match ContextBuilder::create_context(
+                                &context_path,
+                                &dockerfile_path,
+                            ) {
                                 Ok(data) => data,
                                 Err(e) => {
                                     return Err(anyhow::anyhow!("コンテキスト作成エラー: {}", e));
@@ -716,7 +732,16 @@ async fn main() -> anyhow::Result<()> {
 
                             // ビルダーを作成してビルド実行
                             let builder = ImageBuilder::new(docker.clone());
-                            match builder.build_image(context_data, image, build_args, target.as_deref(), false).await {
+                            match builder
+                                .build_image(
+                                    context_data,
+                                    image,
+                                    build_args,
+                                    target.as_deref(),
+                                    false,
+                                )
+                                .await
+                            {
                                 Ok(_) => {
                                     println!("  {} ビルド完了", "✓".green());
                                 }
@@ -1581,10 +1606,7 @@ async fn main() -> anyhow::Result<()> {
                 let service_def = match config.services.get(service_name) {
                     Some(s) => s,
                     None => {
-                        println!(
-                            "  ⚠ サービス '{}' の定義が見つかりません",
-                            service_name
-                        );
+                        println!("  ⚠ サービス '{}' の定義が見つかりません", service_name);
                         continue;
                     }
                 };
@@ -1606,10 +1628,7 @@ async fn main() -> anyhow::Result<()> {
                 // イメージ確認
                 #[allow(deprecated)]
                 let image = container_config.image.as_ref().ok_or_else(|| {
-                    anyhow::anyhow!(
-                        "サービス '{}' のイメージ設定が見つかりません",
-                        service_name
-                    )
+                    anyhow::anyhow!("サービス '{}' のイメージ設定が見つかりません", service_name)
                 })?;
 
                 // イメージの存在確認（pullしていない場合）
@@ -1782,7 +1801,16 @@ async fn main() -> anyhow::Result<()> {
             tag,
             no_cache,
         } => {
-            handle_build_command(&project_root, &config, &stage, service.as_deref(), push, tag.as_deref(), no_cache).await?;
+            handle_build_command(
+                &project_root,
+                &config,
+                &stage,
+                service.as_deref(),
+                push,
+                tag.as_deref(),
+                no_cache,
+            )
+            .await?;
         }
         Commands::Cloud(cloud_cmd) => {
             handle_cloud_command(cloud_cmd, &config).await?;
@@ -2257,9 +2285,7 @@ async fn handle_build_command(
     cli_tag: Option<&str>,
     no_cache: bool,
 ) -> anyhow::Result<()> {
-    use fleetflow_build::{
-        resolve_tag, BuildResolver, ContextBuilder, ImageBuilder, ImagePusher,
-    };
+    use fleetflow_build::{BuildResolver, ContextBuilder, ImageBuilder, ImagePusher, resolve_tag};
     use std::collections::HashMap;
 
     println!("{}", "Dockerイメージをビルド中...".green());
@@ -2377,7 +2403,10 @@ async fn handle_build_command(
         };
 
         // イメージタグを解決
-        let image_name = service.image.as_deref().unwrap_or_else(|| service_name.as_str());
+        let image_name = service
+            .image
+            .as_deref()
+            .unwrap_or_else(|| service_name.as_str());
         let (base_image, tag) = resolve_tag(cli_tag, image_name);
         let full_image = format!("{}:{}", base_image, tag);
 
@@ -2388,7 +2417,10 @@ async fn handle_build_command(
         // ターゲットステージ
         let target = service.build.as_ref().and_then(|b| b.target.clone());
 
-        println!("  → Dockerfile: {}", dockerfile_path.display().to_string().cyan());
+        println!(
+            "  → Dockerfile: {}",
+            dockerfile_path.display().to_string().cyan()
+        );
         println!("  → Context: {}", context_path.display().to_string().cyan());
         println!("  → Image: {}", full_image.cyan());
 
@@ -2403,7 +2435,13 @@ async fn handle_build_command(
 
         // ビルド実行
         match builder
-            .build_image(context_data, &full_image, build_args, target.as_deref(), no_cache)
+            .build_image(
+                context_data,
+                &full_image,
+                build_args,
+                target.as_deref(),
+                no_cache,
+            )
             .await
         {
             Ok(_) => {
@@ -2446,7 +2484,9 @@ async fn handle_build_command(
     if push {
         println!(
             "{}",
-            "✓ すべてのイメージがビルド＆プッシュされました！".green().bold()
+            "✓ すべてのイメージがビルド＆プッシュされました！"
+                .green()
+                .bold()
         );
     } else {
         println!(
@@ -2527,7 +2567,7 @@ async fn self_update() -> anyhow::Result<()> {
                 "このプラットフォームはサポートされていません: {}-{}",
                 os,
                 arch
-            ))
+            ));
         }
     };
 
@@ -2572,7 +2612,12 @@ async fn self_update() -> anyhow::Result<()> {
 
     // tar.gzを展開
     let output = Command::new("tar")
-        .args(["-xzf", tar_path.to_str().unwrap(), "-C", temp_dir.to_str().unwrap()])
+        .args([
+            "-xzf",
+            tar_path.to_str().unwrap(),
+            "-C",
+            temp_dir.to_str().unwrap(),
+        ])
         .output()?;
 
     if !output.status.success() {
@@ -2620,10 +2665,7 @@ async fn self_update() -> anyhow::Result<()> {
         Err(e) if e.raw_os_error() == Some(26) || e.raw_os_error() == Some(1) => {
             // Text file busy (26) or Permission denied (1)
             println!();
-            println!(
-                "{}",
-                "⚠ 実行中のバイナリを直接置換できません。".yellow()
-            );
+            println!("{}", "⚠ 実行中のバイナリを直接置換できません。".yellow());
             println!("以下のコマンドを実行してください:");
             println!();
             println!(
@@ -2689,10 +2731,7 @@ async fn check_and_update_if_needed() -> anyhow::Result<()> {
                 current_version.yellow()
             )
         );
-        println!(
-            "{}",
-            "   更新するには: fleetflow self-update".dimmed()
-        );
+        println!("{}", "   更新するには: fleetflow self-update".dimmed());
         println!();
 
         // 自動更新の確認
@@ -2714,11 +2753,8 @@ async fn check_and_update_if_needed() -> anyhow::Result<()> {
 
 /// バージョン比較: new_ver が current_ver より新しければ true
 fn is_newer_version(new_ver: &str, current_ver: &str) -> bool {
-    let parse_version = |v: &str| -> Vec<u32> {
-        v.split('.')
-            .filter_map(|s| s.parse().ok())
-            .collect()
-    };
+    let parse_version =
+        |v: &str| -> Vec<u32> { v.split('.').filter_map(|s| s.parse().ok()).collect() };
 
     let new_parts = parse_version(new_ver);
     let current_parts = parse_version(current_ver);

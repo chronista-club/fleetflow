@@ -7,9 +7,9 @@
 #![allow(deprecated)]
 
 use crate::error::{ContainerError, Result};
+use bollard::Docker;
 use bollard::container::InspectContainerOptions;
 use bollard::models::HealthStatusEnum;
-use bollard::Docker;
 use fleetflow_atom::WaitConfig;
 use std::time::Duration;
 use tokio::time::sleep;
@@ -75,11 +75,11 @@ async fn check_container_health(docker: &Docker, container_name: &str) -> Result
         .map_err(|e| ContainerError::DockerApiError(e.to_string()))?;
 
     // コンテナの状態を確認
-    let state = inspect_result.state.ok_or_else(|| {
-        ContainerError::ContainerNotFound {
+    let state = inspect_result
+        .state
+        .ok_or_else(|| ContainerError::ContainerNotFound {
             container: container_name.to_string(),
-        }
-    })?;
+        })?;
 
     // Running状態かどうか
     let is_running = state.running.unwrap_or(false);

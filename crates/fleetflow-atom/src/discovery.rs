@@ -137,8 +137,7 @@ pub fn discover_files_with_stage(
     // flow.{stage}.kdl または .fleetflow/flow.{stage}.kdl（ステージ指定時のみ）
     if let Some(stage_name) = stage {
         let stage_file = project_root.join(format!("flow.{}.kdl", stage_name));
-        let fleetflow_stage_file =
-            project_root.join(format!(".fleetflow/flow.{}.kdl", stage_name));
+        let fleetflow_stage_file = project_root.join(format!(".fleetflow/flow.{}.kdl", stage_name));
         if stage_file.exists() {
             debug!(file = %stage_file.display(), stage = %stage_name, "Found stage override file");
             discovered.stage_override = Some(stage_file);

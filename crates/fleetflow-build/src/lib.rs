@@ -17,5 +17,5 @@ pub use builder::ImageBuilder;
 pub use context::ContextBuilder;
 pub use error::{BuildError, BuildResult};
 pub use progress::BuildProgress;
-pub use pusher::{resolve_tag, split_image_tag, ImagePusher};
+pub use pusher::{ImagePusher, resolve_tag, split_image_tag};
 pub use resolver::BuildResolver;

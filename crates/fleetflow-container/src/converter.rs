@@ -4,7 +4,9 @@
 #![allow(deprecated)]
 
 use bollard::container::{Config, CreateContainerOptions, NetworkingConfig};
-use bollard::models::{EndpointSettings, HostConfig, PortBinding, RestartPolicy, RestartPolicyNameEnum};
+use bollard::models::{
+    EndpointSettings, HostConfig, PortBinding, RestartPolicy, RestartPolicyNameEnum,
+};
 use fleetflow_atom::{Flow, Service};
 use std::collections::HashMap;
 

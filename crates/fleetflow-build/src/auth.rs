@@ -144,12 +144,11 @@ impl RegistryAuth {
 
     /// Docker config.json を読み込み
     fn load_docker_config(&self) -> BuildResult<DockerConfig> {
-        let content = std::fs::read_to_string(&self.config_path).map_err(|e| {
-            BuildError::AuthFailed {
+        let content =
+            std::fs::read_to_string(&self.config_path).map_err(|e| BuildError::AuthFailed {
                 registry: self.config_path.display().to_string(),
                 message: format!("Failed to read config.json: {}", e),
-            }
-        })?;
+            })?;
 
         serde_json::from_str(&content).map_err(|e| BuildError::AuthFailed {
             registry: self.config_path.display().to_string(),
@@ -211,10 +210,12 @@ impl RegistryAuth {
             stdin.write_all(registry.as_bytes()).ok();
         }
 
-        let output = child.wait_with_output().map_err(|e| BuildError::AuthFailed {
-            registry: registry.to_string(),
-            message: format!("Credential helper failed: {}", e),
-        })?;
+        let output = child
+            .wait_with_output()
+            .map_err(|e| BuildError::AuthFailed {
+                registry: registry.to_string(),
+                message: format!("Credential helper failed: {}", e),
+            })?;
 
         if !output.status.success() {
             // credential helper が認証情報を持っていない場合は None を返す

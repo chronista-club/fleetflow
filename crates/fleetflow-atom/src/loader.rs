@@ -2,7 +2,9 @@
 //!
 //! ファイル発見、テンプレート展開、パースを統合
 
-use crate::discovery::{DiscoveredFiles, discover_files, discover_files_with_stage, find_project_root};
+use crate::discovery::{
+    DiscoveredFiles, discover_files, discover_files_with_stage, find_project_root,
+};
 use crate::error::{FlowError, Result};
 use crate::model::Flow;
 use crate::parser::parse_kdl_string;
@@ -39,10 +41,7 @@ pub fn load_project_from_root(project_root: &Path) -> Result<Flow> {
 /// stage が指定されている場合、flow.{stage}.kdl も読み込んでマージします。
 /// 読み込み順序: flow.kdl → flow.{stage}.kdl → flow.local.kdl
 #[instrument(skip(project_root), fields(project_root = %project_root.display()))]
-pub fn load_project_from_root_with_stage(
-    project_root: &Path,
-    stage: Option<&str>,
-) -> Result<Flow> {
+pub fn load_project_from_root_with_stage(project_root: &Path, stage: Option<&str>) -> Result<Flow> {
     // 1. ファイル発見
     debug!("Step 1: Discovering files");
     let discovered = discover_files_with_stage(project_root, stage)?;
