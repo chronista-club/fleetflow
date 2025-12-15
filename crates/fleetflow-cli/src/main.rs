@@ -292,6 +292,20 @@ enum Commands {
     /// FleetFlow自体を最新版に更新
     #[command(name = "self-update")]
     SelfUpdate,
+    /// ステージをデプロイ（CI/CD向け）
+    /// 既存コンテナを強制停止・削除し、最新イメージで再起動
+    Deploy {
+        /// ステージ名を指定 (local, dev, stg, prd)
+        /// 環境変数 FLOW_STAGE からも読み込み可能
+        #[arg(short, long, env = "FLOW_STAGE")]
+        stage: Option<String>,
+        /// 最新イメージを強制的にpull
+        #[arg(long)]
+        pull: bool,
+        /// 確認なしで実行
+        #[arg(short, long)]
+        yes: bool,
+    },
     /// Dockerイメージをビルド
     Build {
         /// ステージ名
@@ -1352,6 +1366,276 @@ async fn main() -> anyhow::Result<()> {
                 }
                 Err(e) => return Err(e.into()),
             }
+        }
+        Commands::Deploy { stage, pull, yes } => {
+            println!("{}", "デプロイを開始します...".blue().bold());
+            print_loaded_config_files(&project_root);
+
+            // ステージ名の決定
+            let stage_name = determine_stage_name(stage, &config)?;
+            println!("ステージ: {}", stage_name.cyan());
+
+            // ステージの取得
+            let stage_config = config
+                .stages
+                .get(&stage_name)
+                .ok_or_else(|| anyhow::anyhow!("ステージ '{}' が見つかりません", stage_name))?;
+
+            println!();
+            println!(
+                "{}",
+                format!("デプロイ対象サービス ({} 個):", stage_config.services.len()).bold()
+            );
+            for service_name in &stage_config.services {
+                let service = config.services.get(service_name);
+                let image = service
+                    .and_then(|s| s.image.as_ref())
+                    .map(|s| s.as_str())
+                    .unwrap_or("(イメージ未設定)");
+                println!("  • {} ({})", service_name.cyan(), image);
+            }
+
+            // 確認（--yesが指定されていない場合）
+            if !yes {
+                println!();
+                println!(
+                    "{}",
+                    "警告: 既存のコンテナを停止・削除して再作成します。".yellow()
+                );
+                println!("実行するには --yes オプションを指定してください");
+                return Ok(());
+            }
+
+            // Docker接続
+            println!();
+            println!("{}", "Dockerに接続中...".blue());
+            let docker = init_docker_with_error_handling().await?;
+
+            // 1. 既存コンテナの停止・削除
+            println!();
+            println!("{}", "【Step 1/3】既存コンテナを停止・削除中...".yellow());
+            for service_name in &stage_config.services {
+                let container_name = format!("{}-{}-{}", config.name, stage_name, service_name);
+
+                // 停止
+                match docker
+                    .stop_container(
+                        &container_name,
+                        None::<bollard::query_parameters::StopContainerOptions>,
+                    )
+                    .await
+                {
+                    Ok(_) => {
+                        println!("  ✓ {} を停止しました", service_name.cyan());
+                    }
+                    Err(bollard::errors::Error::DockerResponseServerError {
+                        status_code: 404,
+                        ..
+                    }) => {
+                        println!("  - {} (コンテナなし)", service_name);
+                    }
+                    Err(bollard::errors::Error::DockerResponseServerError {
+                        status_code: 304,
+                        ..
+                    }) => {
+                        println!("  - {} (既に停止中)", service_name);
+                    }
+                    Err(e) => {
+                        println!("  ⚠ {} 停止エラー: {}", service_name, e);
+                    }
+                }
+
+                // 削除（強制）
+                match docker
+                    .remove_container(
+                        &container_name,
+                        Some(bollard::query_parameters::RemoveContainerOptions {
+                            force: true,
+                            ..Default::default()
+                        }),
+                    )
+                    .await
+                {
+                    Ok(_) => {
+                        println!("  ✓ {} を削除しました", service_name.cyan());
+                    }
+                    Err(bollard::errors::Error::DockerResponseServerError {
+                        status_code: 404,
+                        ..
+                    }) => {
+                        // コンテナが存在しない場合は無視
+                    }
+                    Err(e) => {
+                        println!("  ⚠ {} 削除エラー: {}", service_name, e);
+                    }
+                }
+            }
+
+            // 2. イメージのpull（--pullが指定されている場合）
+            if pull {
+                println!();
+                println!("{}", "【Step 2/3】最新イメージをダウンロード中...".blue());
+                for service_name in &stage_config.services {
+                    if let Some(service) = config.services.get(service_name) {
+                        if let Some(image) = &service.image {
+                            println!("  ↓ {} ({})", service_name.cyan(), image);
+                            match pull_image(&docker, image).await {
+                                Ok(_) => {}
+                                Err(e) => {
+                                    println!("    ⚠ pullエラー: {}", e);
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                println!();
+                println!(
+                    "{}",
+                    "【Step 2/3】イメージpullをスキップ（--pullで強制pull）"
+                );
+            }
+
+            // 3. コンテナの作成・起動
+            println!();
+            println!("{}", "【Step 3/3】コンテナを作成・起動中...".green());
+
+            // 依存関係順にソート（簡易版：depends_onがないものを先に）
+            let mut ordered_services: Vec<String> = Vec::new();
+            let mut remaining: Vec<String> = stage_config.services.clone();
+
+            // まずdepends_onが空のサービスを追加
+            remaining.retain(|name| {
+                if let Some(service) = config.services.get(name) {
+                    if service.depends_on.is_empty() {
+                        ordered_services.push(name.clone());
+                        return false;
+                    }
+                }
+                true
+            });
+
+            // 残りを追加（依存関係があるもの）
+            ordered_services.extend(remaining);
+
+            for service_name in &ordered_services {
+                let service_def = match config.services.get(service_name) {
+                    Some(s) => s,
+                    None => {
+                        println!(
+                            "  ⚠ サービス '{}' の定義が見つかりません",
+                            service_name
+                        );
+                        continue;
+                    }
+                };
+
+                println!();
+                println!(
+                    "{}",
+                    format!("■ {} を起動中...", service_name).green().bold()
+                );
+
+                let (container_config, create_options) =
+                    fleetflow_container::service_to_container_config(
+                        service_name,
+                        service_def,
+                        &stage_name,
+                        &config.name,
+                    );
+
+                // イメージ確認
+                #[allow(deprecated)]
+                let image = container_config.image.as_ref().ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "サービス '{}' のイメージ設定が見つかりません",
+                        service_name
+                    )
+                })?;
+
+                // イメージの存在確認（pullしていない場合）
+                if !pull {
+                    match docker.inspect_image(image).await {
+                        Ok(_) => {}
+                        Err(bollard::errors::Error::DockerResponseServerError {
+                            status_code: 404,
+                            ..
+                        }) => {
+                            pull_image(&docker, image).await?;
+                        }
+                        Err(e) => return Err(e.into()),
+                    }
+                }
+
+                // コンテナ作成
+                match docker
+                    .create_container(Some(create_options.clone()), container_config.clone())
+                    .await
+                {
+                    Ok(_) => {
+                        println!("  ✓ コンテナを作成しました");
+                    }
+                    Err(e) => {
+                        println!("  ✗ コンテナ作成エラー: {}", e);
+                        return Err(e.into());
+                    }
+                }
+
+                // 依存サービスの待機（wait_forが設定されている場合）
+                if let Some(wait_config) = &service_def.wait_for {
+                    if !service_def.depends_on.is_empty() {
+                        println!("  ↻ 依存サービスの準備完了を待機中...");
+                        for dep_service in &service_def.depends_on {
+                            let dep_container =
+                                format!("{}-{}-{}", config.name, stage_name, dep_service);
+                            match fleetflow_container::wait_for_service(
+                                &docker,
+                                &dep_container,
+                                wait_config,
+                            )
+                            .await
+                            {
+                                Ok(_) => {
+                                    println!("    ✓ {} が準備完了", dep_service.cyan());
+                                }
+                                Err(e) => {
+                                    println!(
+                                        "    ⚠ {} の待機でエラー: {}",
+                                        dep_service.yellow(),
+                                        e
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // コンテナ起動
+                let container_name = format!("{}-{}-{}", config.name, stage_name, service_name);
+                match docker
+                    .start_container(
+                        &container_name,
+                        None::<bollard::query_parameters::StartContainerOptions>,
+                    )
+                    .await
+                {
+                    Ok(_) => {
+                        println!("  ✓ 起動完了");
+                    }
+                    Err(e) => {
+                        println!("  ✗ 起動エラー: {}", e);
+                        return Err(e.into());
+                    }
+                }
+            }
+
+            println!();
+            println!(
+                "{}",
+                format!("✓ デプロイ完了: ステージ '{}'", stage_name)
+                    .green()
+                    .bold()
+            );
         }
         Commands::Validate => {
             println!("{}", "設定を検証中...".blue());
