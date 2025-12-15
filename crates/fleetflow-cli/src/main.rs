@@ -530,6 +530,65 @@ async fn main() -> anyhow::Result<()> {
                         &config.name,
                     );
 
+                // build設定がある場合は先にビルドを実行（ローカルビルド優先）
+                if service.build.is_some() {
+                    #[allow(deprecated)]
+                    let image = container_config
+                        .image
+                        .as_ref()
+                        .ok_or_else(|| anyhow::anyhow!("イメージ名が指定されていません"))?;
+
+                    println!("  🔨 build設定があるためローカルビルドを実行...");
+
+                    let resolver = BuildResolver::new(project_root.to_path_buf());
+
+                    let dockerfile_path = match resolver.resolve_dockerfile(service_name, service) {
+                        Ok(Some(path)) => path,
+                        Ok(None) => {
+                            return Err(anyhow::anyhow!(
+                                "Dockerfileが見つかりません: サービス '{}'",
+                                service_name
+                            ));
+                        }
+                        Err(e) => {
+                            return Err(anyhow::anyhow!("Dockerfile解決エラー: {}", e));
+                        }
+                    };
+
+                    let context_path = match resolver.resolve_context(service) {
+                        Ok(path) => path,
+                        Err(e) => {
+                            return Err(anyhow::anyhow!("コンテキスト解決エラー: {}", e));
+                        }
+                    };
+
+                    let variables: HashMap<String, String> = std::env::vars().collect();
+                    let build_args = resolver.resolve_build_args(service, &variables);
+                    let target = service.build.as_ref().and_then(|b| b.target.clone());
+
+                    println!("  → Dockerfile: {}", dockerfile_path.display().to_string().cyan());
+                    println!("  → Context: {}", context_path.display().to_string().cyan());
+                    println!("  → Image: {}", image.cyan());
+
+                    let context_data = match ContextBuilder::create_context(&context_path, &dockerfile_path) {
+                        Ok(data) => data,
+                        Err(e) => {
+                            return Err(anyhow::anyhow!("コンテキスト作成エラー: {}", e));
+                        }
+                    };
+
+                    let builder = ImageBuilder::new(docker.clone());
+                    match builder.build_image(context_data, image, build_args, target.as_deref(), false).await {
+                        Ok(_) => {
+                            println!("  {} ビルド完了", "✓".green());
+                        }
+                        Err(e) => {
+                            eprintln!("  ✗ ビルドエラー: {}", e);
+                            return Err(anyhow::anyhow!("イメージのビルドに失敗しました"));
+                        }
+                    }
+                }
+
                 // コンテナ作成
                 match docker
                     .create_container(Some(create_options.clone()), container_config.clone())
