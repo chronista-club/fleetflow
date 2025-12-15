@@ -149,7 +149,7 @@ pub fn parse_service(node: &KdlNode) -> Result<(String, Service)> {
                     if let Some(policy_str) =
                         child.entries().first().and_then(|e| e.value().as_string())
                     {
-                        service.restart = RestartPolicy::from_str(policy_str);
+                        service.restart = RestartPolicy::parse(policy_str);
                     }
                 }
                 // 依存サービス待機設定（exponential backoff）

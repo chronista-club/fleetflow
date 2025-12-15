@@ -31,10 +31,11 @@ pub struct Service {
 }
 
 /// 再起動ポリシー
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum RestartPolicy {
     /// 再起動しない（デフォルト）
+    #[default]
     No,
     /// 常に再起動
     Always,
@@ -44,15 +45,9 @@ pub enum RestartPolicy {
     UnlessStopped,
 }
 
-impl Default for RestartPolicy {
-    fn default() -> Self {
-        Self::No
-    }
-}
-
 impl RestartPolicy {
     /// 文字列からパース
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "no" => Some(Self::No),
             "always" => Some(Self::Always),

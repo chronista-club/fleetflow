@@ -89,10 +89,10 @@ async fn check_container_health(docker: &Docker, container_name: &str) -> Result
     }
 
     // ヘルスチェックが設定されている場合、そのステータスを確認
-    if let Some(health) = state.health {
-        if let Some(status) = health.status {
-            return Ok(status == HealthStatusEnum::HEALTHY);
-        }
+    if let Some(health) = state.health
+        && let Some(status) = health.status
+    {
+        return Ok(status == HealthStatusEnum::HEALTHY);
     }
 
     // ヘルスチェックがない場合はRunning状態で準備完了とみなす

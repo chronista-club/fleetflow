@@ -93,13 +93,12 @@ impl RegistryAuth {
         let config = self.load_docker_config()?;
 
         // 1. auths セクションを確認
-        if let Some(auth_entry) = config.auths.get(&registry) {
-            if let Some(auth_b64) = &auth_entry.auth {
-                if let Some(creds) = self.decode_auth(auth_b64, &registry)? {
-                    tracing::debug!("Found credentials in auths for {}", registry);
-                    return Ok(Some(creds));
-                }
-            }
+        if let Some(auth_entry) = config.auths.get(&registry)
+            && let Some(auth_b64) = &auth_entry.auth
+            && let Some(creds) = self.decode_auth(auth_b64, &registry)?
+        {
+            tracing::debug!("Found credentials in auths for {}", registry);
+            return Ok(Some(creds));
         }
 
         // 2. credential helper を確認

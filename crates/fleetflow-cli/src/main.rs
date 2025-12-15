@@ -1560,24 +1560,21 @@ async fn main() -> anyhow::Result<()> {
                 println!();
                 println!("{}", "【Step 2/3】最新イメージをダウンロード中...".blue());
                 for service_name in &stage_config.services {
-                    if let Some(service) = config.services.get(service_name) {
-                        if let Some(image) = &service.image {
-                            println!("  ↓ {} ({})", service_name.cyan(), image);
-                            match pull_image(&docker, image).await {
-                                Ok(_) => {}
-                                Err(e) => {
-                                    println!("    ⚠ pullエラー: {}", e);
-                                }
+                    if let Some(service) = config.services.get(service_name)
+                        && let Some(image) = &service.image
+                    {
+                        println!("  ↓ {} ({})", service_name.cyan(), image);
+                        match pull_image(&docker, image).await {
+                            Ok(_) => {}
+                            Err(e) => {
+                                println!("    ⚠ pullエラー: {}", e);
                             }
                         }
                     }
                 }
             } else {
                 println!();
-                println!(
-                    "{}",
-                    "【Step 2/3】イメージpullをスキップ（--pullで強制pull）"
-                );
+                println!("【Step 2/3】イメージpullをスキップ（--pullで強制pull）");
             }
 
             // 3. コンテナの作成・起動
@@ -1590,11 +1587,11 @@ async fn main() -> anyhow::Result<()> {
 
             // まずdepends_onが空のサービスを追加
             remaining.retain(|name| {
-                if let Some(service) = config.services.get(name) {
-                    if service.depends_on.is_empty() {
-                        ordered_services.push(name.clone());
-                        return false;
-                    }
+                if let Some(service) = config.services.get(name)
+                    && service.depends_on.is_empty()
+                {
+                    ordered_services.push(name.clone());
+                    return false;
                 }
                 true
             });
@@ -1660,29 +1657,29 @@ async fn main() -> anyhow::Result<()> {
                 }
 
                 // 依存サービスの待機（wait_forが設定されている場合）
-                if let Some(wait_config) = &service_def.wait_for {
-                    if !service_def.depends_on.is_empty() {
-                        println!("  ↻ 依存サービスの準備完了を待機中...");
-                        for dep_service in &service_def.depends_on {
-                            let dep_container =
-                                format!("{}-{}-{}", config.name, stage_name, dep_service);
-                            match fleetflow_container::wait_for_service(
-                                &docker,
-                                &dep_container,
-                                wait_config,
-                            )
-                            .await
-                            {
-                                Ok(_) => {
-                                    println!("    ✓ {} が準備完了", dep_service.cyan());
-                                }
-                                Err(e) => {
-                                    println!(
-                                        "    ⚠ {} の待機でエラー: {}",
-                                        dep_service.yellow(),
-                                        e
-                                    );
-                                }
+                if let Some(wait_config) = &service_def.wait_for
+                    && !service_def.depends_on.is_empty()
+                {
+                    println!("  ↻ 依存サービスの準備完了を待機中...");
+                    for dep_service in &service_def.depends_on {
+                        let dep_container =
+                            format!("{}-{}-{}", config.name, stage_name, dep_service);
+                        match fleetflow_container::wait_for_service(
+                            &docker,
+                            &dep_container,
+                            wait_config,
+                        )
+                        .await
+                        {
+                            Ok(_) => {
+                                println!("    ✓ {} が準備完了", dep_service.cyan());
+                            }
+                            Err(e) => {
+                                println!(
+                                    "    ⚠ {} の待機でエラー: {}",
+                                    dep_service.yellow(),
+                                    e
+                                );
                             }
                         }
                     }
@@ -2403,10 +2400,7 @@ async fn handle_build_command(
         };
 
         // イメージタグを解決
-        let image_name = service
-            .image
-            .as_deref()
-            .unwrap_or_else(|| service_name.as_str());
+        let image_name = service.image.as_deref().unwrap_or(service_name.as_str());
         let (base_image, tag) = resolve_tag(cli_tag, image_name);
         let full_image = format!("{}:{}", base_image, tag);
 
@@ -2724,12 +2718,9 @@ async fn check_and_update_if_needed() -> anyhow::Result<()> {
     if is_newer_version(latest_version, current_version) {
         println!();
         println!(
-            "{}",
-            format!(
-                "📦 新しいバージョン {} が利用可能です（現在: {}）",
-                latest_version.green(),
-                current_version.yellow()
-            )
+            "📦 新しいバージョン {} が利用可能です（現在: {}）",
+            latest_version.green(),
+            current_version.yellow()
         );
         println!("{}", "   更新するには: fleetflow self-update".dimmed());
         println!();
