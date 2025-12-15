@@ -16,8 +16,45 @@ env:
   BINARY_NAME: fleetflow
 
 jobs:
+  # CI チェック（リリース前に必須）
+  ci-check:
+    name: CI チェック
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: mise のインストール
+        uses: jdx/mise-action@v2
+        with:
+          experimental: true
+
+      - name: mise のセットアップ
+        run: mise install
+
+      - name: Rustツールのインストール
+        run: mise run setup
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: フォーマットチェック
+        run: mise run fmt-check
+
+      - name: Clippy
+        run: mise run clippy
+
+      - name: テスト
+        run: mise run test
+
+      - name: ビルド
+        run: mise run build
+
   create-release:
     name: リリースを作成
+    needs: ci-check
     runs-on: ubuntu-latest
     outputs:
       upload_url: ${{ steps.create_release.outputs.upload_url }}
