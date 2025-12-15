@@ -1675,11 +1675,7 @@ async fn main() -> anyhow::Result<()> {
                                 println!("    ✓ {} が準備完了", dep_service.cyan());
                             }
                             Err(e) => {
-                                println!(
-                                    "    ⚠ {} の待機でエラー: {}",
-                                    dep_service.yellow(),
-                                    e
-                                );
+                                println!("    ⚠ {} の待機でエラー: {}", dep_service.yellow(), e);
                             }
                         }
                     }
