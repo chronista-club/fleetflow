@@ -414,6 +414,9 @@ async fn main() -> anyhow::Result<()> {
     // ここから既存のコマンド処理
     match cli.command {
         Commands::Up { stage } => {
+            // 最初にバージョンチェック
+            check_and_update_if_needed().await?;
+
             println!("{}", "ステージを起動中...".green());
             print_loaded_config_files(&project_root);
 
@@ -2134,7 +2137,7 @@ async fn self_update() -> anyhow::Result<()> {
 
     let client = reqwest::Client::new();
     let response = client
-        .get("https://api.github.com/repos/osousa/fleetflow/releases/latest")
+        .get("https://api.github.com/repos/chronista-club/fleetflow/releases/latest")
         .header("User-Agent", "fleetflow-cli")
         .send()
         .await?;
@@ -2186,15 +2189,28 @@ async fn self_update() -> anyhow::Result<()> {
     };
 
     // ダウンロードURLを取得
-    let assets = release["assets"]
-        .as_array()
-        .ok_or_else(|| anyhow::anyhow!("assetsが見つかりません"))?;
+    let assets = release["assets"].as_array();
 
-    let download_url = assets
-        .iter()
-        .find(|a| a["name"].as_str() == Some(asset_name))
-        .and_then(|a| a["browser_download_url"].as_str())
-        .ok_or_else(|| anyhow::anyhow!("{}が見つかりません", asset_name))?;
+    let download_url = assets.and_then(|arr| {
+        arr.iter()
+            .find(|a| a["name"].as_str() == Some(asset_name))
+            .and_then(|a| a["browser_download_url"].as_str())
+    });
+
+    // バイナリがない場合は cargo install を使用
+    let download_url = match download_url {
+        Some(url) => url.to_string(),
+        None => {
+            println!(
+                "{}",
+                format!("プリビルドバイナリが見つかりません（{}）", asset_name).yellow()
+            );
+            println!("cargo install でビルドします...");
+            println!();
+
+            return cargo_install_update().await;
+        }
+    };
 
     println!("ダウンロード中: {}", asset_name);
 
@@ -2205,7 +2221,7 @@ async fn self_update() -> anyhow::Result<()> {
     let tar_path = temp_dir.join(asset_name);
 
     // ダウンロード
-    let response = client.get(download_url).send().await?;
+    let response = client.get(&download_url).send().await?;
     let bytes = response.bytes().await?;
     std::fs::write(&tar_path, &bytes)?;
 
@@ -2280,4 +2296,130 @@ async fn self_update() -> anyhow::Result<()> {
     std::fs::remove_dir_all(&temp_dir).ok();
 
     Ok(())
+}
+
+/// 起動時にバージョンチェックを行い、更新があれば通知・更新
+async fn check_and_update_if_needed() -> anyhow::Result<()> {
+    let current_version = env!("CARGO_PKG_VERSION");
+
+    // GitHub APIから最新リリース情報を取得（タイムアウト短め）
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()?;
+
+    let response = match client
+        .get("https://api.github.com/repos/chronista-club/fleetflow/releases/latest")
+        .header("User-Agent", "fleetflow-cli")
+        .send()
+        .await
+    {
+        Ok(r) => r,
+        Err(_) => {
+            // ネットワークエラーは無視して続行
+            return Ok(());
+        }
+    };
+
+    if !response.status().is_success() {
+        // APIエラーは無視して続行
+        return Ok(());
+    }
+
+    let release: serde_json::Value = match response.json().await {
+        Ok(r) => r,
+        Err(_) => return Ok(()),
+    };
+
+    let latest_version = match release["tag_name"].as_str() {
+        Some(tag) => tag.trim_start_matches('v'),
+        None => return Ok(()),
+    };
+
+    // バージョン比較
+    if is_newer_version(latest_version, current_version) {
+        println!();
+        println!(
+            "{}",
+            format!(
+                "📦 新しいバージョン {} が利用可能です（現在: {}）",
+                latest_version.green(),
+                current_version.yellow()
+            )
+        );
+        println!(
+            "{}",
+            "   更新するには: fleetflow self-update".dimmed()
+        );
+        println!();
+
+        // 自動更新の確認
+        print!("今すぐ更新しますか？ [y/N]: ");
+        use std::io::Write;
+        std::io::stdout().flush()?;
+
+        let mut input = String::new();
+        std::io::stdin().read_line(&mut input)?;
+
+        if input.trim().eq_ignore_ascii_case("y") {
+            return self_update().await;
+        }
+        println!();
+    }
+
+    Ok(())
+}
+
+/// バージョン比較: new_ver が current_ver より新しければ true
+fn is_newer_version(new_ver: &str, current_ver: &str) -> bool {
+    let parse_version = |v: &str| -> Vec<u32> {
+        v.split('.')
+            .filter_map(|s| s.parse().ok())
+            .collect()
+    };
+
+    let new_parts = parse_version(new_ver);
+    let current_parts = parse_version(current_ver);
+
+    for (n, c) in new_parts.iter().zip(current_parts.iter()) {
+        if n > c {
+            return true;
+        }
+        if n < c {
+            return false;
+        }
+    }
+
+    // 桁数が多い方が新しい (例: 1.0.1 > 1.0)
+    new_parts.len() > current_parts.len()
+}
+
+/// cargo install でFleetFlowを更新
+async fn cargo_install_update() -> anyhow::Result<()> {
+    use std::process::Command;
+
+    println!(
+        "{}",
+        "🔧 cargo install --git https://github.com/chronista-club/fleetflow --force".cyan()
+    );
+    println!();
+
+    let status = Command::new("cargo")
+        .args([
+            "install",
+            "--git",
+            "https://github.com/chronista-club/fleetflow",
+            "--force",
+        ])
+        .status()?;
+
+    if status.success() {
+        println!();
+        println!("{}", "✓ FleetFlow を更新しました！".green().bold());
+        Ok(())
+    } else {
+        Err(anyhow::anyhow!(
+            "cargo install に失敗しました（終了コード: {:?}）",
+            status.code()
+        ))
+    }
 }
