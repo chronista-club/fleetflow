@@ -116,6 +116,13 @@ pub fn parse_server(node: &KdlNode) -> Result<(String, ServerResource)> {
                         .filter_map(|e| e.value().as_string().map(|s| s.to_string()))
                         .collect();
                 }
+                "deploy_path" => {
+                    server.deploy_path = child
+                        .entries()
+                        .first()
+                        .and_then(|e| e.value().as_string())
+                        .map(|s| s.to_string());
+                }
                 // 追加設定はconfigに保存
                 other => {
                     if let Some(value) = child.entries().first().and_then(|e| e.value().as_string())
@@ -236,5 +243,62 @@ mod tests {
         let (_, server) = parse_server(node).unwrap();
         assert_eq!(server.dns_aliases, vec!["app", "app", "api"]);
         assert_eq!(server.dns_aliases.len(), 3);
+    }
+
+    #[test]
+    fn test_parse_server_with_deploy_path() {
+        let kdl = r#"
+            server "creo-vps" {
+                provider "sakura-cloud"
+                deploy_path "/opt/creo-memories"
+            }
+        "#;
+        let doc: kdl::KdlDocument = kdl.parse().unwrap();
+        let node = doc.nodes().first().unwrap();
+
+        let (name, server) = parse_server(node).unwrap();
+        assert_eq!(name, "creo-vps");
+        assert_eq!(server.deploy_path, Some("/opt/creo-memories".to_string()));
+    }
+
+    #[test]
+    fn test_parse_server_without_deploy_path() {
+        let kdl = r#"
+            server "creo-vps" {
+                provider "sakura-cloud"
+            }
+        "#;
+        let doc: kdl::KdlDocument = kdl.parse().unwrap();
+        let node = doc.nodes().first().unwrap();
+
+        let (_, server) = parse_server(node).unwrap();
+        assert!(server.deploy_path.is_none());
+    }
+
+    #[test]
+    fn test_parse_server_full_config() {
+        let kdl = r#"
+            server "creo-vps" {
+                provider "sakura-cloud"
+                plan "4core-8gb"
+                disk_size 100
+                os "ubuntu-24.04"
+                ssh_keys "my-key"
+                dns_aliases "app" "api"
+                deploy_path "/opt/myapp"
+            }
+        "#;
+        let doc: kdl::KdlDocument = kdl.parse().unwrap();
+        let node = doc.nodes().first().unwrap();
+
+        let (name, server) = parse_server(node).unwrap();
+        assert_eq!(name, "creo-vps");
+        assert_eq!(server.provider, "sakura-cloud");
+        assert_eq!(server.plan, Some("4core-8gb".to_string()));
+        assert_eq!(server.disk_size, Some(100));
+        assert_eq!(server.os, Some("ubuntu-24.04".to_string()));
+        assert_eq!(server.ssh_keys, vec!["my-key"]);
+        assert_eq!(server.dns_aliases, vec!["app", "api"]);
+        assert_eq!(server.deploy_path, Some("/opt/myapp".to_string()));
     }
 }

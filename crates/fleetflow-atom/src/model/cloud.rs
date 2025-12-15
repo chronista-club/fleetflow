@@ -46,6 +46,10 @@ pub struct ServerResource {
     /// 例: ["app", "api"] -> app.{domain} と api.{domain} が {server-hostname}.{domain} を参照
     pub dns_aliases: Vec<String>,
 
+    /// デプロイ先パス
+    /// 例: "/opt/myapp" - CI/CDやmiseタスクでデプロイ先を参照
+    pub deploy_path: Option<String>,
+
     /// 追加設定
     pub config: HashMap<String, String>,
 }
