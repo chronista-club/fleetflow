@@ -1,7 +1,7 @@
 ---
 name: fleetflow
 description: FleetFlow（KDLベースのコンテナオーケストレーションツール）を効果的に使用するためのガイド
-version: 0.2.6
+version: 0.2.12
 ---
 
 # FleetFlow スキル
@@ -33,6 +33,8 @@ FleetFlowは、KDL（KDL Document Language）をベースにした超シンプ�
 | 依存サービス待機 | Exponential Backoffで堅牢な起動順序制御 |
 | クラウド対応 | さくらのクラウド、Cloudflareなど複数プロバイダー |
 | DNS自動管理 | Cloudflare DNSとの自動連携 |
+| CI/CDデプロイ | deployコマンドによる自動デプロイ |
+| セルフアップデート | 最新バージョンへの自動更新 |
 
 ## クイックスタート
 
@@ -78,6 +80,7 @@ fleetflow down local    # 停止・削除
 |---------|------|
 | `up <stage>` | ステージを起動 |
 | `down <stage>` | ステージを停止・削除 |
+| `deploy <stage> --pull --yes` | CI/CD向けデプロイ（強制再作成） |
 | `ps [--all]` | コンテナ一覧 |
 | `logs [--follow] [service]` | ログ表示 |
 | `start <stage> [service]` | 停止中のサービスを起動 |
@@ -85,10 +88,10 @@ fleetflow down local    # 停止・削除
 | `restart <stage> [service]` | サービスを再起動 |
 | `build <stage> [-n service]` | イメージをビルド |
 | `build <stage> --push [--tag <tag>]` | ビルド＆レジストリへプッシュ |
-| `rebuild <service> [stage]` | リビルドして再起動 |
 | `validate` | 設定を検証 |
 | `cloud up --stage <stage>` | クラウド環境を構築 |
 | `cloud down --stage <stage>` | クラウド環境を削除 |
+| `self-update` | FleetFlow自体を最新版に更新 |
 | `version` | バージョン表示 |
 
 詳細: [reference/cli-commands.md](reference/cli-commands.md)
@@ -319,6 +322,43 @@ service "api" {
 必要な環境変数:
 - `CLOUDFLARE_API_TOKEN`: Cloudflare APIトークン
 - `CLOUDFLARE_ZONE_ID`: ドメインのZone ID
+
+### CI/CDデプロイ（deployコマンド）
+
+CI/CDパイプラインからの自動デプロイに最適化されたコマンド：
+
+```bash
+# 基本的な使い方
+fleetflow deploy prod --pull --yes
+
+# GitHub Actionsから
+ssh user@vps "cd /app && fleetflow deploy prod --pull --yes"
+```
+
+**オプション:**
+| オプション | 説明 |
+|-----------|------|
+| `--pull` | 最新イメージを強制的にダウンロード |
+| `--yes` | 確認なしで実行（CI向け） |
+| `--stage` | ステージ名を指定 |
+
+**デプロイフロー:**
+1. 既存コンテナを強制停止・削除
+2. 最新イメージをpull（--pullオプション時）
+3. コンテナを依存関係順に作成・起動
+4. wait_forによる依存サービス待機
+
+### セルフアップデート
+
+`fleetflow up`実行時に自動的にバージョンチェックを行い、新しいバージョンがあれば通知します：
+
+```bash
+# 手動でアップデート
+fleetflow self-update
+
+# upコマンド時に自動チェック
+fleetflow up local  # 新バージョンがあれば通知
+```
 
 ## コンテナ命名規則
 
