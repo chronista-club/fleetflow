@@ -165,6 +165,63 @@ async fn pull_image(docker: &bollard::Docker, image: &str) -> anyhow::Result<()>
     Ok(())
 }
 
+/// 最新イメージを強制的にpull（--pull フラグ用）
+async fn pull_image_always(docker: &bollard::Docker, image: &str) -> anyhow::Result<()> {
+    use futures_util::stream::StreamExt;
+
+    let (image_name, tag) = parse_image_tag(image);
+
+    println!("  ↓ 最新イメージをプル中: {}", image.cyan());
+
+    // レジストリから認証情報を取得（あれば）
+    let credentials = extract_registry(image).and_then(get_docker_credentials);
+
+    #[allow(deprecated)]
+    let options = bollard::image::CreateImageOptions {
+        from_image: image_name,
+        tag,
+        ..Default::default()
+    };
+
+    #[allow(deprecated)]
+    let mut stream = docker.create_image(Some(options), None, credentials);
+
+    while let Some(info) = stream.next().await {
+        match info {
+            Ok(bollard::models::CreateImageInfo {
+                status: Some(status),
+                progress: Some(progress),
+                ..
+            }) => {
+                print!("\r  ↓ {}: {}", status, progress);
+                use std::io::Write;
+                std::io::stdout().flush()?;
+            }
+            Ok(bollard::models::CreateImageInfo {
+                status: Some(status),
+                ..
+            }) => {
+                print!("\r  ↓ {}                    ", status);
+                use std::io::Write;
+                std::io::stdout().flush()?;
+            }
+            Err(e) => {
+                println!();
+                return Err(anyhow::anyhow!(
+                    "イメージのプルに失敗しました: {}",
+                    e
+                ));
+            }
+            _ => {}
+        }
+    }
+
+    println!();
+    println!("  ✓ プル完了");
+
+    Ok(())
+}
+
 /// Docker接続を初期化（エラーハンドリング付き）
 async fn init_docker_with_error_handling() -> anyhow::Result<bollard::Docker> {
     match bollard::Docker::connect_with_local_defaults() {
@@ -221,6 +278,9 @@ enum Commands {
         /// 環境変数 FLOW_STAGE からも読み込み可能
         #[arg(short, long, env = "FLOW_STAGE")]
         stage: Option<String>,
+        /// 起動前に最新イメージをpullする
+        #[arg(short, long)]
+        pull: bool,
     },
     /// ステージを停止
     Down {
@@ -427,7 +487,7 @@ async fn main() -> anyhow::Result<()> {
 
     // ここから既存のコマンド処理
     match cli.command {
-        Commands::Up { stage } => {
+        Commands::Up { stage, pull } => {
             // 最初にバージョンチェック
             check_and_update_if_needed().await?;
 
@@ -594,6 +654,16 @@ async fn main() -> anyhow::Result<()> {
                             return Err(anyhow::anyhow!("イメージのビルドに失敗しました"));
                         }
                     }
+                }
+
+                // --pull フラグが指定されていて、build設定がない場合は最新イメージをpull
+                if pull && service.build.is_none() {
+                    #[allow(deprecated)]
+                    let image = container_config
+                        .image
+                        .as_ref()
+                        .ok_or_else(|| anyhow::anyhow!("イメージ名が指定されていません"))?;
+                    pull_image_always(&docker, image).await?;
                 }
 
                 // コンテナ作成
