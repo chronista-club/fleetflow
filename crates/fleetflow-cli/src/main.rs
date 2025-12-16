@@ -207,10 +207,7 @@ async fn pull_image_always(docker: &bollard::Docker, image: &str) -> anyhow::Res
             }
             Err(e) => {
                 println!();
-                return Err(anyhow::anyhow!(
-                    "イメージのプルに失敗しました: {}",
-                    e
-                ));
+                return Err(anyhow::anyhow!("イメージのプルに失敗しました: {}", e));
             }
             _ => {}
         }
