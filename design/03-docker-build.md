@@ -70,7 +70,7 @@ fleetflow/
 │   │   │   └── builder_tests.rs
 │   │   └── Cargo.toml
 │   │
-│   ├── fleetflow-cli/
+│   ├── fleetflow/
 │   │   ├── src/
 │   │   │   ├── main.rs           # rebuild, buildコマンド追加
 │   │   │   └── commands/         # 新規：コマンド分離
@@ -644,7 +644,7 @@ impl BuildProgress {
 
 ### 1. コマンド構造のリファクタリング
 
-**ファイル**: `crates/fleetflow-cli/src/commands/mod.rs`
+**ファイル**: `crates/fleetflow/src/commands/mod.rs`
 
 ```rust
 pub mod up;
@@ -666,7 +666,7 @@ pub use validate::execute_validate;
 
 ### 2. buildコマンド
 
-**ファイル**: `crates/fleetflow-cli/src/commands/build.rs`
+**ファイル**: `crates/fleetflow/src/commands/build.rs`
 
 ```rust
 use bollard::Docker;
@@ -770,7 +770,7 @@ pub async fn execute_build(
 
 ### 3. rebuildコマンド
 
-**ファイル**: `crates/fleetflow-cli/src/commands/rebuild.rs`
+**ファイル**: `crates/fleetflow/src/commands/rebuild.rs`
 
 ```rust
 pub async fn execute_rebuild(
@@ -817,7 +817,7 @@ pub async fn execute_rebuild(
 
 ### 4. upコマンドの拡張
 
-**ファイル**: `crates/fleetflow-cli/src/commands/up.rs`
+**ファイル**: `crates/fleetflow/src/commands/up.rs`
 
 ```rust
 pub async fn execute_up(
@@ -918,7 +918,7 @@ tempfile.workspace = true
 ```toml
 [workspace]
 members = [
-    "crates/fleetflow-cli",
+    "crates/fleetflow",
     "crates/fleetflow-atom",
     "crates/fleetflow-config",
     "crates/fleetflow-container",

@@ -8,7 +8,7 @@
 ### アーキテクチャ概要
 
 ```
-fleetflow-cli
+fleetflow
     │
     ├── build コマンド
     │   ├── --push オプション処理
@@ -22,9 +22,9 @@ fleetflow-cli
 
 ### コンポーネント設計
 
-#### 1. CLI拡張 (fleetflow-cli)
+#### 1. CLI拡張 (fleetflow)
 
-**変更ファイル**: `crates/fleetflow-cli/src/commands/build.rs`
+**変更ファイル**: `crates/fleetflow/src/commands/build.rs`
 
 ```rust
 #[derive(Parser)]

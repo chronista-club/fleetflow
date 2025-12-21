@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
-  "crates/fleetflow-cli",
+  "crates/fleetflow",
   "crates/fleetflow-atom",
   "crates/fleetflow-container",
   "crates/fleetflow-config",
@@ -9,10 +9,11 @@ members = [
   "crates/fleetflow-cloud",
   "crates/fleetflow-cloud-sakura",
   "crates/fleetflow-cloud-cloudflare",
+  "crates/fleetflow-mcp",
 ]
 
 [workspace.package]
-version = "0.2.14"
+version = "0.3.0"
 edition = "2024"
 authors = ["Mito <mito@chronista.club>"]
 license = "MIT OR Apache-2.0"

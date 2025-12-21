@@ -7,7 +7,7 @@ FleetFlowの内部構造とコンポーネントの説明です。
 ```
 fleetflow/
 ├── crates/
-│   ├── fleetflow-cli/              # CLIエントリーポイント
+│   ├── fleetflow/              # CLIエントリーポイント
 │   ├── fleetflow-atom/             # KDLパーサー・データモデル
 │   │   ├── src/model/              # データ構造
 │   │   └── src/parser/             # パーサー
@@ -24,7 +24,7 @@ fleetflow/
 
 ## クレート概要
 
-### fleetflow-cli
+### fleetflow
 
 CLIのエントリーポイント。`clap`を使用したコマンド定義とメインロジック。
 

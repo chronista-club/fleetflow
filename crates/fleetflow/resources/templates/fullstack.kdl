@@ -15,6 +15,7 @@ stage "local" {
 stage "production" {
     service "postgres"
     service "redis"
+    service "app"
     variables {
         APP_ENV "production"
         DEBUG "false"

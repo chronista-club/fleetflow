@@ -20,13 +20,13 @@ pub fn get_config_dir() -> Result<PathBuf> {
 /// プロジェクトのflow.kdlファイルを探す
 ///
 /// 以下の優先順位で設定ファイルを検索:
-/// 1. 環境変数 FLOW_CONFIG_PATH (直接パス指定)
+/// 1. 環境変数 FLEETFLOW_CONFIG_PATH (直接パス指定)
 /// 2. カレントディレクトリ: flow.local.kdl, .flow.local.kdl, flow.kdl, .flow.kdl
 /// 3. ./.fleetflow/ ディレクトリ内: 同様の順序
 /// 4. ~/.config/fleetflow/flow.kdl (グローバル設定)
 pub fn find_flow_file() -> Result<PathBuf> {
     // 1. 環境変数で直接指定
-    if let Ok(config_path) = std::env::var("FLOW_CONFIG_PATH") {
+    if let Ok(config_path) = std::env::var("FLEETFLOW_CONFIG_PATH") {
         let path = PathBuf::from(config_path);
         if path.exists() {
             return Ok(path);
@@ -119,7 +119,7 @@ mod tests {
         // 環境変数で直接指定する方式に変更（並列テスト対応）
         // SAFETY: テスト実行中のみ環境変数を設定し、テスト終了時に削除する
         unsafe {
-            std::env::set_var("FLOW_CONFIG_PATH", &local_kdl);
+            std::env::set_var("FLEETFLOW_CONFIG_PATH", &local_kdl);
         }
 
         let result = find_flow_file().unwrap();
@@ -129,7 +129,7 @@ mod tests {
 
         // SAFETY: テスト終了時に環境変数を削除
         unsafe {
-            std::env::remove_var("FLOW_CONFIG_PATH");
+            std::env::remove_var("FLEETFLOW_CONFIG_PATH");
         }
     }
 
@@ -162,7 +162,7 @@ mod tests {
 
         // 環境変数を設定
         unsafe {
-            std::env::set_var("FLOW_CONFIG_PATH", config_path.to_str().unwrap());
+            std::env::set_var("FLEETFLOW_CONFIG_PATH", config_path.to_str().unwrap());
         }
 
         let result = find_flow_file().unwrap();
@@ -170,7 +170,7 @@ mod tests {
 
         // クリーンアップ
         unsafe {
-            std::env::remove_var("FLOW_CONFIG_PATH");
+            std::env::remove_var("FLEETFLOW_CONFIG_PATH");
         }
     }
 

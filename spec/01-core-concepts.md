@@ -46,11 +46,15 @@ sequenceDiagram
 
 #### 抽象化レイヤー
 
-Fleetflowは、プロセス管理を段階的に抽象化します：
+FleetFlowは、プロセス管理を段階的に抽象化します：
 
 ```mermaid
 graph TD
-    subgraph "抽象度: 高い（人間に優しい）"
+    subgraph "抽象度: 最高（意図の宣言）"
+        W[Workload定義<br/>抽象的な役割]
+    end
+
+    subgraph "抽象度: 高い（環境の設計）"
         A[Flow/Stage定義<br/>flow.kdl]
     end
 
@@ -59,16 +63,18 @@ graph TD
         C[Docker Image<br/>パッケージ化]
     end
 
-    subgraph "抽象度: 低い（機械に近い）"
+    subgraph "抽象度: 低い（実行環境）"
         D[Container<br/>分離された実行環境]
         E[Process<br/>OS上の実行単位]
     end
 
+    W --> A
     A --> B
     B --> C
     C --> D
     D --> E
 
+    style W fill:#f9f,stroke:#333,stroke-width:2px
     style A fill:#e1f5ff
     style E fill:#ffe1e1
 ```
@@ -77,7 +83,7 @@ graph TD
 
 ```mermaid
 stateDiagram-v2
-    [*] --> 定義: flow.kdlに記述
+    [*] --> 定義: workload/flow.kdlに記述
     定義 --> 解析: fleetflow up
     解析 --> イメージPull: Dockerイメージ取得
     イメージPull --> コンテナ作成: docker create
@@ -101,11 +107,33 @@ stateDiagram-v2
 
 ### 基本概念の定義
 
-Fleetflowでは2つの基本概念を使用します：
+FleetFlowでは3つの基本概念を使用します：
+
+#### ワークロード（Workload）
+
+**ワークロード**とは、特定のアプリケーション実行形態に必要な一連のサービス群や設定をパッケージ化した「役割」の定義です。
+
+ワークロードは以下の特性を持ちます：
+
+1. **パッケージ化**: 複数のサービス定義（App, DB, Redis等）を1つの名前でまとめられる
+2. **暗黙的インクルード**: ワークロード名を宣言するだけで、対応する設定ファイルが自動的に読み込まれる
+3. **ボイラープレートの排除**: プロジェクトごとの微細な差異（イメージタグ等）のみを記述すれば良くなる
+
+#### 例
+
+メイン設定 (`flow.kdl`):
+```kdl
+project "my-shop"
+workload "fullstack-app" // これだけで必要なサービスが全て読み込まれる
+
+service "api" {
+    image "my-custom-api:v1" // ワークロード側の定義を一部上書き可能
+}
+```
 
 #### サービス（Service）
 
-**サービス**とは、Fleetflowにおける最小単位の実行可能なコンポーネントです。
+**サービス**とは、FleetFlowにおける最小単位の実行可能なコンポーネントです。
 
 サービスは以下の特性を持ちます：
 
@@ -178,6 +206,14 @@ Container (flow-postgres-1)
 #### ステージ（Stage）
 
 **ステージ**とは、アプリケーションがデプロイされる物理的・論理的な実行環境です。
+
+##### 二環境の原則 (The Dual-Environment Principle)
+
+FleetFlowは、**「開発環境（Development）」と「本番環境（Production）」の最低2つの環境が必ず存在する**ことを設計の前提としています。
+
+1. **分離の義務**: 開発時の試行錯誤が本番利用者に影響を与えてはならず、本番のデータが不用意に開発環境に漏れてはなりません。
+2. **構成の対称性**: 開発と本番は「場所（Local/Cloud）」や「スケール（1/多）」は異なりますが、Flowとしての構成は可能な限り対称であるべきです。
+3. **昇格のプロセス**: 開発環境で検証された設定（Flow）が、そのまま本番環境へ「昇格」していくワークフローを支援します。
 
 ##### 定義
 

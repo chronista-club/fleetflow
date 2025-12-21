@@ -10,7 +10,7 @@ pub enum ConfigError {
         - カレントディレクトリ: flow.kdl, flow.local.kdl, .flow.kdl, .flow.local.kdl\n\
         - ./.fleetflow/ ディレクトリ\n\
         - ~/.config/fleetflow/flow.kdl\n\
-        または FLOW_CONFIG_PATH 環境変数で直接指定できます"
+        または FLEETFLOW_CONFIG_PATH 環境変数で直接指定できます"
     )]
     FlowFileNotFound,
 

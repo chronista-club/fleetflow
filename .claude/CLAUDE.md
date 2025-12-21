@@ -37,7 +37,7 @@ Docker Composeの手軽さはそのままに、より少ない記述で、より
 ```
 fleetflow/
 ├── crates/
-│   ├── fleetflow-cli/              # CLIエントリーポイント
+│   ├── fleetflow/              # CLIエントリーポイント
 │   ├── fleetflow-atom/             # KDLパーサー・データモデル
 │   │   ├── src/model/              # データ構造（モジュール分割）
 │   │   └── src/parser/             # パーサー（モジュール分割）

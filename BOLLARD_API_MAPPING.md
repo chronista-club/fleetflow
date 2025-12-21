@@ -134,7 +134,7 @@ let options = LogsOptions {
 - `CreateContainerOptions`の代替方法
 - テストケースでの動作確認
 
-### フェーズ2: fleetflow-cli（優先度: 中）
+### フェーズ2: fleetflow（優先度: 中）
 
 各API呼び出しを個別に新APIに移行:
 1. ネットワーク作成 → `NetworkCreateRequest`

@@ -377,7 +377,7 @@ OrbStackでは `{project}-{stage}` でグループ化されます。
 ```
 fleetflow/
 ├── crates/
-│   ├── fleetflow-cli/           # CLI
+│   ├── fleetflow/           # CLI
 │   ├── fleetflow-atom/          # KDLパーサー
 │   ├── fleetflow-container/     # コンテナ操作
 │   ├── fleetflow-build/         # Dockerビルド

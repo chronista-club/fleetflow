@@ -7,6 +7,13 @@ stage "local" {
     }
 }
 
+stage "production" {
+    service "postgres"
+    variables {
+        LOG_LEVEL "warn"
+    }
+}
+
 service "postgres" {
     version "16"
     ports {

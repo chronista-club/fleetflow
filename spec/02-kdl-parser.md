@@ -2,7 +2,7 @@
 
 ## 概要
 
-KDL（KDL Document Language）形式の設定ファイルをパースし、Fleetflowの内部データモデル（`FlowConfig`）に変換する機能を提供します。
+KDL（KDL Document Language）形式の設定ファイルをパースし、FleetFlowの内部データモデル（`FlowConfig`）に変換する機能を提供します。
 
 ## 目標
 

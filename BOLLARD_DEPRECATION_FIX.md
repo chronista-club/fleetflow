@@ -7,7 +7,7 @@ FleetFlowコードベースからBollard APIの非推奨警告をすべて除去
 
 ### 影響を受けるクレート
 1. `fleetflow-container` - コンテナ設定の変換ロジック
-2. `fleetflow-cli` - CLIコマンド実装
+2. `fleetflow` - CLIコマンド実装
 3. `fleetflow-build` - イメージビルド機能
 
 ### 非推奨API一覧
@@ -17,26 +17,26 @@ FleetFlowコードベースからBollard APIの非推奨警告をすべて除去
 - **新API**: `bollard::models::ContainerConfig` または `bollard::models::ContainerCreateBody`
 - **影響箇所**:
   - `fleetflow-container/src/converter.rs`
-  - `fleetflow-cli/src/main.rs` (複数箇所)
+  - `fleetflow/src/main.rs` (複数箇所)
 
 #### 2. CreateContainerOptions
 - **非推奨**: `bollard::container::CreateContainerOptions`
 - **新API**: `bollard::query_parameters::CreateContainerOptions` + `CreateContainerOptionsBuilder`
 - **影響箇所**:
   - `fleetflow-container/src/converter.rs`
-  - `fleetflow-cli/src/main.rs`
+  - `fleetflow/src/main.rs`
 
 #### 3. Network API
 - **非推奨**: `bollard::network::CreateNetworkOptions`
 - **新API**: `bollard::models::NetworkCreateRequest`
 - **影響箇所**:
-  - `fleetflow-cli/src/main.rs:387`
+  - `fleetflow/src/main.rs:387`
 
 #### 4. Image API
 - **非推奨**: `bollard::image::CreateImageOptions`
 - **新API**: `bollard::query_parameters::CreateImageOptions` + `CreateImageOptionsBuilder`
 - **影響箇所**:
-  - `fleetflow-cli/src/main.rs:70`
+  - `fleetflow/src/main.rs:70`
 
 - **非推奨**: `bollard::image::BuildImageOptions`
 - **新API**: `bollard::query_parameters::BuildImageOptions` + `BuildImageOptionsBuilder`
@@ -47,13 +47,13 @@ FleetFlowコードベースからBollard APIの非推奨警告をすべて除去
 - **非推奨**: `bollard::container::LogsOptions`
 - **新API**: `bollard::query_parameters::LogsOptions` + `LogsOptionsBuilder`
 - **影響箇所**:
-  - `fleetflow-cli/src/main.rs:850`
+  - `fleetflow/src/main.rs:850`
 
 #### 6. ListContainers API
 - **非推奨**: `bollard::container::ListContainersOptions`
 - **新API**: `bollard::query_parameters::ListContainersOptions` + `ListContainersOptionsBuilder`
 - **影響箇所**:
-  - `fleetflow-cli/src/main.rs:721`
+  - `fleetflow/src/main.rs:721`
 
 ## 移行戦略
 
@@ -76,7 +76,7 @@ FleetFlowコードベースからBollard APIの非推奨警告をすべて除去
 - `NetworkingConfig`との互換性
 - `HealthCheck`のマッピング
 
-### フェーズ2: fleetflow-cli の修正
+### フェーズ2: fleetflow の修正
 **優先度**: 中
 
 #### 対象箇所
@@ -135,7 +135,7 @@ FleetFlowコードベースからBollard APIの非推奨警告をすべて除去
 - [ ] ユニットテスト実行・修正
 - [ ] 統合テスト実行
 
-### マイルストーン3: fleetflow-cli移行 (2-3時間)
+### マイルストーン3: fleetflow移行 (2-3時間)
 - [ ] イメージAPI移行
 - [ ] ネットワークAPI移行
 - [ ] コンテナAPI移行

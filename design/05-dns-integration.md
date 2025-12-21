@@ -47,7 +47,7 @@ crates/
 ### 既存クレートとの関係
 
 ```
-fleetflow-cli
+fleetflow
 ├── fleetflow-cloud-sakura     # さくらクラウド連携（既存）
 └── fleetflow-cloud-dns        # DNS連携（新規）
 ```
@@ -242,7 +242,7 @@ impl CloudDnsManager {
 ### cloud upへの統合
 
 ```rust
-// fleetflow-cli/src/commands/cloud_up.rs
+// fleetflow/src/commands/cloud_up.rs
 
 pub async fn execute(args: CloudUpArgs) -> Result<()> {
     // 1. クラウドプロバイダーでサーバー作成
@@ -279,7 +279,7 @@ pub async fn execute(args: CloudUpArgs) -> Result<()> {
 ### cloud downへの統合
 
 ```rust
-// fleetflow-cli/src/commands/cloud_down.rs
+// fleetflow/src/commands/cloud_down.rs
 
 pub async fn execute(args: CloudDownArgs) -> Result<()> {
     // 1. SSH接続してコンテナ停止

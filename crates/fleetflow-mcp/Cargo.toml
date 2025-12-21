@@ -1,0 +1,22 @@
+[package]
+name = "fleetflow-mcp"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+# Workspace crates
+fleetflow-atom = { version = "0.3.0", path = "../fleetflow-atom" }
+fleetflow-container = { version = "0.3.0", path = "../fleetflow-container" }
+fleetflow-config = { version = "0.3.0", path = "../fleetflow-config" }
+
+# External dependencies
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+futures-util.workspace = true
+bollard.workspace = true

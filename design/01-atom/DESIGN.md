@@ -249,7 +249,7 @@ FlowError (flow-atom)
 
 ConfigError (flow-config)
 ├── ConfigDirNotFound
-├── FleetflowFileNotFound(PathBuf)
+├── FleetFlowFileNotFound(PathBuf)
 └── Io(std::io::Error)
 ```
 

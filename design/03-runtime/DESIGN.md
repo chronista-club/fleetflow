@@ -158,7 +158,7 @@ enum ContainerRuntime {
 impl ContainerRuntime {
     fn detect() -> Self {
         // 環境変数やStage設定から自動検出
-        if let Ok(runtime) = std::env::var("FLOW_RUNTIME") {
+        if let Ok(runtime) = std::env::var("FLEETFLOW_RUNTIME") {
             match runtime.as_str() {
                 "kubernetes" => Self::Kubernetes,
                 "cloudrun" => Self::CloudRun,

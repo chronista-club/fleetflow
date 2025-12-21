@@ -53,6 +53,11 @@ pub fn parse_service(node: &KdlNode) -> Result<(String, Service)> {
                         }
                     }
                 }
+                "port" => {
+                    if let Some(port) = parse_port(child) {
+                        service.ports.push(port);
+                    }
+                }
                 // env と environment 両方をサポート (#12)
                 "environment" | "env" => {
                     if let Some(envs) = child.children() {
@@ -65,6 +70,13 @@ pub fn parse_service(node: &KdlNode) -> Result<(String, Service)> {
                                 .unwrap_or("")
                                 .to_string();
                             service.environment.insert(key, value);
+                        }
+                    } else {
+                        // 子ノードがない場合は、フラットな env "KEY=VALUE" 形式をサポート
+                        if let Some(val) = child.entries().first().and_then(|e| e.value().as_string()) {
+                            if let Some((k, v)) = val.split_once('=') {
+                                service.environment.insert(k.trim().to_string(), v.trim().to_string());
+                            }
                         }
                     }
                 }

@@ -1,8 +1,8 @@
-# Fleetflow - 命名規則
+# FleetFlow - 命名規則
 
 ## プロジェクト名
 
-**正式名称**: Fleetflow
+**正式名称**: FleetFlow
 
 **決定日**: 2025-11-16
 
@@ -15,7 +15,7 @@
 
 ### ブランド名・ドキュメント
 ```
-Fleetflow
+FleetFlow
 ```
 
 ドキュメント、UI、マーケティング資料で使用。先頭を大文字に。
@@ -72,7 +72,7 @@ name = "fleetflow"
 ```toml
 [package]
 name = "fleetflow-atom"
-name = "fleetflow-cli"
+name = "fleetflow"
 name = "fleetflow-config"
 name = "fleetflow-container"
 ```
@@ -85,7 +85,7 @@ name = "fleetflow-container"
 fleetflow/
 ├── crates/
 │   ├── fleetflow-atom/
-│   ├── fleetflow-cli/
+│   ├── fleetflow/
 │   ├── fleetflow-config/
 │   └── fleetflow-container/
 ├── design/
@@ -123,4 +123,4 @@ fleetflow/
 
 | 日付 | 変更内容 |
 |------|---------|
-| 2025-11-16 | 初版作成。Fleetflow の正式な命名規則を定義 |
+| 2025-11-16 | 初版作成。FleetFlow の正式な命名規則を定義 |

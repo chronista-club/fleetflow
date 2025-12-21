@@ -28,9 +28,10 @@ pub fn parse_port(node: &KdlNode) -> Option<Port> {
         .and_then(|e| e.as_integer())
         .map(|v| v as u16)
         .or_else(|| {
-            // フォールバック: 位置引数
+            // フォールバック: 位置引数の2番目、なければ1番目を使用
             node.entries()
-                .get(1)?
+                .get(1)
+                .or_else(|| node.entries().first())?
                 .value()
                 .as_integer()
                 .map(|v| v as u16)

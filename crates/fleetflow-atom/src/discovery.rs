@@ -14,6 +14,8 @@ pub struct DiscoveredFiles {
     pub root: Option<PathBuf>,
     /// サービス定義ファイル (services/**/*.kdl)
     pub services: Vec<PathBuf>,
+    /// ワークロード定義ファイル (workloads/*.kdl)
+    pub workloads: Vec<PathBuf>,
     /// ステージ定義ファイル (stages/**/*.kdl)
     pub stages: Vec<PathBuf>,
     /// 変数定義ファイル (variables/**/*.kdl)
@@ -29,16 +31,16 @@ pub struct DiscoveredFiles {
 /// プロジェクトルートを検出
 ///
 /// 以下の優先順位で検索:
-/// 1. 環境変数 FLOW_PROJECT_ROOT
+/// 1. 環境変数 FLEETFLOW_PROJECT_ROOT
 /// 2. カレントディレクトリから上に向かって以下を探す:
 ///    - flow.kdl
 ///    - .fleetflow/flow.kdl
 #[tracing::instrument]
 pub fn find_project_root() -> Result<PathBuf> {
     // 1. 環境変数
-    if let Ok(root) = std::env::var("FLOW_PROJECT_ROOT") {
+    if let Ok(root) = std::env::var("FLEETFLOW_PROJECT_ROOT") {
         let path = PathBuf::from(&root);
-        debug!(env_root = %root, "Checking FLOW_PROJECT_ROOT");
+        debug!(env_root = %root, "Checking FLEETFLOW_PROJECT_ROOT");
         if path.join("flow.kdl").exists() || path.join(".fleetflow/flow.kdl").exists() {
             info!(project_root = %path.display(), "Found project root from environment variable");
             return Ok(path);
@@ -96,12 +98,38 @@ pub fn discover_files_with_stage(
     // flow.kdl または .fleetflow/flow.kdl
     let root_file = project_root.join("flow.kdl");
     let fleetflow_root_file = project_root.join(".fleetflow/flow.kdl");
-    if root_file.exists() {
+    let actual_root = if root_file.exists() {
         debug!(file = %root_file.display(), "Found root file");
-        discovered.root = Some(root_file);
+        discovered.root = Some(root_file.clone());
+        Some(root_file)
     } else if fleetflow_root_file.exists() {
         debug!(file = %fleetflow_root_file.display(), "Found root file in .fleetflow/");
-        discovered.root = Some(fleetflow_root_file);
+        discovered.root = Some(fleetflow_root_file.clone());
+        Some(fleetflow_root_file)
+    } else {
+        None
+    };
+
+    // workload 宣言の解析とファイル発見
+    if let Some(root_path) = actual_root {
+        if let Ok(content) = std::fs::read_to_string(&root_path) {
+            let workload_names = extract_workload_names(&content);
+            for name in workload_names {
+                // 1. workloads/{name}.kdl
+                let direct_file = project_root.join(format!("workloads/{}.kdl", name));
+                if direct_file.exists() {
+                    discovered.workloads.push(direct_file);
+                }
+                
+                // 2. workloads/{name}/*.kdl
+                let workload_dir = project_root.join(format!("workloads/{}", name));
+                if workload_dir.is_dir() {
+                    if let Ok(files) = discover_kdl_files(&workload_dir) {
+                        discovered.workloads.extend(files);
+                    }
+                }
+            }
+        }
     }
 
     // services/**/*.kdl
@@ -227,6 +255,30 @@ fn visit_dir(dir: &Path, files: &mut Vec<PathBuf>, visited: &mut HashSet<PathBuf
     }
 
     Ok(())
+}
+
+/// KDL文字列から workload 名を抽出する簡易スキャナ
+fn extract_workload_names(content: &str) -> HashSet<String> {
+    let mut names = HashSet::new();
+    for line in content.lines() {
+        let line = line.trim();
+        // コメント行を無視
+        if line.starts_with("//") || line.starts_with('/') {
+            continue;
+        }
+        
+        // workload "name" 形式を探す
+        if line.starts_with("workload") {
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() >= 2 {
+                let name = parts[1].trim_matches('"').trim_matches('\'').to_string();
+                if !name.is_empty() {
+                    names.insert(name);
+                }
+            }
+        }
+    }
+    names
 }
 
 #[cfg(test)]

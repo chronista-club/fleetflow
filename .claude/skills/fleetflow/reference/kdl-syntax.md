@@ -399,7 +399,7 @@ service "api" {
 
 FleetFlowは以下の優先順位で設定ファイルを検索します：
 
-1. 環境変数 `FLOW_CONFIG_PATH`
+1. 環境変数 `FLEETFLOW_CONFIG_PATH`
 2. カレントディレクトリ:
    - `flow.local.kdl` (ローカル専用)
    - `.flow.local.kdl`

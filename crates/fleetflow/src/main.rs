@@ -75,7 +75,7 @@ fn determine_stage_name(
         Ok(config.stages.keys().next().unwrap().clone())
     } else {
         Err(anyhow::anyhow!(
-            "ステージ名を指定してください: --stage=<stage> または FLOW_STAGE=<stage>\n利用可能なステージ: {}",
+            "ステージ名を指定してください: --stage=<stage> または FLEETFLOW_STAGE=<stage>\n利用可能なステージ: {}",
             config
                 .stages
                 .keys()
@@ -272,8 +272,8 @@ enum Commands {
     /// ステージを起動
     Up {
         /// ステージ名を指定 (local, dev, stg, prd)
-        /// 環境変数 FLOW_STAGE からも読み込み可能
-        #[arg(short, long, env = "FLOW_STAGE")]
+        /// 環境変数 FLEETFLOW_STAGE からも読み込み可能
+        #[arg(short, long, env = "FLEETFLOW_STAGE")]
         stage: Option<String>,
         /// 起動前に最新イメージをpullする
         #[arg(short, long)]
@@ -282,8 +282,8 @@ enum Commands {
     /// ステージを停止
     Down {
         /// ステージ名を指定 (local, dev, stg, prd)
-        /// 環境変数 FLOW_STAGE からも読み込み可能
-        #[arg(short, long, env = "FLOW_STAGE")]
+        /// 環境変数 FLEETFLOW_STAGE からも読み込み可能
+        #[arg(short, long, env = "FLEETFLOW_STAGE")]
         stage: Option<String>,
         /// コンテナを削除する（デフォルトは停止のみ）
         #[arg(short, long)]
@@ -292,8 +292,8 @@ enum Commands {
     /// コンテナのログを表示
     Logs {
         /// ステージ名を指定 (local, dev, stg, prd)
-        /// 環境変数 FLOW_STAGE からも読み込み可能
-        #[arg(short, long, env = "FLOW_STAGE")]
+        /// 環境変数 FLEETFLOW_STAGE からも読み込み可能
+        #[arg(short, long, env = "FLEETFLOW_STAGE")]
         stage: Option<String>,
         /// サービス名（指定しない場合は全サービス）
         #[arg(short = 'n', long)]
@@ -308,8 +308,8 @@ enum Commands {
     /// コンテナの一覧を表示
     Ps {
         /// ステージ名を指定 (local, dev, stg, prd)
-        /// 環境変数 FLOW_STAGE からも読み込み可能
-        #[arg(short, long, env = "FLOW_STAGE")]
+        /// 環境変数 FLEETFLOW_STAGE からも読み込み可能
+        #[arg(short, long, env = "FLEETFLOW_STAGE")]
         stage: Option<String>,
         /// 停止中のコンテナも表示
         #[arg(short, long)]
@@ -320,8 +320,8 @@ enum Commands {
         /// サービス名
         service: String,
         /// ステージ名を指定 (local, dev, stg, prd)
-        /// 環境変数 FLOW_STAGE からも読み込み可能
-        #[arg(short, long, env = "FLOW_STAGE")]
+        /// 環境変数 FLEETFLOW_STAGE からも読み込み可能
+        #[arg(short, long, env = "FLEETFLOW_STAGE")]
         stage: Option<String>,
     },
     /// サービスを停止
@@ -329,8 +329,8 @@ enum Commands {
         /// サービス名
         service: String,
         /// ステージ名を指定 (local, dev, stg, prd)
-        /// 環境変数 FLOW_STAGE からも読み込み可能
-        #[arg(short, long, env = "FLOW_STAGE")]
+        /// 環境変数 FLEETFLOW_STAGE からも読み込み可能
+        #[arg(short, long, env = "FLEETFLOW_STAGE")]
         stage: Option<String>,
     },
     /// サービスを起動
@@ -338,8 +338,8 @@ enum Commands {
         /// サービス名
         service: String,
         /// ステージ名を指定 (local, dev, stg, prd)
-        /// 環境変数 FLOW_STAGE からも読み込み可能
-        #[arg(short, long, env = "FLOW_STAGE")]
+        /// 環境変数 FLEETFLOW_STAGE からも読み込み可能
+        #[arg(short, long, env = "FLEETFLOW_STAGE")]
         stage: Option<String>,
     },
     /// 設定を検証
@@ -353,8 +353,8 @@ enum Commands {
     /// 既存コンテナを強制停止・削除し、最新イメージで再起動
     Deploy {
         /// ステージ名を指定 (local, dev, stg, prd)
-        /// 環境変数 FLOW_STAGE からも読み込み可能
-        #[arg(short, long, env = "FLOW_STAGE")]
+        /// 環境変数 FLEETFLOW_STAGE からも読み込み可能
+        #[arg(short, long, env = "FLEETFLOW_STAGE")]
         stage: Option<String>,
         /// 最新イメージを強制的にpull
         #[arg(long)]
@@ -383,6 +383,8 @@ enum Commands {
     /// クラウドリソースを管理
     #[command(subcommand)]
     Cloud(CloudCommands),
+    /// MCP (Model Context Protocol) サーバーを起動
+    Mcp,
 }
 
 /// クラウド関連のサブコマンド
@@ -500,7 +502,7 @@ async fn main() -> anyhow::Result<()> {
                 config.stages.keys().next().unwrap().clone()
             } else {
                 return Err(anyhow::anyhow!(
-                    "ステージ名を指定してください: --stage=<stage> または FLOW_STAGE=<stage>\n利用可能なステージ: {}",
+                    "ステージ名を指定してください: --stage=<stage> または FLEETFLOW_STAGE=<stage>\n利用可能なステージ: {}",
                     config
                         .stages
                         .keys()
@@ -897,7 +899,7 @@ async fn main() -> anyhow::Result<()> {
                 config.stages.keys().next().unwrap().clone()
             } else {
                 return Err(anyhow::anyhow!(
-                    "ステージ名を指定してください: --stage=<stage> または FLOW_STAGE=<stage>\n利用可能なステージ: {}",
+                    "ステージ名を指定してください: --stage=<stage> または FLEETFLOW_STAGE=<stage>\n利用可能なステージ: {}",
                     config
                         .stages
                         .keys()
@@ -1875,6 +1877,10 @@ async fn main() -> anyhow::Result<()> {
         Commands::Cloud(cloud_cmd) => {
             handle_cloud_command(cloud_cmd, &config).await?;
         }
+        Commands::Mcp => {
+            let mut server = fleetflow_mcp::McpServer::new();
+            server.run().await?;
+        }
         Commands::SelfUpdate => {
             // 早期リターンで処理済み（main関数冒頭）
             unreachable!("SelfUpdate is handled before config loading");
@@ -2578,7 +2584,7 @@ async fn self_update() -> anyhow::Result<()> {
     let client = reqwest::Client::new();
     let response = client
         .get("https://api.github.com/repos/chronista-club/fleetflow/releases/latest")
-        .header("User-Agent", "fleetflow-cli")
+        .header("User-Agent", "fleetflow")
         .send()
         .await?;
 
@@ -2751,7 +2757,7 @@ async fn check_and_update_if_needed() -> anyhow::Result<()> {
 
     let response = match client
         .get("https://api.github.com/repos/chronista-club/fleetflow/releases/latest")
-        .header("User-Agent", "fleetflow-cli")
+        .header("User-Agent", "fleetflow")
         .send()
         .await
     {

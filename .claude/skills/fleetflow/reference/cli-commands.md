@@ -263,7 +263,7 @@ fleetflow version
 
 | 変数 | 説明 |
 |------|------|
-| `FLOW_CONFIG_PATH` | 設定ファイルの直接パス指定 |
+| `FLEETFLOW_CONFIG_PATH` | 設定ファイルの直接パス指定 |
 | `CLOUDFLARE_API_TOKEN` | Cloudflare APIトークン（DNS自動管理用） |
 | `CLOUDFLARE_ZONE_ID` | Cloudflare Zone ID（DNS自動管理用） |
 
@@ -285,7 +285,7 @@ fleetflow version
 
 **解決方法**:
 1. カレントディレクトリに`flow.kdl`があるか確認
-2. 環境変数`FLOW_CONFIG_PATH`を確認
+2. 環境変数`FLEETFLOW_CONFIG_PATH`を確認
 3. `fleetflow validate`で検証
 
 ### イメージが見つからない

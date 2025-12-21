@@ -2,7 +2,7 @@
 
 ## アーキテクチャ概要
 
-KDL Parserは、`kdl` crateを使用してKDL形式のテキストをパースし、Fleetflow内部のデータモデルに変換する役割を担います。
+KDL Parserは、`kdl` crateを使用してKDL形式のテキストをパースし、FleetFlow内部のデータモデルに変換する役割を担います。
 
 ```
 Input (KDL File/String)

@@ -90,11 +90,11 @@ impl TemplateProcessor {
 **ファイル**: `crates/flow-atom/src/discovery.rs:36-48`
 
 **問題点**:
-環境変数 `FLOW_PROJECT_ROOT` から取得したパスを検証せずに使用しています。
+環境変数 `FLEETFLOW_PROJECT_ROOT` から取得したパスを検証せずに使用しています。
 
 **脆弱性シナリオ**:
 ```bash
-export FLOW_PROJECT_ROOT="../../../etc"
+export FLEETFLOW_PROJECT_ROOT="../../../etc"
 flow validate  # システムディレクトリにアクセス可能
 ```
 
@@ -102,7 +102,7 @@ flow validate  # システムディレクトリにアクセス可能
 ```rust
 pub fn find_project_root() -> Result<PathBuf> {
     // 1. 環境変数
-    if let Ok(root) = std::env::var("FLOW_PROJECT_ROOT") {
+    if let Ok(root) = std::env::var("FLEETFLOW_PROJECT_ROOT") {
         let path = PathBuf::from(root);
         
         // ✅ パスの正規化
@@ -318,8 +318,8 @@ fn expand_all_files(discovered: &DiscoveredFiles, processor: &TemplateProcessor)
 /// 環境変数を追加（ホワイトリスト方式）
 pub fn add_env_variables(&mut self) {
     const ALLOWED_ENV_VARS: &[&str] = &[
-        "FLOW_STAGE",
-        "FLOW_PROJECT_ROOT",
+        "FLEETFLOW_STAGE",
+        "FLEETFLOW_PROJECT_ROOT",
         "HOME",
         "USER",
         "PATH",
@@ -344,7 +344,7 @@ pub fn add_filtered_env_variables(&mut self, prefix: &str) {
 
 **使用例**:
 ```rust
-processor.add_filtered_env_variables("FLOW_");
+processor.add_filtered_env_variables("FLEETFLOW_");
 ```
 
 ---

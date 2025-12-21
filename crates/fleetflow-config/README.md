@@ -32,7 +32,7 @@ println!("Config dir: {}", config_dir.display());
 
 `find_flow_file()`は以下の優先順位で設定ファイルを検索します：
 
-1. **環境変数** `FLOW_CONFIG_PATH` - 直接パス指定
+1. **環境変数** `FLEETFLOW_CONFIG_PATH` - 直接パス指定
 2. **カレントディレクトリ**:
    - `flow.local.kdl`
    - `.flow.local.kdl`
