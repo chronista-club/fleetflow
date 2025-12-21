@@ -18,14 +18,14 @@ echo -e "${BLUE}   FleetFlow Setup Wizard (MCP Enabled)    ${NC}"
 echo -e "${BLUE}===========================================${NC}"
 
 # 1. 環境チェック
-OS=\"$(uname -s | tr '[:upper:]' '[:lower:]')\"
-ARCH=\"$(uname -m)\"\n
-case "$OS" in
-    darwin)  PLATFORM=\"darwin\" ;; 
-    linux)   PLATFORM=\"linux\" ;; 
-    *)       echo -e "${RED}エラー: サポートされていないOSです: $OS${NC}"; exit 1 ;; 
-esac
+OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
+ARCH="$(uname -m)"
 
+case "$OS" in
+    darwin*)  PLATFORM="darwin" ;;
+    linux*)   PLATFORM="linux" ;;
+    *)        echo -e "${RED}エラー: サポートされていないOSです: $OS${NC}"; exit 1 ;;
+esac
 case "$ARCH" in
     x86_64)  BINARY_ARCH=\"amd64\" ;; 
     arm64|aarch64) BINARY_ARCH=\"arm64\" ;; 
