@@ -17,14 +17,14 @@ path = "src/main.rs"
 
 [dependencies]
 # Workspace crates
-fleetflow-atom = { version = "0.3.0", path = "../fleetflow-atom" }
-fleetflow-container = { version = "0.3.0", path = "../fleetflow-container" }
-fleetflow-config = { version = "0.3.0", path = "../fleetflow-config" }
-fleetflow-build = { version = "0.3.0", path = "../fleetflow-build" }
-fleetflow-cloud = { version = "0.3.0", path = "../fleetflow-cloud" }
-fleetflow-cloud-sakura = { version = "0.3.0", path = "../fleetflow-cloud-sakura" }
-fleetflow-cloud-cloudflare = { version = "0.3.0", path = "../fleetflow-cloud-cloudflare" }
-fleetflow-mcp = { version = "0.3.0", path = "../fleetflow-mcp" }
+fleetflow-atom = { version = "0.3.1", path = "../fleetflow-atom" }
+fleetflow-container = { version = "0.3.1", path = "../fleetflow-container" }
+fleetflow-config = { version = "0.3.1", path = "../fleetflow-config" }
+fleetflow-build = { version = "0.3.1", path = "../fleetflow-build" }
+fleetflow-cloud = { version = "0.3.1", path = "../fleetflow-cloud" }
+fleetflow-cloud-sakura = { version = "0.3.1", path = "../fleetflow-cloud-sakura" }
+fleetflow-cloud-cloudflare = { version = "0.3.1", path = "../fleetflow-cloud-cloudflare" }
+fleetflow-mcp = { version = "0.3.1", path = "../fleetflow-mcp" }
 
 # External dependencies
 clap.workspace = true

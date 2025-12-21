@@ -47,10 +47,10 @@ printf "\n"
 info "[1/3] FleetFlow 本体をインストールしています..."
 
 # 最新バージョンの取得
-LATEST_VERSION=$(curl -s https://api.github.com/repos/chronista-club/fleetflow/releases/latest | grep tag_name | cut -d'"' -f4 || echo "v0.3.0")
+LATEST_VERSION=$(curl -s https://api.github.com/repos/chronista-club/fleetflow/releases/latest | grep tag_name | cut -d'"' -f4 || echo "v0.3.1")
 
 if [ -z "$LATEST_VERSION" ] || [ "$LATEST_VERSION" = "null" ]; then
-    LATEST_VERSION="v0.3.0"
+    LATEST_VERSION="v0.3.1"
 fi
 
 printf "  → バージョン: ${GREEN}%s${NC}\n" "$LATEST_VERSION"
