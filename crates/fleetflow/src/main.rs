@@ -435,6 +435,12 @@ async fn main() -> anyhow::Result<()> {
         return self_update().await;
     }
 
+    // Mcpコマンドは設定ファイル不要（ツール実行時に必要に応じてロード）
+    if matches!(cli.command, Commands::Mcp) {
+        let mut server = fleetflow_mcp::McpServer::new();
+        return server.run().await;
+    }
+
     // プロジェクトルートを検索
     let project_root = match fleetflow_atom::find_project_root() {
         Ok(root) => root,
@@ -1878,8 +1884,8 @@ async fn main() -> anyhow::Result<()> {
             handle_cloud_command(cloud_cmd, &config).await?;
         }
         Commands::Mcp => {
-            let mut server = fleetflow_mcp::McpServer::new();
-            server.run().await?;
+            // 早期リターンで処理済み（main関数冒頭）
+            unreachable!("Mcp is handled before config loading");
         }
         Commands::SelfUpdate => {
             // 早期リターンで処理済み（main関数冒頭）

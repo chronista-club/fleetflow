@@ -111,10 +111,10 @@ fi
 echo -e "\n${GREEN}[3/3] セットアップが完了しました！${NC}"
 echo -e "${BLUE}-------------------------------------------${NC}"
 echo -e "今すぐ始めるには："
-echo -e "  ${CYAN}fleetflow --version${NC}"
+echo -e "  ${CYAN}fleetflow version${NC}"
 echo -e ""
 echo -e "AI にプロジェクトを解析させるには："
 echo -e "  ${CYAN}# Gemini CLI や Claude Code 内で${NC}"
 echo -e "  「今のプロジェクトの構成を教えて」"
-${BLUE}-------------------------------------------${NC}
+echo -e "${BLUE}-------------------------------------------${NC}"
 echo -e "Happy Flowing with ${GREEN}FleetFlow${NC}! (FとFが大文字なのを忘れずに！)\n"
