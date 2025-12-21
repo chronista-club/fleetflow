@@ -474,7 +474,7 @@ async fn main() -> anyhow::Result<()> {
                     println!("  {}", config_path.display().to_string().cyan());
                     println!();
                     println!("{}", "次のコマンドで環境を起動できます:".bold());
-                    println!("  {} up", "flow".cyan());
+                    println!("  {} up", "fleetflow".cyan());
 
                     return Ok(());
                 }
@@ -872,7 +872,7 @@ async fn main() -> anyhow::Result<()> {
                             eprintln!("  {}", err_str);
                             eprintln!();
                             eprintln!("{}", "解決方法:".yellow());
-                            eprintln!("  • 既存のコンテナを停止: flow down --stage={}", stage_name);
+                            eprintln!("  • 既存のコンテナを停止: fleetflow down --stage={}", stage_name);
                             eprintln!("  • 別のポート番号を使用してください");
                             eprintln!(
                                 "  • docker ps でポートを使用しているコンテナを確認してください"

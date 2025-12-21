@@ -316,7 +316,7 @@ service "api" {
 ### デプロイ後にサービスが起動しない
 
 **確認手順**:
-1. `fleetflow logs --stage prod` でログを確認
+1. `fleetfleetflow logs --stage prod` でログを確認
 2. イメージタグが正しいか確認
 3. 環境変数が設定されているか確認
 

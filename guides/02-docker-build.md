@@ -17,7 +17,7 @@ FleetFlowでカスタムDockerイメージをビルドする方法を、実践�
 ## 前提知識
 
 - Dockerfileの基本的な書き方
-- FleetFlowの基本的な使い方（`fleetflow up`, `fleetflow down`）
+- FleetFlowの基本的な使い方（`fleetfleetflow up`, `fleetfleetflow down`）
 - flow.kdlの基本構文
 
 ## 基本的な使い方
@@ -66,7 +66,7 @@ CMD ["npm", "start"]
 
 **起動**:
 ```bash
-fleetflow up local
+fleetfleetflow up local
 ```
 
 → 自動的に`services/api/Dockerfile`が検出され、ビルド後にコンテナが起動します。
@@ -167,11 +167,11 @@ service "api" {
 **使用例**:
 ```bash
 # 開発環境でビルド・起動
-fleetflow up local
+fleetfleetflow up local
 # → APP_ENV=development, DEBUG=true
 
 # 本番環境でビルド・起動
-fleetflow up prod
+fleetfleetflow up prod
 # → APP_ENV=production, DEBUG=false
 ```
 
@@ -275,10 +275,10 @@ fleetflow rebuild api --no-cache
 
 ```bash
 # 全サービスをリビルド
-fleetflow up --build local
+fleetfleetflow up --build local
 
 # キャッシュなしでリビルド
-fleetflow up --build --no-cache local
+fleetfleetflow up --build --no-cache local
 ```
 
 ## 実践的なパターン
@@ -402,7 +402,7 @@ CMD ["./server"]
 **開発フロー**:
 ```bash
 # 初回起動
-fleetflow up local
+fleetfleetflow up local
 
 # フロントエンド変更後
 # （ホットリロードが効いているので不要）
@@ -411,7 +411,7 @@ fleetflow up local
 fleetflow rebuild backend
 
 # 全体リビルド
-fleetflow up --build local
+fleetfleetflow up --build local
 ```
 
 ### パターン2: マイクロサービス

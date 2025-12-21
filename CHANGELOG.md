@@ -11,7 +11,7 @@
 
 ### 追加
 
-- `fleetflow up --pull`: 起動前に最新イメージを強制プルするオプション
+- `fleetfleetflow up --pull`: 起動前に最新イメージを強制プルするオプション
   - リモートレジストリから最新イメージを取得してから起動
   - `build`設定があるサービスには適用されない（ローカルビルド優先）
 
@@ -70,10 +70,10 @@
 - FleetFlowの初回リリース
 - KDLベースの設定構文
 - 基本的なCLIコマンド:
-  - `fleetflow up` - ステージ内のサービスを起動
-  - `fleetflow down` - ステージ内のサービスを停止
-  - `fleetflow ps` - 実行中のサービスを一覧表示
-  - `fleetflow logs` - サービスのログを表示
+  - `fleetfleetflow up` - ステージ内のサービスを起動
+  - `fleetfleetflow down` - ステージ内のサービスを停止
+  - `fleetfleetflow ps` - 実行中のサービスを一覧表示
+  - `fleetfleetflow logs` - サービスのログを表示
 - ステージベースの環境管理（local, dev, stg, prd）
 - 自動イメージ推測機能付きサービス定義
 - ポートマッピング設定

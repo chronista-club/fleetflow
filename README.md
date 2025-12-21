@@ -84,10 +84,10 @@ stage "production" {
 ## コマンド一覧
 
 ```bash
-fleetflow up <stage>      # ステージを起動
-fleetflow down <stage>    # ステージを停止
-fleetflow ps              # コンテナ一覧を表示
-fleetflow logs            # ログを表示
+fleetfleetflow up <stage>      # ステージを起動
+fleetfleetflow down <stage>    # ステージを停止
+fleetfleetflow ps              # コンテナ一覧を表示
+fleetfleetflow logs            # ログを表示
 fleetflow mcp             # MCP サーバーを起動 (AI連携用)
 ```
 

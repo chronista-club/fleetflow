@@ -31,7 +31,7 @@ sequenceDiagram
     participant Docker
     participant OS
 
-    User->>Flow: fleetflow up --stage=local
+    User->>Flow: fleetfleetflow up --stage=local
     Flow->>Flow: flow.kdl を解析
     Flow->>Docker: コンテナ作成リクエスト
     Docker->>OS: プロセス起動
@@ -84,19 +84,19 @@ graph TD
 ```mermaid
 stateDiagram-v2
     [*] --> 定義: workload/flow.kdlに記述
-    定義 --> 解析: fleetflow up
+    定義 --> 解析: fleetfleetflow up
     解析 --> イメージPull: Dockerイメージ取得
     イメージPull --> コンテナ作成: docker create
     コンテナ作成 --> プロセス起動: docker start
     プロセス起動 --> 実行中: プロセスが動作
 
-    実行中 --> 停止中: fleetflow down
-    停止中 --> プロセス起動: fleetflow up
+    実行中 --> 停止中: fleetfleetflow down
+    停止中 --> プロセス起動: fleetfleetflow up
 
     実行中 --> 異常終了: クラッシュ
     異常終了 --> プロセス起動: 再起動
 
-    停止中 --> 削除: fleetflow down --remove
+    停止中 --> 削除: fleetfleetflow down --remove
     削除 --> [*]
 
     note right of 実行中
@@ -320,16 +320,16 @@ service "worker" {
 
 ```bash
 # ローカル開発
-fleetflow up --stage=local
+fleetfleetflow up --stage=local
 
 # クラウド開発環境
-fleetflow up --stage=dev
+fleetfleetflow up --stage=dev
 
 # ステージング検証
-fleetflow up --stage=stg
+fleetfleetflow up --stage=stg
 
 # 本番デプロイ
-fleetflow up --stage=prd
+fleetfleetflow up --stage=prd
 ```
 
 ##### ステージの責務

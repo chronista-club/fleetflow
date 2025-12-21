@@ -1,10 +1,10 @@
 {
-    "mcpServers": {
-        "creo-memories": {
-            "displayName": "Creo Memories",
-            "url": "https://mcp.creo-memories.in/mcp",
-            "type": "http",
-            "context": "memory-tool"
-        }
+  "mcpServers": {
+    "fleetflow": {
+      "displayName": "FleetFlow",
+      "command": "fleetflow",
+      "args": ["mcp"],
+      "type": "stdio"
     }
+  }
 }

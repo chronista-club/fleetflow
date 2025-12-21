@@ -69,29 +69,29 @@ stage "local" {
 ### 2. サービスを起動
 
 ```bash
-fleetflow up
+fleetfleetflow up
 ```
 
 ### 3. サービスを確認
 
 ```bash
-fleetflow ps
+fleetfleetflow ps
 ```
 
 ### 4. サービスを停止
 
 ```bash
-fleetflow down
+fleetfleetflow down
 ```
 
 ## 📚 主なコマンド
 
 | コマンド | 説明 |
 |---------|------|
-| `fleetflow up [stage]` | ステージ内のサービスを起動 |
-| `fleetflow down [stage]` | ステージ内のサービスを停止 |
-| `fleetflow ps` | 実行中のサービスを一覧表示 |
-| `fleetflow logs <service>` | サービスのログを表示 |
+| `fleetfleetflow up [stage]` | ステージ内のサービスを起動 |
+| `fleetfleetflow down [stage]` | ステージ内のサービスを停止 |
+| `fleetfleetflow ps` | 実行中のサービスを一覧表示 |
+| `fleetfleetflow logs <service>` | サービスのログを表示 |
 
 ## 🎯 主な機能
 

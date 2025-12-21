@@ -25,13 +25,13 @@ Docker Composeの冗長さを排除し、本当に必要なコマンドだけを
 
 ```bash
 # 削除したい → --remove
-flow down --remove
+fleetflow down --remove
 
 # ログを追いたい → --follow
-flow logs --follow
+fleetflow logs --follow
 
 # 全部見たい → --all
-flow ps --all
+fleetflow ps --all
 ```
 
 #### 3. **環境変数との統合**
@@ -41,9 +41,9 @@ flow ps --all
 ```bash
 # 毎回 --stage=local を打つ必要がない
 export FLEETFLOW_STAGE=local
-flow up
-flow logs
-flow down
+fleetflow up
+fleetflow logs
+fleetflow down
 ```
 
 #### 4. **エラーメッセージの親切さ**
@@ -57,7 +57,7 @@ flow down
   port 5432 is already allocated
 
 解決方法:
-  • 既存のコンテナを停止: flow down --stage=local
+  • 既存のコンテナを停止: fleetflow down --stage=local
   • 別のポート番号を使用してください
 ```
 
@@ -84,7 +84,7 @@ flow down
 
 ### 機能仕様
 
-#### FS-001: flow up - コンテナ起動
+#### FS-001: fleetflow up - コンテナ起動
 
 **目的**: 指定したステージのサービスを起動する
 
@@ -111,7 +111,7 @@ flow down
 - Docker が起動している必要がある
 - イメージが存在する必要がある
 
-#### FS-002: flow down - コンテナ停止
+#### FS-002: fleetflow down - コンテナ停止
 
 **目的**: 指定したステージのサービスを停止する
 
@@ -137,7 +137,7 @@ flow down
 - ステージ名は必須
 - Docker が起動している必要がある
 
-#### FS-003: flow logs - ログ表示
+#### FS-003: fleetflow logs - ログ表示
 
 **目的**: コンテナのログを表示する
 
@@ -167,7 +167,7 @@ flow down
 - Docker が起動している必要がある
 - コンテナが存在する必要がある
 
-#### FS-004: flow ps - コンテナ一覧表示
+#### FS-004: fleetflow ps - コンテナ一覧表示
 
 **目的**: 管理中のコンテナの状態を確認する
 
@@ -196,19 +196,19 @@ flow down
 
 ```bash
 # 基本的な使用方法
-fleetflow up --stage=local
-fleetflow down --stage=local
-fleetflow logs --stage=local
-fleetflow ps --stage=local
+fleetfleetflow up --stage=local
+fleetfleetflow down --stage=local
+fleetfleetflow logs --stage=local
+fleetfleetflow ps --stage=local
 
 # 環境変数を使用
 export FLEETFLOW_STAGE=local
-fleetflow up
-fleetflow logs --follow
-fleetflow down --remove
+fleetfleetflow up
+fleetfleetflow logs --follow
+fleetfleetflow down --remove
 
 # サービス指定
-fleetflow logs --service=postgres --lines=1000
+fleetfleetflow logs --service=postgres --lines=1000
 ```
 
 ### 非機能仕様
@@ -261,7 +261,7 @@ Flowは「本当に必要な機能」だけを提供することで、学習コ�
 #### 初めて使う人
 
 ```bash
-$ fleetflow up
+$ fleetfleetflow up
 ✗ ステージ名を指定してください: --stage=local または FLEETFLOW_STAGE=local
 ```
 
@@ -271,10 +271,10 @@ $ fleetflow up
 
 ```bash
 $ export FLEETFLOW_STAGE=local
-$ fleetflow up
-$ fleetflow logs -f
+$ fleetfleetflow up
+$ fleetfleetflow logs -f
 # 開発作業
-$ fleetflow down
+$ fleetfleetflow down
 ```
 
 わずか4つのコマンドで開発サイクルが回る。
@@ -282,11 +282,11 @@ $ fleetflow down
 #### トラブルシューティング
 
 ```bash
-$ fleetflow up
+$ fleetfleetflow up
 ✗ ポートが既に使用されています
 
 解決方法:
-  • 既存のコンテナを停止: fleetflow down --stage=local
+  • 既存のコンテナを停止: fleetfleetflow down --stage=local
 ```
 
 次に何をすればいいかが明確。

@@ -15,7 +15,7 @@ FleetFlowにクラウドインフラ管理機能を追加し、**複数のクラ
 
 ### ゴール
 
-- `flow up --stage dev` でクラウド環境を宣言的に構築
+- `fleetflow up --stage dev` でクラウド環境を宣言的に構築
 - さくらのクラウド、Cloudflareなど複数プロバイダー対応
 - stageによってデプロイターゲットが変わる設計
 
@@ -212,10 +212,10 @@ service-group "creo-stack" {
 
 ```bash
 # 環境を構築・更新
-flow up --stage dev
+fleetflow up --stage dev
 
 # 環境を削除
-flow down --stage dev
+fleetflow down --stage dev
 
 # 差分を確認（dry-run）
 flow plan --stage dev

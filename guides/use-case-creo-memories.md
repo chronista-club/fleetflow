@@ -205,22 +205,22 @@ service "creo-mcp-server" {
 
 ```bash
 # ローカル開発環境
-fleetflow up --stage local
+fleetfleetflow up --stage local
 
 # 本番環境
-fleetflow up --stage prod
+fleetfleetflow up --stage prod
 ```
 
 ### 状態確認
 
 ```bash
-fleetflow ps
+fleetfleetflow ps
 ```
 
 ### 停止
 
 ```bash
-fleetflow down --stage local
+fleetfleetflow down --stage local
 ```
 
 ## 発見した課題と対策
@@ -300,7 +300,7 @@ stage "local" {
 ```
 
 期待動作：
-- `fleetflow up --stage local` で自動的にDockerネットワークを作成
+- `fleetfleetflow up --stage local` で自動的にDockerネットワークを作成
 - 各サービスをネットワークに接続
 - サービス名でDNS解決可能
 
@@ -311,7 +311,7 @@ stage "local" {
 1. さくらのクラウドでのサーバー作成
 2. SSH鍵設定
 3. Dockerインストール自動化
-4. `fleetflow up --stage dev --remote` でリモートデプロイ
+4. `fleetfleetflow up --stage dev --remote` でリモートデプロイ
 
 ## 関連リンク
 
