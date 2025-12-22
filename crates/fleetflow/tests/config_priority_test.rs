@@ -3,8 +3,10 @@ mod common;
 use common::TestProject;
 use std::fs;
 
+// TODO: このテストは現在失敗している。本番環境では動作しているが、テスト環境で
+// ポートバインディングが空になる問題がある。bollardの使い方を調査する必要がある。
+#[ignore]
 #[tokio::test]
-#[ignore] // TODO: KDLパースエラーを修正する必要がある
 async fn test_config_priority_complex() {
     let project = TestProject::new();
 
@@ -14,10 +16,10 @@ async fn test_config_priority_complex() {
     // 2. flow.kdl (基本)
     project.write_flow_kdl(
         r#"
-project priority-test
+project "priority-test"
 
-service db {
-    image surrealdb/surrealdb:{{ DB_TAG }}
+service "db" {
+    image "surrealdb/surrealdb:{{ DB_TAG }}"
     command "start --user root --pass root --bind 0.0.0.0:8000 rocksdb:///data/database.db"
     ports {
         port host={{ DB_PORT }} container=8000
@@ -30,12 +32,12 @@ service db {
     fs::write(
         project.path().join("flow.prod.kdl"),
         r#"
-stage prod {
-    service db
+stage "prod" {
+    service "db"
 }
 
-service db {
-    image surrealdb/surrealdb:v2 // 明示的にイメージを上書き
+service "db" {
+    image "surrealdb/surrealdb:v2" // 明示的にイメージを上書き
     ports {
         port host=9001 container=8000 // ポートも上書き
     }
@@ -48,7 +50,7 @@ service db {
     fs::write(
         project.path().join("flow.local.kdl"),
         r#"
-service db {
+service "db" {
     ports {
         port host=9999 container=8000 // さらにローカルで上書き
     }
@@ -106,15 +108,24 @@ service db {
     );
 
     // DB のポートが 9999 (flow.local.kdl) になっているか
-    let port_bindings = db_inspect.host_config.unwrap().port_bindings.unwrap();
-    let host_port = port_bindings
+    let host_config = db_inspect.host_config.expect("host_config should exist");
+    let port_bindings = host_config
+        .port_bindings
+        .expect("port_bindings should exist");
+
+    println!("  DEBUG: All port bindings: {:?}", port_bindings);
+
+    let port_binding = port_bindings
         .get("8000/tcp")
-        .unwrap()
+        .expect("8000/tcp port should be bound")
         .as_ref()
-        .unwrap()[0]
+        .expect("port binding should have value");
+
+    let host_port = port_binding[0]
         .host_port
         .as_ref()
-        .unwrap();
+        .expect("host_port should exist");
+
     println!("  DEBUG: DB Port: {}", host_port);
     assert_eq!(
         host_port, "9999",
