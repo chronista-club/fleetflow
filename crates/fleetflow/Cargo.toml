@@ -17,7 +17,7 @@ path = "src/main.rs"
 
 [dependencies]
 # Workspace crates
-fleetflow-atom = { version = "0.3.1", path = "../fleetflow-atom" }
+fleetflow-core = { version = "0.3.1", path = "../fleetflow-core" }
 fleetflow-container = { version = "0.3.1", path = "../fleetflow-container" }
 fleetflow-config = { version = "0.3.1", path = "../fleetflow-config" }
 fleetflow-build = { version = "0.3.1", path = "../fleetflow-build" }
@@ -45,3 +45,10 @@ crossterm.workspace = true
 
 # Self-update
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+
+[dev-dependencies]
+assert_cmd = "2.0"
+predicates = "3.1"
+tempfile = "3.10"
+tokio = { version = "1", features = ["full"] }
+

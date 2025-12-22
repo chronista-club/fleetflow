@@ -120,7 +120,7 @@ pub fn discover_files_with_stage(
                 if direct_file.exists() {
                     discovered.workloads.push(direct_file);
                 }
-                
+
                 // 2. workloads/{name}/*.kdl
                 let workload_dir = project_root.join(format!("workloads/{}", name));
                 if workload_dir.is_dir() {
@@ -266,7 +266,7 @@ fn extract_workload_names(content: &str) -> HashSet<String> {
         if line.starts_with("//") || line.starts_with('/') {
             continue;
         }
-        
+
         // workload "name" 形式を探す
         if line.starts_with("workload") {
             let parts: Vec<&str> = line.split_whitespace().collect();

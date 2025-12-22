@@ -1,6 +1,6 @@
 # Design: ワークロードの実装メカニズム
 
-## 1. ファイル発見フェーズの拡張 (`fleetflow-atom/src/discovery.rs`)
+## 1. ファイル発見フェーズの拡張 (`fleetflow-core/src/discovery.rs`)
 
 `discover_files` 関数を拡張し、`workload` ノードを事前にスキャンして関連ファイルを収集するようにします。
 
@@ -9,7 +9,7 @@
 2. 抽出されたワークロード名に基づき、`workloads/{name}.kdl` および `workloads/{name}/**/*.kdl` を探索。
 3. 発見されたファイルを `DiscoveredFiles` のリストに追加。
 
-## 2. ロードとマージの順序 (`fleetflow-atom/src/loader.rs`)
+## 2. ロードとマージの順序 (`fleetflow-core/src/loader.rs`)
 
 以下の順序で KDL 文字列を結合し、パースを行います。
 
@@ -18,7 +18,7 @@
 3. **ステージ/サービス定義ファイル**: さらに詳細な分割ファイル。
 4. **ローカルオーバーライド (`flow.local.kdl`)**: 最終的な上書き。
 
-## 3. データモデルの変更 (`fleetflow-atom/src/model/`)
+## 3. データモデルの変更 (`fleetflow-core/src/model/`)
 
 `Flow` 構造体に `workload` フィールドを追加することを検討します（必須ではありませんが、メタデータとして保持しておくと便利です）。
 

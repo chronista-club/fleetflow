@@ -1,0 +1,15 @@
+// SurrealDB v2 ワークロード
+service "db" {
+    // 指定された v2 タグを使用
+    image "surrealdb/surrealdb:v2"
+    restart "unless-stopped"
+
+    // 既存設定に合わせた起動コマンド (RocksDBストレージ)
+    command "start --user root --pass root --bind [::]:8000 rocksdb:///data/database.db"
+
+    // ポート設定はステージごとに定義（flow.kdl参照）
+
+    volumes {
+        volume "./data/surrealdb" "/data"
+    }
+}

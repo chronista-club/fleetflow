@@ -71,7 +71,7 @@ name = "fleetflow"
 #### 個別クレート
 ```toml
 [package]
-name = "fleetflow-atom"
+name = "fleetflow-core"
 name = "fleetflow"
 name = "fleetflow-config"
 name = "fleetflow-container"
@@ -84,7 +84,7 @@ name = "fleetflow-container"
 ```
 fleetflow/
 ├── crates/
-│   ├── fleetflow-atom/
+│   ├── fleetflow-core/
 │   ├── fleetflow/
 │   ├── fleetflow-config/
 │   └── fleetflow-container/

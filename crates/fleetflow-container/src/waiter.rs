@@ -10,7 +10,7 @@ use crate::error::{ContainerError, Result};
 use bollard::Docker;
 use bollard::container::InspectContainerOptions;
 use bollard::models::HealthStatusEnum;
-use fleetflow_atom::WaitConfig;
+use fleetflow_core::WaitConfig;
 use std::time::Duration;
 use tokio::time::sleep;
 

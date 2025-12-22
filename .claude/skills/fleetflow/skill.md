@@ -68,10 +68,10 @@ service "db" {
 ### 基本操作
 
 ```bash
-fleetfleetflow up local      # 起動
-fleetfleetflow ps            # 状態確認
-fleetfleetflow logs          # ログ表示
-fleetfleetflow down local    # 停止・削除
+fleetflow up local      # 起動
+fleetflow ps            # 状態確認
+fleetflow logs          # ログ表示
+fleetflow down local    # 停止・削除
 ```
 
 ## CLIコマンド一覧
@@ -350,14 +350,14 @@ ssh user@vps "cd /app && fleetflow deploy prod --pull --yes"
 
 ### セルフアップデート
 
-`fleetfleetflow up`実行時に自動的にバージョンチェックを行い、新しいバージョンがあれば通知します：
+`fleetflow up`実行時に自動的にバージョンチェックを行い、新しいバージョンがあれば通知します：
 
 ```bash
 # 手動でアップデート
 fleetflow self-update
 
 # upコマンド時に自動チェック
-fleetfleetflow up local  # 新バージョンがあれば通知
+fleetflow up local  # 新バージョンがあれば通知
 ```
 
 ## コンテナ命名規則
@@ -378,7 +378,7 @@ OrbStackでは `{project}-{stage}` でグループ化されます。
 fleetflow/
 ├── crates/
 │   ├── fleetflow/           # CLI
-│   ├── fleetflow-atom/          # KDLパーサー
+│   ├── fleetflow-core/          # KDLパーサー
 │   ├── fleetflow-container/     # コンテナ操作
 │   ├── fleetflow-build/         # Dockerビルド
 │   ├── fleetflow-cloud/         # クラウド抽象化

@@ -233,7 +233,7 @@ service "api" {
 #### 5.2 キャッシュ無効化
 
 ```bash
-fleetfleetflow up --build --no-cache local
+fleetflow up --build --no-cache local
 ```
 
 または
@@ -275,14 +275,14 @@ CMD ["npm", "start"]
 
 ## コマンド仕様
 
-### 1. `fleetfleetflow up`
+### 1. `fleetflow up`
 
 既存の`up`コマンドに`--build`フラグを追加。
 
 #### 1.1 基本動作（既存）
 
 ```bash
-fleetfleetflow up local
+fleetflow up local
 ```
 
 - Dockerfileが存在する場合、**初回のみ**自動ビルド
@@ -292,7 +292,7 @@ fleetfleetflow up local
 #### 1.2 強制リビルド
 
 ```bash
-fleetfleetflow up --build local
+fleetflow up --build local
 ```
 
 - 既存イメージの有無にかかわらず、必ずビルドを実行
@@ -301,7 +301,7 @@ fleetfleetflow up --build local
 #### 1.3 キャッシュなしビルド
 
 ```bash
-fleetfleetflow up --build --no-cache local
+fleetflow up --build --no-cache local
 ```
 
 - キャッシュを使わずにフルビルド

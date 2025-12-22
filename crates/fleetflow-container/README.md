@@ -20,7 +20,7 @@ FleetFlowのDockerコンテナランタイム統合を提供するライブラ�
 
 ```rust
 use fleetflow_container::converter::service_to_container_config;
-use fleetflow_atom::Service;
+use fleetflow_core::Service;
 
 let service = Service {
     image: Some("postgres:16".to_string()),
@@ -37,7 +37,7 @@ let (config, options) = service_to_container_config("postgres", &service);
 
 ```rust
 use fleetflow_container::converter::get_stage_services;
-use fleetflow_atom::Flow;
+use fleetflow_core::Flow;
 
 let flow = /* ... */;
 let services = get_stage_services(&flow, "local")?;
@@ -51,7 +51,7 @@ for service_name in services {
 
 ```rust
 use fleetflow_container::runtime::ContainerRuntime;
-use fleetflow_atom::Flow;
+use fleetflow_core::Flow;
 
 #[async_trait]
 pub trait ContainerRuntime {
@@ -88,7 +88,7 @@ FleetFlowのServiceをDocker APIのパラメータに変換：
 ## 依存関係
 
 - [bollard](https://crates.io/crates/bollard) - Docker APIクライアント
-- [fleetflow-atom](https://crates.io/crates/fleetflow-atom) - FleetFlowコア機能
+- [fleetflow-core](https://crates.io/crates/fleetflow-core) - FleetFlowコア機能
 
 ## ドキュメント
 

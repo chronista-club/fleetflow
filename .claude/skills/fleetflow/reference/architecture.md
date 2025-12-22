@@ -8,7 +8,7 @@ FleetFlowの内部構造とコンポーネントの説明です。
 fleetflow/
 ├── crates/
 │   ├── fleetflow/              # CLIエントリーポイント
-│   ├── fleetflow-atom/             # KDLパーサー・データモデル
+│   ├── fleetflow-core/             # KDLパーサー・データモデル
 │   │   ├── src/model/              # データ構造
 │   │   └── src/parser/             # パーサー
 │   ├── fleetflow-config/           # 設定管理
@@ -39,7 +39,7 @@ CLIのエントリーポイント。`clap`を使用したコマンド定義と�
 - `cloud up/down` - クラウドインフラ管理
 - `ps`, `logs`, `validate` - 状態確認
 
-### fleetflow-atom
+### fleetflow-core
 
 KDLパーサーとコアデータモデル。
 

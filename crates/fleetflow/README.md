@@ -69,29 +69,29 @@ stage "local" {
 ### 2. サービスを起動
 
 ```bash
-fleetfleetflow up
+fleetflow up
 ```
 
 ### 3. サービスを確認
 
 ```bash
-fleetfleetflow ps
+fleetflow ps
 ```
 
 ### 4. サービスを停止
 
 ```bash
-fleetfleetflow down
+fleetflow down
 ```
 
 ## 📚 主なコマンド
 
 | コマンド | 説明 |
 |---------|------|
-| `fleetfleetflow up [stage]` | ステージ内のサービスを起動 |
-| `fleetfleetflow down [stage]` | ステージ内のサービスを停止 |
-| `fleetfleetflow ps` | 実行中のサービスを一覧表示 |
-| `fleetfleetflow logs <service>` | サービスのログを表示 |
+| `fleetflow up [stage]` | ステージ内のサービスを起動 |
+| `fleetflow down [stage]` | ステージ内のサービスを停止 |
+| `fleetflow ps` | 実行中のサービスを一覧表示 |
+| `fleetflow logs <service>` | サービスのログを表示 |
 
 ## 🎯 主な機能
 
@@ -162,7 +162,7 @@ service "api" {
 FleetFlowは以下のクレートで構成されています：
 
 - **fleetflow** - メインCLI
-- **fleetflow-atom** - コア機能（パーサー、モデル、ローダー）
+- **fleetflow-core** - コア機能（パーサー、モデル、ローダー）
 - **fleetflow-config** - 設定ファイル検索と管理
 - **fleetflow-container** - Dockerコンテナランタイム統合
 
@@ -176,6 +176,6 @@ Issue、Pull Requestを歓迎します！
 
 ## 🔗 関連クレート
 
-- [`fleetflow-atom`](https://crates.io/crates/fleetflow-atom) - コア機能
+- [`fleetflow-core`](https://crates.io/crates/fleetflow-core) - コア機能
 - [`fleetflow-config`](https://crates.io/crates/fleetflow-config) - 設定管理
 - [`fleetflow-container`](https://crates.io/crates/fleetflow-container) - コンテナランタイム統合

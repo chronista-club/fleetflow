@@ -7,7 +7,7 @@ use crate::discovery::{
 };
 use crate::error::{FlowError, Result};
 use crate::model::Flow;
-use crate::parser::parse_kdl_string;
+use crate::parser::{parse_kdl_string, parse_kdl_string_with_stage};
 use crate::template::{TemplateProcessor, Variables, extract_variables};
 use std::path::Path;
 use tracing::{debug, info, instrument};
@@ -65,7 +65,7 @@ pub fn load_project_from_root_with_stage(project_root: &Path, stage: Option<&str
         .and_then(|n| n.to_str())
         .unwrap_or("unnamed")
         .to_string();
-    let flow = parse_kdl_string(&expanded_content, name)?;
+    let flow = parse_kdl_string_with_stage(&expanded_content, name, stage)?;
     info!(
         services = flow.services.len(),
         stages = flow.stages.len(),
@@ -100,15 +100,16 @@ fn prepare_template_processor(discovered: &DiscoveredFiles) -> Result<TemplatePr
         all_variables.extend(vars);
     }
 
-    // 3. 環境変数を追加（FLEETFLOW_*, CI_*, APP_* プレフィックスのみ）
-    processor.add_env_variables();
-
-    // 4. .env ファイルから変数を追加（プレフィックス制限なし）
+    // 3. .env ファイルから変数を追加
     if let Some(env_file) = &discovered.env_file {
         processor.add_env_file_variables(env_file)?;
     }
 
+    // 4. 環境変数を追加（FLEETFLOW_*, CI_*, APP_* プレフィックスのみ、最優先）
+    processor.add_env_variables();
+
     // 5. 収集した変数を追加（最も優先度が高い）
+    debug!(vars = ?all_variables, "Adding all collected variables to processor");
     processor.add_variables(all_variables);
 
     Ok(processor)
@@ -138,54 +139,52 @@ fn expand_all_files(
 
     let mut expanded = String::with_capacity(estimated_capacity);
 
-    // 読み込み順序:
-    // 0. workloads/*.kdl（基礎となるワークロード定義）
-    // 1. flow.kdl（グローバル設定、ワークロードの上書き）
-    // 2. services/**/*.kdl
-    // 3. stages/**/*.kdl
-    // 4. flow.{stage}.kdl（ステージオーバーライド）
-    // 5. flow.local.kdl（ローカルオーバーライド）
-
     // 0. workloads/*.kdl
     for workload_file in &discovered.workloads {
+        debug!(file = %workload_file.display(), "Rendering workload file");
         let rendered = processor.render_file(workload_file)?;
         expanded.push_str(&rendered);
-        expanded.push('\n');
+        expanded.push_str("\n\n");
     }
 
     // 1. flow.kdl
     if let Some(root_file) = &discovered.root {
+        debug!(file = %root_file.display(), "Rendering root file");
         let rendered = processor.render_file(root_file)?;
         expanded.push_str(&rendered);
-        expanded.push('\n');
+        expanded.push_str("\n\n");
     }
 
     // 2. services/**/*.kdl
     for service_file in &discovered.services {
+        debug!(file = %service_file.display(), "Rendering service file");
         let rendered = processor.render_file(service_file)?;
         expanded.push_str(&rendered);
-        expanded.push('\n');
+        expanded.push_str("\n\n");
     }
 
     // 3. stages/**/*.kdl
     for stage_file in &discovered.stages {
+        debug!(file = %stage_file.display(), "Rendering stage file");
         let rendered = processor.render_file(stage_file)?;
         expanded.push_str(&rendered);
-        expanded.push('\n');
+        expanded.push_str("\n\n");
     }
 
     // 4. flow.{stage}.kdl（ステージオーバーライド）
     if let Some(stage_file) = &discovered.stage_override {
+        debug!(file = %stage_file.display(), "Rendering stage override file");
         let rendered = processor.render_file(stage_file)?;
         expanded.push_str(&rendered);
-        expanded.push('\n');
+        expanded.push_str("\n\n");
     }
 
     // 5. flow.local.kdl（ローカルオーバーライド）
     if let Some(local_file) = &discovered.local_override {
+        debug!(file = %local_file.display(), "Rendering local override file");
         let rendered = processor.render_file(local_file)?;
         expanded.push_str(&rendered);
-        expanded.push('\n');
+        expanded.push_str("\n\n");
     }
 
     Ok(expanded)
@@ -611,7 +610,10 @@ stage "local" {
         let config = load_project_from_root_with_stage(project_root, Some("local"))?;
 
         // デバッグ出力
-        println!("Services found: {:?}", config.services.keys().collect::<Vec<_>>());
+        println!(
+            "Services found: {:?}",
+            config.services.keys().collect::<Vec<_>>()
+        );
         if let Some(api) = config.services.get("api") {
             println!("API Image: {:?}", api.image);
             println!("API Ports: {:?}", api.ports);
@@ -624,9 +626,12 @@ stage "local" {
         // オーバーライドが機能していることを確認
         let api = &config.services["api"];
         assert_eq!(api.image.as_ref().unwrap(), "my-custom-api:v1"); // 上書きされた値
-        
+
         // ポートが空でないことを確認してからアクセス
-        assert!(!api.ports.is_empty(), "API ports should not be empty (inherited from workload)");
+        assert!(
+            !api.ports.is_empty(),
+            "API ports should not be empty (inherited from workload)"
+        );
         assert_eq!(api.ports[0].container, 8080); // ワークロード側の設定が維持されている
 
         let db = &config.services["db"];

@@ -1,6 +1,16 @@
 # FleetFlow プロジェクトガイド
 
-最終更新日: 2025-11-28
+最終更新日: 2025-12-22
+
+## 言語規定
+
+- **第一言語**: **日本語**
+- **適用範囲**:
+  - ユーザーとの議論・対話
+  - 思考プロセス（Thought process）
+  - Gitのコミットメッセージ
+  - ドキュメントの編集・作成（特に指定がない限り）
+  - コード内コメント（ただし関数名・変数名は英語）
 
 ## プロジェクト概要
 
@@ -38,7 +48,7 @@ Docker Composeの手軽さはそのままに、より少ない記述で、より
 fleetflow/
 ├── crates/
 │   ├── fleetflow/              # CLIエントリーポイント
-│   ├── fleetflow-atom/             # KDLパーサー・データモデル
+│   ├── fleetflow-core/             # KDLパーサー・データモデル
 │   │   ├── src/model/              # データ構造（モジュール分割）
 │   │   └── src/parser/             # パーサー（モジュール分割）
 │   ├── fleetflow-config/           # 設定管理
@@ -68,6 +78,8 @@ fleetflow/
 │   ├── CLAUDE.md                   # プロジェクトガイド（このファイル）
 │   ├── ports.md                    # ポート設定ガイド
 │   └── skills/                     # インストール済みスキル
+├── .gemini/                        # Gemini CLI設定
+│   └── GEMINI.md                   # Gemini用プロジェクトガイド
 ├── docs/                           # 公式ドキュメント
 └── README.md                       # プロジェクト説明
 ```
@@ -141,6 +153,38 @@ guides/            # Usage（使い方・ベストプラクティス）
 - ✅ Docker操作の実装
 - ✅ コンテナ、イメージ、ボリューム、ネットワーク操作
 - ✅ エラーハンドリング
+
+## 名称・環境変数の規約
+
+### 正式名称
+- **プロジェクト名**: `FleetFlow` (FとFを大文字、表記ゆれ防止)
+- **コード内識別子**: `fleetflow` (旧 `fleetflow-cli`)
+
+### 環境変数プレフィックス
+- **プレフィックス**: `FLEETFLOW_` (旧 `FLOW_`)
+- **例**:
+  - `FLEETFLOW_ENV`: 環境名
+  - `FLEETFLOW_PROJECT_ROOT`: プロジェクトルート
+  - `FLEETFLOW_STAGE`: ステージ名 (local/dev/stg/prod)
+
+## 重要な設計原則
+
+### Simplicity（シンプルさ）
+
+FleetFlowの設計哲学の中核は「シンプルさ」です。
+
+- **YAGNI原則**: You Aren't Gonna Need It - 今必要でない機能は実装しない
+- **最小限の概念**: `project`, `stage`, `service` の3つで全てを表現
+- **Straightforward原則**: 入力→処理→出力を直線的に
+- **不要な抽象化を避ける**: 過度なトレイトやジェネリクスを使わない
+
+### Living Documentation
+
+ドキュメントとコードは常に同期させる。不一致は技術的負債として扱う。
+
+- コード変更時は必ず対応するドキュメントも更新
+- `spec/`, `design/`, `guides/` を活用
+- READMEは常に最新の状態を反映
 
 ## 開発方針
 

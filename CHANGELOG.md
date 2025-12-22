@@ -7,11 +7,27 @@
 
 ## [Unreleased]
 
+## [0.3.1] - 2025-12-22
+
+### 修正
+
+- **ステージ内サービス定義の解析**: ステージ内に定義されたサービス設定（ポート、環境変数等）が解析されず反映されていなかった問題を修正
+  - 例: `stage "dev" { service "db" { ports { port host=50001 container=8000 } } }` のようなステージ固有の設定が無視されていた
+  - `parser/stage.rs` でステージ内のサービス定義を詳細に解析するように修正
+- **ステージ固有オーバーライドの適用**: ステージ指定時に他のステージのサービスオーバーライドが混在していた問題を修正
+  - dev環境なのにprod環境のポート設定が適用されるなどの問題を解決
+  - `parse_kdl_string_with_stage()` を追加し、指定されたステージのサービスオーバーライドのみを適用するように改善
+
+### 内部変更
+
+- `parse_stage()` の返り値を `(String, Stage, HashMap<String, Service>)` に変更し、ステージ内のサービス定義も返すように拡張
+- `parse_kdl_string_with_stage()` 関数を追加（ステージ指定対応）
+
 ## [0.2.14] - 2025-12-17
 
 ### 追加
 
-- `fleetfleetflow up --pull`: 起動前に最新イメージを強制プルするオプション
+- `fleetflow up --pull`: 起動前に最新イメージを強制プルするオプション
   - リモートレジストリから最新イメージを取得してから起動
   - `build`設定があるサービスには適用されない（ローカルビルド優先）
 
@@ -70,10 +86,10 @@
 - FleetFlowの初回リリース
 - KDLベースの設定構文
 - 基本的なCLIコマンド:
-  - `fleetfleetflow up` - ステージ内のサービスを起動
-  - `fleetfleetflow down` - ステージ内のサービスを停止
-  - `fleetfleetflow ps` - 実行中のサービスを一覧表示
-  - `fleetfleetflow logs` - サービスのログを表示
+  - `fleetflow up` - ステージ内のサービスを起動
+  - `fleetflow down` - ステージ内のサービスを停止
+  - `fleetflow ps` - 実行中のサービスを一覧表示
+  - `fleetflow logs` - サービスのログを表示
 - ステージベースの環境管理（local, dev, stg, prd）
 - 自動イメージ推測機能付きサービス定義
 - ポートマッピング設定

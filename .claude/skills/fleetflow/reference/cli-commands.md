@@ -21,15 +21,15 @@ FleetFlowのCLIコマンド一覧と詳細な使い方です。
 
 ## 詳細
 
-### `fleetfleetflow up`
+### `fleetflow up`
 
 指定したステージのコンテナを起動します。
 
 ```bash
-fleetfleetflow up <stage>
-fleetfleetflow up local
-fleetfleetflow up --build local      # ビルドしてから起動
-fleetfleetflow up --build --no-cache local  # キャッシュなしでビルド
+fleetflow up <stage>
+fleetflow up local
+fleetflow up --build local      # ビルドしてから起動
+fleetflow up --build --no-cache local  # キャッシュなしでビルド
 ```
 
 **オプション**:
@@ -47,13 +47,13 @@ fleetfleetflow up --build --no-cache local  # キャッシュなしでビルド
 5. コンテナを起動
 6. サービスごとに進捗を表示
 
-### `fleetfleetflow down`
+### `fleetflow down`
 
 指定したステージのコンテナを停止・削除します。
 
 ```bash
-fleetfleetflow down <stage>
-fleetfleetflow down local
+fleetflow down <stage>
+fleetflow down local
 ```
 
 **動作**:
@@ -61,13 +61,13 @@ fleetfleetflow down local
 2. コンテナを削除
 3. ボリュームは削除しない（データ保持）
 
-### `fleetfleetflow ps`
+### `fleetflow ps`
 
 コンテナの状態を表示します。
 
 ```bash
-fleetfleetflow ps            # 実行中のコンテナのみ
-fleetfleetflow ps --all      # 停止中も含む
+fleetflow ps            # 実行中のコンテナのみ
+fleetflow ps --all      # 停止中も含む
 ```
 
 **表示内容**:
@@ -75,16 +75,16 @@ fleetfleetflow ps --all      # 停止中も含む
 - 状態（Running/Stopped）
 - ポートマッピング
 
-### `fleetfleetflow logs`
+### `fleetflow logs`
 
 コンテナのログを表示します。
 
 ```bash
-fleetfleetflow logs                    # 全サービス
-fleetfleetflow logs [service]          # 特定サービス
-fleetfleetflow logs --follow           # リアルタイム表示
-fleetfleetflow logs --lines 100        # 行数指定
-fleetfleetflow logs -f -n 50 web       # 組み合わせ
+fleetflow logs                    # 全サービス
+fleetflow logs [service]          # 特定サービス
+fleetflow logs --follow           # リアルタイム表示
+fleetflow logs --lines 100        # 行数指定
+fleetflow logs -f -n 50 web       # 組み合わせ
 ```
 
 **オプション**:
@@ -313,7 +313,7 @@ fleetflow version
 ### コンテナが起動しない
 
 **解決方法**:
-1. ログを確認: `fleetfleetflow logs` または `docker logs {container}`
+1. ログを確認: `fleetflow logs` または `docker logs {container}`
 2. 環境変数が正しいか確認
 3. ボリュームマウントのパスを確認
 4. コマンドが正しいか確認

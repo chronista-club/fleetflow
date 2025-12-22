@@ -2,7 +2,7 @@
 resolver = "2"
 members = [
   "crates/fleetflow",
-  "crates/fleetflow-atom",
+  "crates/fleetflow-core",
   "crates/fleetflow-container",
   "crates/fleetflow-config",
   "crates/fleetflow-build",

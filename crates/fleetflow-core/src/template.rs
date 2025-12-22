@@ -184,32 +184,42 @@ impl Default for TemplateProcessor {
 
 /// KDLファイルから変数定義を抽出
 ///
-/// variables { ... } ブロックを探してHashMapに変換
+/// variables { ... } ブロックを探してHashMapに変換。
+/// 正規表現を使用してブロックを抽出することで、ドキュメント内の他の場所にある
+/// テンプレート変数 {{ ... }} によるパースエラーを回避します。
 pub fn extract_variables(kdl_content: &str) -> Result<Variables> {
-    let doc: kdl::KdlDocument = kdl_content
-        .parse()
-        .map_err(|e| FlowError::InvalidConfig(format!("KDL パースエラー: {}", e)))?;
+    use regex::Regex;
 
-    let mut variables = HashMap::new();
+    // variables { ... } ブロックを抽出する正規表現
+    // 注意: ネストした中括弧には対応していませんが、variablesブロック内では通常不要です
+    let re = Regex::new(r"(?s)variables\s*\{(?P<content>.*?)\}")
+        .map_err(|e| FlowError::InvalidConfig(format!("正規表現のコンパイルエラー: {}", e)))?;
 
-    // variables ノードを探す
-    for node in doc.nodes() {
-        if node.name().value() == "variables"
-            && let Some(children) = node.children()
-        {
-            for var_node in children.nodes() {
-                let key = var_node.name().value().to_string();
+    let mut all_vars = HashMap::new();
 
-                // 最初のエントリから値を取得
-                if let Some(entry) = var_node.entries().first() {
-                    let value = kdl_value_to_json(entry.value());
-                    variables.insert(key, value);
+    for cap in re.captures_iter(kdl_content) {
+        if let Some(content) = cap.name("content") {
+            // ブロックの中身だけをダミーのKDLとしてパース
+            let dummy_kdl = format!("extracted {{\n{}\n}}", content.as_str());
+            let doc: kdl::KdlDocument = dummy_kdl.parse().map_err(|e| {
+                FlowError::InvalidConfig(format!("KDL パースエラー (変数抽出ブロック): {}", e))
+            })?;
+
+            if let Some(node) = doc.nodes().first() {
+                if let Some(children) = node.children() {
+                    for var_node in children.nodes() {
+                        let key = var_node.name().value().to_string();
+                        if let Some(entry) = var_node.entries().first() {
+                            let value = kdl_value_to_json(entry.value());
+                            all_vars.insert(key, value);
+                        }
+                    }
                 }
             }
         }
     }
 
-    Ok(variables)
+    Ok(all_vars)
 }
 
 /// クォートを除去するヘルパー関数

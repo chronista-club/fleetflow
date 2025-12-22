@@ -73,9 +73,13 @@ pub fn parse_service(node: &KdlNode) -> Result<(String, Service)> {
                         }
                     } else {
                         // 子ノードがない場合は、フラットな env "KEY=VALUE" 形式をサポート
-                        if let Some(val) = child.entries().first().and_then(|e| e.value().as_string()) {
+                        if let Some(val) =
+                            child.entries().first().and_then(|e| e.value().as_string())
+                        {
                             if let Some((k, v)) = val.split_once('=') {
-                                service.environment.insert(k.trim().to_string(), v.trim().to_string());
+                                service
+                                    .environment
+                                    .insert(k.trim().to_string(), v.trim().to_string());
                             }
                         }
                     }

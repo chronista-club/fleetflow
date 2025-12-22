@@ -51,7 +51,7 @@
 ```
 fleetflow/
 ├── crates/
-│   ├── fleetflow-atom/
+│   ├── fleetflow-core/
 │   │   ├── src/
 │   │   │   ├── model.rs          # Serviceモデルにbuild関連フィールド追加
 │   │   │   └── parser.rs         # buildブロックのパース処理追加
@@ -90,7 +90,7 @@ fleetflow/
 
 ### 1. Service構造体の拡張
 
-**ファイル**: `crates/fleetflow-atom/src/model.rs`
+**ファイル**: `crates/fleetflow-core/src/model.rs`
 
 ```rust
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -136,7 +136,7 @@ pub struct BuildConfig {
 
 ### 2. KDLパーサーの拡張
 
-**ファイル**: `crates/fleetflow-atom/src/parser.rs`
+**ファイル**: `crates/fleetflow-core/src/parser.rs`
 
 ```rust
 fn parse_service(node: &KdlNode) -> Option<Service> {
@@ -311,7 +311,7 @@ service "api" {
 ```rust
 use std::path::{Path, PathBuf};
 use std::collections::HashMap;
-use fleetflow_atom::{Service, Flow};
+use fleetflow_core::{Service, Flow};
 
 pub struct BuildResolver {
     project_root: PathBuf,
@@ -670,7 +670,7 @@ pub use validate::execute_validate;
 
 ```rust
 use bollard::Docker;
-use fleetflow_atom::Flow;
+use fleetflow_core::Flow;
 use fleetflow_build::{BuildResolver, ContextBuilder, ImageBuilder};
 use fleetflow_config::find_flow_file;
 use std::path::PathBuf;
@@ -684,7 +684,7 @@ pub async fn execute_build(
     let config_path = find_flow_file()?;
     let project_root = config_path.parent().unwrap().to_path_buf();
     let config_content = std::fs::read_to_string(&config_path)?;
-    let flow: Flow = fleetflow_atom::parse(&config_content)?;
+    let flow: Flow = fleetflow_core::parse(&config_content)?;
 
     // Dockerクライアントの初期化
     let docker = Docker::connect_with_local_defaults()?;
@@ -897,7 +897,7 @@ repository.workspace = true
 description = "Docker image build functionality for FleetFlow"
 
 [dependencies]
-fleetflow-atom.workspace = true
+fleetflow-core.workspace = true
 bollard.workspace = true
 tokio.workspace = true
 futures-util.workspace = true
@@ -919,7 +919,7 @@ tempfile.workspace = true
 [workspace]
 members = [
     "crates/fleetflow",
-    "crates/fleetflow-atom",
+    "crates/fleetflow-core",
     "crates/fleetflow-config",
     "crates/fleetflow-container",
     "crates/fleetflow-build",  # 追加

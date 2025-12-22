@@ -84,10 +84,10 @@ stage "production" {
 ## コマンド一覧
 
 ```bash
-fleetfleetflow up <stage>      # ステージを起動
-fleetfleetflow down <stage>    # ステージを停止
-fleetfleetflow ps              # コンテナ一覧を表示
-fleetfleetflow logs            # ログを表示
+fleetflow up <stage>      # ステージを起動
+fleetflow down <stage>    # ステージを停止
+fleetflow ps              # コンテナ一覧を表示
+fleetflow logs            # ログを表示
 fleetflow mcp             # MCP サーバーを起動 (AI連携用)
 ```
 
@@ -100,7 +100,7 @@ fleetflow/
 ├── crates/
 │   ├── fleetflow/              # CLIエントリーポイント
 │   ├── fleetflow-mcp/          # AIエージェント連携 (MCP)
-│   ├── fleetflow-atom/         # KDLパーサー・データモデル
+│   ├── fleetflow-core/         # KDLパーサー・データモデル
 │   ├── fleetflow-container/    # コンテナ操作・ランタイム
 │   └── ...
 ├── workloads/                  # 共有ワークロード定義

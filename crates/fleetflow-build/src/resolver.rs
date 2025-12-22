@@ -1,5 +1,5 @@
 use crate::error::{BuildError, BuildResult};
-use fleetflow_atom::Service;
+use fleetflow_core::Service;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -166,7 +166,7 @@ impl BuildResolver {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use fleetflow_atom::{BuildConfig, Service};
+    use fleetflow_core::{BuildConfig, Service};
     use std::fs;
     use tempfile::tempdir;
 

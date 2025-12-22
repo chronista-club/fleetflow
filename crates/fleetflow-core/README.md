@@ -1,14 +1,14 @@
-# fleetflow-atom
+# fleetflow-core
 
-[![Crates.io](https://img.shields.io/crates/v/fleetflow-atom.svg)](https://crates.io/crates/fleetflow-atom)
-[![Documentation](https://docs.rs/fleetflow-atom/badge.svg)](https://docs.rs/fleetflow-atom)
-[![License](https://img.shields.io/crates/l/fleetflow-atom.svg)](https://github.com/chronista-club/fleetflow#license)
+[![Crates.io](https://img.shields.io/crates/v/fleetflow-core.svg)](https://crates.io/crates/fleetflow-core)
+[![Documentation](https://docs.rs/fleetflow-core/badge.svg)](https://docs.rs/fleetflow-core)
+[![License](https://img.shields.io/crates/l/fleetflow-core.svg)](https://github.com/chronista-club/fleetflow#license)
 
 FleetFlowのコア機能を提供するライブラリクレート。
 
 ## 概要
 
-`fleetflow-atom`は、FleetFlowの中核となる機能を提供します：
+`fleetflow-core`は、FleetFlowの中核となる機能を提供します：
 
 - **KDLパーサー** - KDL設定ファイルの解析
 - **データモデル** - Flow、Service、Stage、Processなどの構造体
@@ -38,7 +38,7 @@ src/
 ## 使用例
 
 ```rust
-use fleetflow_atom::{Flow, Service, Stage, parser};
+use fleetflow_core::{Flow, Service, Stage, parser};
 
 // KDL文字列をパース
 let kdl_content = r#"
@@ -134,7 +134,7 @@ pub struct Process {
 KDL形式の設定ファイルを解析してFlowオブジェクトに変換。
 
 ```rust
-use fleetflow_atom::parser;
+use fleetflow_core::parser;
 
 let flow = parser::parse_kdl_file("flow.kdl")?;
 ```
@@ -144,7 +144,7 @@ let flow = parser::parse_kdl_file("flow.kdl")?;
 プロジェクト全体（複数ファイル）を自動的に読み込み。
 
 ```rust
-use fleetflow_atom::loader;
+use fleetflow_core::loader;
 
 let flow = loader::load_project()?;
 ```
@@ -154,7 +154,7 @@ let flow = loader::load_project()?;
 変数展開とテンプレート機能。
 
 ```rust
-use fleetflow_atom::template::TemplateProcessor;
+use fleetflow_core::template::TemplateProcessor;
 
 let mut processor = TemplateProcessor::new();
 processor.add_variable("version", "1.0.0");
@@ -164,7 +164,7 @@ let result = processor.render("{{ version }}")?;
 ## ドキュメント
 
 - [FleetFlow メインプロジェクト](https://github.com/chronista-club/fleetflow)
-- [API ドキュメント](https://docs.rs/fleetflow-atom)
+- [API ドキュメント](https://docs.rs/fleetflow-core)
 - [仕様書](https://github.com/chronista-club/fleetflow/tree/main/spec)
 
 ## ライセンス

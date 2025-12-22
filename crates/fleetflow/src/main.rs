@@ -65,7 +65,7 @@ fn parse_image_tag(image: &str) -> (&str, &str) {
 /// ステージ名を決定する（共通ロジック）
 fn determine_stage_name(
     stage: Option<String>,
-    config: &fleetflow_atom::Flow,
+    config: &fleetflow_core::Flow,
 ) -> anyhow::Result<String> {
     if let Some(s) = stage {
         Ok(s)
@@ -271,9 +271,9 @@ struct Cli {
 enum Commands {
     /// ステージを起動
     Up {
-        /// ステージ名を指定 (local, dev, stg, prd)
+        /// ステージ名 (local, dev, stg, prd)
         /// 環境変数 FLEETFLOW_STAGE からも読み込み可能
-        #[arg(short, long, env = "FLEETFLOW_STAGE")]
+        #[arg(env = "FLEETFLOW_STAGE")]
         stage: Option<String>,
         /// 起動前に最新イメージをpullする
         #[arg(short, long)]
@@ -281,9 +281,9 @@ enum Commands {
     },
     /// ステージを停止
     Down {
-        /// ステージ名を指定 (local, dev, stg, prd)
+        /// ステージ名 (local, dev, stg, prd)
         /// 環境変数 FLEETFLOW_STAGE からも読み込み可能
-        #[arg(short, long, env = "FLEETFLOW_STAGE")]
+        #[arg(env = "FLEETFLOW_STAGE")]
         stage: Option<String>,
         /// コンテナを削除する（デフォルトは停止のみ）
         #[arg(short, long)]
@@ -291,9 +291,9 @@ enum Commands {
     },
     /// コンテナのログを表示
     Logs {
-        /// ステージ名を指定 (local, dev, stg, prd)
+        /// ステージ名 (local, dev, stg, prd)
         /// 環境変数 FLEETFLOW_STAGE からも読み込み可能
-        #[arg(short, long, env = "FLEETFLOW_STAGE")]
+        #[arg(env = "FLEETFLOW_STAGE")]
         stage: Option<String>,
         /// サービス名（指定しない場合は全サービス）
         #[arg(short = 'n', long)]
@@ -307,9 +307,9 @@ enum Commands {
     },
     /// コンテナの一覧を表示
     Ps {
-        /// ステージ名を指定 (local, dev, stg, prd)
+        /// ステージ名 (local, dev, stg, prd)
         /// 環境変数 FLEETFLOW_STAGE からも読み込み可能
-        #[arg(short, long, env = "FLEETFLOW_STAGE")]
+        #[arg(env = "FLEETFLOW_STAGE")]
         stage: Option<String>,
         /// 停止中のコンテナも表示
         #[arg(short, long)]
@@ -319,27 +319,27 @@ enum Commands {
     Restart {
         /// サービス名
         service: String,
-        /// ステージ名を指定 (local, dev, stg, prd)
+        /// ステージ名 (local, dev, stg, prd)
         /// 環境変数 FLEETFLOW_STAGE からも読み込み可能
-        #[arg(short, long, env = "FLEETFLOW_STAGE")]
+        #[arg(env = "FLEETFLOW_STAGE")]
         stage: Option<String>,
     },
     /// サービスを停止
     Stop {
         /// サービス名
         service: String,
-        /// ステージ名を指定 (local, dev, stg, prd)
+        /// ステージ名 (local, dev, stg, prd)
         /// 環境変数 FLEETFLOW_STAGE からも読み込み可能
-        #[arg(short, long, env = "FLEETFLOW_STAGE")]
+        #[arg(env = "FLEETFLOW_STAGE")]
         stage: Option<String>,
     },
     /// サービスを起動
     Start {
         /// サービス名
         service: String,
-        /// ステージ名を指定 (local, dev, stg, prd)
+        /// ステージ名 (local, dev, stg, prd)
         /// 環境変数 FLEETFLOW_STAGE からも読み込み可能
-        #[arg(short, long, env = "FLEETFLOW_STAGE")]
+        #[arg(env = "FLEETFLOW_STAGE")]
         stage: Option<String>,
     },
     /// 設定を検証
@@ -352,9 +352,9 @@ enum Commands {
     /// ステージをデプロイ（CI/CD向け）
     /// 既存コンテナを強制停止・削除し、最新イメージで再起動
     Deploy {
-        /// ステージ名を指定 (local, dev, stg, prd)
+        /// ステージ名 (local, dev, stg, prd)
         /// 環境変数 FLEETFLOW_STAGE からも読み込み可能
-        #[arg(short, long, env = "FLEETFLOW_STAGE")]
+        #[arg(env = "FLEETFLOW_STAGE")]
         stage: Option<String>,
         /// 最新イメージを強制的にpull
         #[arg(long)]
@@ -442,9 +442,9 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // プロジェクトルートを検索
-    let project_root = match fleetflow_atom::find_project_root() {
+    let project_root = match fleetflow_core::find_project_root() {
         Ok(root) => root,
-        Err(fleetflow_atom::FlowError::ProjectRootNotFound(_)) => {
+        Err(fleetflow_core::FlowError::ProjectRootNotFound(_)) => {
             // 設定ファイルが見つからない場合は初期化ウィザードを起動
             println!("{}", "設定ファイルが見つかりません。".yellow());
             println!("{}", "初期化ウィザードを起動します...".cyan());
@@ -487,8 +487,18 @@ async fn main() -> anyhow::Result<()> {
         Err(e) => return Err(e.into()),
     };
 
-    // プロジェクト全体をロード（flow.kdl + flow.local.kdlを自動マージ）
-    let config = fleetflow_atom::load_project_from_root(&project_root)?;
+    // プロジェクト全体をロード（flow.kdl + stage固有設定 + localを自動マージ）
+    let stage_name_hint = match &cli.command {
+        Commands::Up { stage, .. } => stage.as_deref(),
+        Commands::Down { stage, .. } => stage.as_deref(),
+        Commands::Restart { stage, .. } => stage.as_deref(),
+        Commands::Stop { stage, .. } => stage.as_deref(),
+        Commands::Start { stage, .. } => stage.as_deref(),
+        Commands::Deploy { stage, .. } => stage.as_deref(),
+        _ => None,
+    };
+
+    let config = fleetflow_core::load_project_from_root_with_stage(&project_root, stage_name_hint)?;
 
     // ここから既存のコマンド処理
     match cli.command {
@@ -496,10 +506,13 @@ async fn main() -> anyhow::Result<()> {
             // 最初にバージョンチェック
             check_and_update_if_needed().await?;
 
-            println!("{}", "ステージを起動中...".green());
-            print_loaded_config_files(&project_root);
-
             // ステージ名の決定（デフォルトステージをサポート）
+            let available_stages: Vec<_> = config.stages.keys().map(|s| s.as_str()).collect();
+            println!(
+                "  DEBUG: Available stages in config: {:?}",
+                available_stages
+            );
+
             let stage_name = if let Some(s) = stage {
                 s
             } else if config.stages.contains_key("default") {
@@ -509,22 +522,20 @@ async fn main() -> anyhow::Result<()> {
             } else {
                 return Err(anyhow::anyhow!(
                     "ステージ名を指定してください: --stage=<stage> または FLEETFLOW_STAGE=<stage>\n利用可能なステージ: {}",
-                    config
-                        .stages
-                        .keys()
-                        .map(|s| s.as_str())
-                        .collect::<Vec<_>>()
-                        .join(", ")
+                    available_stages.join(", ")
                 ));
             };
 
             println!("ステージ: {}", stage_name.cyan());
 
             // ステージの取得
-            let stage_config = config
-                .stages
-                .get(&stage_name)
-                .ok_or_else(|| anyhow::anyhow!("ステージ '{}' が見つかりません", stage_name))?;
+            let stage_config = config.stages.get(&stage_name).ok_or_else(|| {
+                anyhow::anyhow!(
+                    "ステージ '{}' が見つかりません。利用可能: {}",
+                    stage_name,
+                    available_stages.join(", ")
+                )
+            })?;
 
             println!();
             println!(
@@ -872,7 +883,10 @@ async fn main() -> anyhow::Result<()> {
                             eprintln!("  {}", err_str);
                             eprintln!();
                             eprintln!("{}", "解決方法:".yellow());
-                            eprintln!("  • 既存のコンテナを停止: fleetflow down --stage={}", stage_name);
+                            eprintln!(
+                                "  • 既存のコンテナを停止: fleetflow down --stage={}",
+                                stage_name
+                            );
                             eprintln!("  • 別のポート番号を使用してください");
                             eprintln!(
                                 "  • docker ps でポートを使用しているコンテナを確認してください"
@@ -1787,7 +1801,7 @@ async fn main() -> anyhow::Result<()> {
             println!("{}", "設定を検証中...".blue());
 
             // プロジェクトルートを検出
-            match fleetflow_atom::find_project_root() {
+            match fleetflow_core::find_project_root() {
                 Ok(project_root) => {
                     println!(
                         "プロジェクトルート: {}",
@@ -1795,7 +1809,7 @@ async fn main() -> anyhow::Result<()> {
                     );
 
                     // デバッグモードでロード
-                    match fleetflow_atom::load_project_with_debug(&project_root) {
+                    match fleetflow_core::load_project_with_debug(&project_root) {
                         Ok(config) => {
                             println!("{}", "✓ 設定ファイルは正常です！".green().bold());
                             println!();
@@ -1899,7 +1913,7 @@ async fn main() -> anyhow::Result<()> {
 /// クラウドコマンドを処理
 async fn handle_cloud_command(
     cmd: CloudCommands,
-    config: &fleetflow_atom::Flow,
+    config: &fleetflow_core::Flow,
 ) -> anyhow::Result<()> {
     use fleetflow_cloud::CloudProvider;
     use fleetflow_cloud_cloudflare::{CloudflareDns, DnsConfig};
@@ -2350,7 +2364,7 @@ async fn handle_cloud_command(
 /// ビルドコマンドを処理
 async fn handle_build_command(
     project_root: &std::path::Path,
-    config: &fleetflow_atom::Flow,
+    config: &fleetflow_core::Flow,
     stage_name: &str,
     service_filter: Option<&str>,
     push: bool,
@@ -2391,7 +2405,7 @@ async fn handle_build_command(
     };
 
     // ビルド可能なサービスをフィルタ（build設定があるもののみ）
-    let buildable_services: Vec<(&String, &fleetflow_atom::Service)> = target_services
+    let buildable_services: Vec<(&String, &fleetflow_core::Service)> = target_services
         .iter()
         .filter_map(|service_name| {
             config.services.get(*service_name).and_then(|service| {

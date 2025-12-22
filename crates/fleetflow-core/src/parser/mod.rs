@@ -36,10 +36,20 @@ pub fn parse_kdl_file<P: AsRef<Path>>(path: P) -> Result<Flow> {
 
 /// KDL文字列をパース
 pub fn parse_kdl_string(content: &str, default_name: String) -> Result<Flow> {
+    parse_kdl_string_with_stage(content, default_name, None)
+}
+
+/// KDL文字列をステージ指定でパース
+pub fn parse_kdl_string_with_stage(
+    content: &str,
+    default_name: String,
+    target_stage: Option<&str>,
+) -> Result<Flow> {
     let doc: KdlDocument = content.parse()?;
 
     let mut stages = HashMap::new();
     let mut services: HashMap<String, Service> = HashMap::new();
+    let mut stage_service_overrides: HashMap<String, HashMap<String, Service>> = HashMap::new();
     let mut providers = HashMap::new();
     let mut servers = HashMap::new();
     let mut name = default_name;
@@ -55,8 +65,13 @@ pub fn parse_kdl_string(content: &str, default_name: String) -> Result<Flow> {
                 }
             }
             "stage" => {
-                let (stage_name, stage) = parse_stage(node)?;
-                stages.insert(stage_name, stage);
+                let (stage_name, stage, stage_services) = parse_stage(node)?;
+                stages.insert(stage_name.clone(), stage);
+
+                // ステージ内で定義されたサービスを保存（後で適用）
+                if !stage_services.is_empty() {
+                    stage_service_overrides.insert(stage_name, stage_services);
+                }
             }
             "service" => {
                 let (service_name, service) = parse_service(node)?;
@@ -83,6 +98,19 @@ pub fn parse_kdl_string(content: &str, default_name: String) -> Result<Flow> {
             }
             _ => {
                 // 不明なノードはスキップ（projectなどの追加ノードも許可）
+            }
+        }
+    }
+
+    // ステージが指定されている場合、そのステージのサービスオーバーライドを適用
+    if let Some(stage) = target_stage {
+        if let Some(overrides) = stage_service_overrides.get(stage) {
+            for (service_name, service) in overrides {
+                if let Some(existing) = services.get_mut(service_name) {
+                    existing.merge(service.clone());
+                } else {
+                    services.insert(service_name.clone(), service.clone());
+                }
             }
         }
     }

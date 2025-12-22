@@ -1,2 +1,40 @@
-// Flow 設定ファイル
+project "fleetflow-services"
 
+// SurrealDB サービス定義（ワークロードを使わずに直接定義）
+service "db" {
+    image "surrealdb/surrealdb:v2"
+    restart "unless-stopped"
+    command "start --user root --pass root --bind [::]:8000 rocksdb:///data/database.db"
+
+    volumes {
+        volume "./data/surrealdb" "/data"
+    }
+}
+
+// 開発環境 (Development)
+// ポート範囲: 50000台
+stage "dev" {
+    service "db" {
+        ports {
+            port host=50001 container=8000
+        }
+        variables {
+            DEBUG "true"
+            LOG_LEVEL "debug"
+        }
+    }
+}
+
+// 本番環境 (Production)
+// ポート範囲: 52000台
+stage "prod" {
+    service "db" {
+        ports {
+            port host=52001 container=8000
+        }
+        variables {
+            DEBUG "false"
+            LOG_LEVEL "warn"
+        }
+    }
+}

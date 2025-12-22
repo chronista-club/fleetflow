@@ -1,0 +1,30 @@
+project "fleetflow-services"
+
+// SurrealDB ワークロードを読み込む
+workload "db-service"
+
+// 開発環境 (Development)
+stage "dev" {
+    service "db" {
+        ports {
+            port host=40001 container=8000
+        }
+        variables {
+            DEBUG "true"
+            LOG_LEVEL "debug"
+        }
+    }
+}
+
+// 本番環境 (Production)
+stage "prod" {
+    service "db" {
+        ports {
+            port host=40002 container=8000
+        }
+        variables {
+            DEBUG "false"
+            LOG_LEVEL "warn"
+        }
+    }
+}

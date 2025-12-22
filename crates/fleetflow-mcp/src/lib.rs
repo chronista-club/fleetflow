@@ -70,7 +70,10 @@ impl McpServer {
             "initialize" => Some(self.handle_initialize()?),
             "tools/list" => Some(self.handle_tools_list()?),
             "tools/call" => {
-                match self.handle_tool_call(req.params.unwrap_or(Value::Null)).await {
+                match self
+                    .handle_tool_call(req.params.unwrap_or(Value::Null))
+                    .await
+                {
                     Ok(res) => Some(res),
                     Err(e) => Some(json!({
                         "isError": true,
@@ -82,7 +85,7 @@ impl McpServer {
                         ]
                     })),
                 }
-            },
+            }
             "resources/list" => Some(json!({ "resources": [] })),
             "prompts/list" => Some(json!({ "prompts": [] })),
             "notifications/initialized" => {
@@ -119,12 +122,12 @@ impl McpServer {
 
         match name {
             "fleetflow_inspect_project" => {
-                let project_root = fleetflow_atom::find_project_root()?;
-                let discovered = fleetflow_atom::discover_files(&project_root)?;
-                let config = fleetflow_atom::load_project_from_root(&project_root)?;
-                
+                let project_root = fleetflow_core::find_project_root()?;
+                let discovered = fleetflow_core::discover_files(&project_root)?;
+                let config = fleetflow_core::load_project_from_root(&project_root)?;
+
                 let mut info = format!("Project: {}\n\n", config.name);
-                
+
                 if !discovered.workloads.is_empty() {
                     info.push_str("Detected Workloads:\n");
                     for w in &discovered.workloads {
@@ -135,9 +138,13 @@ impl McpServer {
 
                 info.push_str("Stages:\n");
                 for (stage_name, stage) in &config.stages {
-                    info.push_str(&format!("  - {} ({} services)\n", stage_name, stage.services.len()));
+                    info.push_str(&format!(
+                        "  - {} ({} services)\n",
+                        stage_name,
+                        stage.services.len()
+                    ));
                 }
-                
+
                 info.push_str("\nServices:\n");
                 for (service_name, service) in &config.services {
                     let image = service.image.as_deref().unwrap_or("(no image)");
@@ -152,33 +159,44 @@ impl McpServer {
                         }
                     ]
                 }))
-            },
+            }
             "fleetflow_status" => {
                 let docker = bollard::Docker::connect_with_local_defaults()?;
-                let project_root = fleetflow_atom::find_project_root()?;
-                let config = fleetflow_atom::load_project_from_root(&project_root)?;
-                
+                let project_root = fleetflow_core::find_project_root()?;
+                let config = fleetflow_core::load_project_from_root(&project_root)?;
+
                 let mut filter = std::collections::HashMap::new();
-                filter.insert("label".to_string(), vec![format!("fleetflow.project={}", config.name)]);
-                
+                filter.insert(
+                    "label".to_string(),
+                    vec![format!("fleetflow.project={}", config.name)],
+                );
+
                 #[allow(deprecated)]
                 let options = bollard::container::ListContainersOptions {
                     all: true,
                     filters: filter,
                     ..Default::default()
                 };
-                
+
                 let containers = docker.list_containers(Some(options)).await?;
-                
+
                 let mut status = format!("Status for project: {}\n\n", config.name);
                 if containers.is_empty() {
                     status.push_str("No containers found.");
                 } else {
                     for c in containers {
-                        let name = c.names.and_then(|n| n.first().cloned()).unwrap_or_else(|| "unnamed".to_string());
+                        let name = c
+                            .names
+                            .and_then(|n| n.first().cloned())
+                            .unwrap_or_else(|| "unnamed".to_string());
                         let status_text = c.status.unwrap_or_else(|| "unknown".to_string());
                         let image = c.image.unwrap_or_else(|| "unknown".to_string());
-                        status.push_str(&format!("- {}: {} ({})\n", name.trim_start_matches('/'), status_text, image));
+                        status.push_str(&format!(
+                            "- {}: {} ({})\n",
+                            name.trim_start_matches('/'),
+                            status_text,
+                            image
+                        ));
                     }
                 }
 
@@ -190,12 +208,15 @@ impl McpServer {
                         }
                     ]
                 }))
-            },
+            }
             "fleetflow_up" => {
-                let stage = arguments.get("stage").and_then(|v| v.as_str()).ok_or_else(|| anyhow::anyhow!("Missing stage argument"))?;
-                let project_root = fleetflow_atom::find_project_root()?;
-                let config = fleetflow_atom::load_project_from_root(&project_root)?;
-                
+                let stage = arguments
+                    .get("stage")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| anyhow::anyhow!("Missing stage argument"))?;
+                let project_root = fleetflow_core::find_project_root()?;
+                let config = fleetflow_core::load_project_from_root(&project_root)?;
+
                 let runtime = fleetflow_container::Runtime::new(project_root)?;
                 match runtime.up(&config, stage, false).await {
                     Ok(_) => Ok(json!({
@@ -216,13 +237,19 @@ impl McpServer {
                         ]
                     })),
                 }
-            },
+            }
             "fleetflow_down" => {
-                let stage = arguments.get("stage").and_then(|v| v.as_str()).ok_or_else(|| anyhow::anyhow!("Missing stage argument"))?;
-                let remove = arguments.get("remove").and_then(|v| v.as_bool()).unwrap_or(false);
-                let project_root = fleetflow_atom::find_project_root()?;
-                let config = fleetflow_atom::load_project_from_root(&project_root)?;
-                
+                let stage = arguments
+                    .get("stage")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| anyhow::anyhow!("Missing stage argument"))?;
+                let remove = arguments
+                    .get("remove")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                let project_root = fleetflow_core::find_project_root()?;
+                let config = fleetflow_core::load_project_from_root(&project_root)?;
+
                 let runtime = fleetflow_container::Runtime::new(project_root)?;
                 match runtime.down(&config, stage, remove).await {
                     Ok(_) => Ok(json!({
@@ -243,7 +270,7 @@ impl McpServer {
                         ]
                     })),
                 }
-            },
+            }
             _ => Ok(json!({
                 "isError": true,
                 "content": [

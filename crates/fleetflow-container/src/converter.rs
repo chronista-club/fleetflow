@@ -7,7 +7,7 @@ use bollard::container::{Config, CreateContainerOptions, NetworkingConfig};
 use bollard::models::{
     EndpointSettings, HostConfig, PortBinding, RestartPolicy, RestartPolicyNameEnum,
 };
-use fleetflow_atom::{Flow, Service};
+use fleetflow_core::{Flow, Service};
 use std::collections::HashMap;
 
 /// ネットワーク名を生成
@@ -67,7 +67,7 @@ pub fn service_to_container_config_with_network(
         let container_port = format!(
             "{}/{}",
             port.container,
-            if port.protocol == fleetflow_atom::Protocol::Udp {
+            if port.protocol == fleetflow_core::Protocol::Udp {
                 "udp"
             } else {
                 "tcp"
@@ -111,7 +111,7 @@ pub fn service_to_container_config_with_network(
 
     // 再起動ポリシーの変換
     let restart_policy = service.restart.map(|policy| {
-        use fleetflow_atom::RestartPolicy as FlowRestartPolicy;
+        use fleetflow_core::RestartPolicy as FlowRestartPolicy;
         RestartPolicy {
             name: Some(match policy {
                 FlowRestartPolicy::No => RestartPolicyNameEnum::NO,
@@ -210,7 +210,7 @@ pub fn get_stage_services(flow: &Flow, stage_name: &str) -> Result<Vec<String>, 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use fleetflow_atom::{Port, Protocol, Service, Stage, Volume};
+    use fleetflow_core::{Port, Protocol, Service, Stage, Volume};
     use std::collections::HashMap;
     use std::path::PathBuf;
 
@@ -503,7 +503,7 @@ mod tests {
 
     #[test]
     fn test_service_to_container_config_with_healthcheck() {
-        use fleetflow_atom::HealthCheck;
+        use fleetflow_core::HealthCheck;
 
         let service = Service {
             healthcheck: Some(HealthCheck {
