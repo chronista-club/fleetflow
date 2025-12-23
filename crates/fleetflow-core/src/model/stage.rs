@@ -15,4 +15,7 @@ pub struct Stage {
     /// ステージ固有の環境変数
     #[serde(default)]
     pub variables: HashMap<String, String>,
+    /// ステージ固有のコンテナレジストリURL（例: ghcr.io/owner）
+    #[serde(default)]
+    pub registry: Option<String>,
 }

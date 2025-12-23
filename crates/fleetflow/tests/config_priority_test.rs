@@ -1,4 +1,4 @@
-use assert_cmd::Command;
+use assert_cmd::cargo::cargo_bin_cmd;
 mod common;
 use common::TestProject;
 use std::fs;
@@ -61,7 +61,10 @@ service "db" {
 
     // 5. デバッグ: 生成されたファイルの内容を確認
     println!("\n=== flow.kdl ===");
-    println!("{}", fs::read_to_string(project.path().join("flow.kdl")).unwrap());
+    println!(
+        "{}",
+        fs::read_to_string(project.path().join("flow.kdl")).unwrap()
+    );
     println!("\n=== flow.prod.kdl ===");
     println!(
         "{}",
@@ -74,7 +77,7 @@ service "db" {
     );
 
     // 6. 起動 (prodステージ)
-    let mut cmd = Command::cargo_bin("fleetflow").unwrap();
+    let mut cmd = cargo_bin_cmd!("fleetflow");
     let output = cmd
         .current_dir(project.path())
         .arg("up")
@@ -134,7 +137,7 @@ service "db" {
     );
 
     // 7. クリーンアップ
-    let mut cmd = Command::cargo_bin("fleetflow").unwrap();
+    let mut cmd = cargo_bin_cmd!("fleetflow");
     cmd.current_dir(project.path())
         .arg("down")
         .arg("prod")

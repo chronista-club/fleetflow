@@ -2,7 +2,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::io::{self, BufRead, Write};
-use tracing::{debug, error, info};
+use tracing::{error, info};
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct JsonRpcRequest {
@@ -22,6 +22,12 @@ pub struct JsonRpcResponse {
 
 pub struct McpServer {
     // 状態管理（将来的に Docker クライアントなどを保持）
+}
+
+impl Default for McpServer {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl McpServer {

@@ -111,23 +111,23 @@ pub fn discover_files_with_stage(
     };
 
     // workload 宣言の解析とファイル発見
-    if let Some(root_path) = actual_root {
-        if let Ok(content) = std::fs::read_to_string(&root_path) {
-            let workload_names = extract_workload_names(&content);
-            for name in workload_names {
-                // 1. workloads/{name}.kdl
-                let direct_file = project_root.join(format!("workloads/{}.kdl", name));
-                if direct_file.exists() {
-                    discovered.workloads.push(direct_file);
-                }
+    if let Some(root_path) = actual_root
+        && let Ok(content) = std::fs::read_to_string(&root_path)
+    {
+        let workload_names = extract_workload_names(&content);
+        for name in workload_names {
+            // 1. workloads/{name}.kdl
+            let direct_file = project_root.join(format!("workloads/{}.kdl", name));
+            if direct_file.exists() {
+                discovered.workloads.push(direct_file);
+            }
 
-                // 2. workloads/{name}/*.kdl
-                let workload_dir = project_root.join(format!("workloads/{}", name));
-                if workload_dir.is_dir() {
-                    if let Ok(files) = discover_kdl_files(&workload_dir) {
-                        discovered.workloads.extend(files);
-                    }
-                }
+            // 2. workloads/{name}/*.kdl
+            let workload_dir = project_root.join(format!("workloads/{}", name));
+            if workload_dir.is_dir()
+                && let Ok(files) = discover_kdl_files(&workload_dir)
+            {
+                discovered.workloads.extend(files);
             }
         }
     }

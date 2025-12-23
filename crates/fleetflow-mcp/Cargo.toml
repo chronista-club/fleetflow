@@ -8,9 +8,9 @@ repository.workspace = true
 
 [dependencies]
 # Workspace crates
-fleetflow-core = { version = "0.3.1", path = "../fleetflow-core" }
-fleetflow-container = { version = "0.3.1", path = "../fleetflow-container" }
-fleetflow-config = { version = "0.3.1", path = "../fleetflow-config" }
+fleetflow-core = { version = "0.3.2", path = "../fleetflow-core" }
+fleetflow-container = { version = "0.3.2", path = "../fleetflow-container" }
+fleetflow-config = { version = "0.3.2", path = "../fleetflow-config" }
 
 # External dependencies
 serde.workspace = true

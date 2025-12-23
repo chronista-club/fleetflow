@@ -24,4 +24,7 @@ pub struct Flow {
     /// サーバーリソース
     #[serde(default)]
     pub servers: HashMap<String, ServerResource>,
+    /// デフォルトのコンテナレジストリURL（例: ghcr.io/owner）
+    #[serde(default)]
+    pub registry: Option<String>,
 }

@@ -356,9 +356,12 @@ enum Commands {
         /// 環境変数 FLEETFLOW_STAGE からも読み込み可能
         #[arg(env = "FLEETFLOW_STAGE")]
         stage: Option<String>,
-        /// 最新イメージを強制的にpull
+        /// デプロイ対象のサービス（省略時は全サービス）
+        #[arg(short = 'n', long)]
+        service: Option<String>,
+        /// イメージのpullをスキップ（デフォルトは常にpull）
         #[arg(long)]
-        pull: bool,
+        no_pull: bool,
         /// 確認なしで実行
         #[arg(short, long)]
         yes: bool,
@@ -376,6 +379,12 @@ enum Commands {
         /// イメージタグを指定（--pushと併用）
         #[arg(long)]
         tag: Option<String>,
+        /// レジストリURL（例: ghcr.io/owner）
+        #[arg(long)]
+        registry: Option<String>,
+        /// ターゲットプラットフォーム（例: linux/amd64）
+        #[arg(long)]
+        platform: Option<String>,
         /// キャッシュを使用しない
         #[arg(long)]
         no_cache: bool,
@@ -1540,7 +1549,12 @@ async fn main() -> anyhow::Result<()> {
                 Err(e) => return Err(e.into()),
             }
         }
-        Commands::Deploy { stage, pull, yes } => {
+        Commands::Deploy {
+            stage,
+            service,
+            no_pull,
+            yes,
+        } => {
             println!("{}", "デプロイを開始します...".blue().bold());
             print_loaded_config_files(&project_root);
 
@@ -1554,14 +1568,37 @@ async fn main() -> anyhow::Result<()> {
                 .get(&stage_name)
                 .ok_or_else(|| anyhow::anyhow!("ステージ '{}' が見つかりません", stage_name))?;
 
+            // デプロイ対象のサービスを決定（--serviceオプションがあればフィルタ）
+            let target_services: Vec<String> = if let Some(ref target) = service {
+                // 指定されたサービスがステージに存在するか確認
+                if !stage_config.services.contains(target) {
+                    return Err(anyhow::anyhow!(
+                        "サービス '{}' はステージ '{}' に存在しません。\n利用可能なサービス: {}",
+                        target,
+                        stage_name,
+                        stage_config.services.join(", ")
+                    ));
+                }
+                vec![target.clone()]
+            } else {
+                stage_config.services.clone()
+            };
+
             println!();
-            println!(
-                "{}",
-                format!("デプロイ対象サービス ({} 個):", stage_config.services.len()).bold()
-            );
-            for service_name in &stage_config.services {
-                let service = config.services.get(service_name);
-                let image = service
+            if service.is_some() {
+                println!(
+                    "{}",
+                    format!("デプロイ対象サービス (指定: {} 個):", target_services.len()).bold()
+                );
+            } else {
+                println!(
+                    "{}",
+                    format!("デプロイ対象サービス ({} 個):", target_services.len()).bold()
+                );
+            }
+            for service_name in &target_services {
+                let svc = config.services.get(service_name);
+                let image = svc
                     .and_then(|s| s.image.as_ref())
                     .map(|s| s.as_str())
                     .unwrap_or("(イメージ未設定)");
@@ -1587,7 +1624,7 @@ async fn main() -> anyhow::Result<()> {
             // 1. 既存コンテナの停止・削除
             println!();
             println!("{}", "【Step 1/3】既存コンテナを停止・削除中...".yellow());
-            for service_name in &stage_config.services {
+            for service_name in &target_services {
                 let container_name = format!("{}-{}-{}", config.name, stage_name, service_name);
 
                 // 停止
@@ -1644,11 +1681,11 @@ async fn main() -> anyhow::Result<()> {
                 }
             }
 
-            // 2. イメージのpull（--pullが指定されている場合）
-            if pull {
+            // 2. イメージのpull（デフォルトで実行、--no-pullでスキップ）
+            if !no_pull {
                 println!();
                 println!("{}", "【Step 2/3】最新イメージをダウンロード中...".blue());
-                for service_name in &stage_config.services {
+                for service_name in &target_services {
                     if let Some(service) = config.services.get(service_name)
                         && let Some(image) = &service.image
                     {
@@ -1663,7 +1700,7 @@ async fn main() -> anyhow::Result<()> {
                 }
             } else {
                 println!();
-                println!("【Step 2/3】イメージpullをスキップ（--pullで強制pull）");
+                println!("【Step 2/3】イメージpullをスキップ（--no-pull指定）");
             }
 
             // 3. コンテナの作成・起動
@@ -1672,7 +1709,7 @@ async fn main() -> anyhow::Result<()> {
 
             // 依存関係順にソート（簡易版：depends_onがないものを先に）
             let mut ordered_services: Vec<String> = Vec::new();
-            let mut remaining: Vec<String> = stage_config.services.clone();
+            let mut remaining: Vec<String> = target_services.clone();
 
             // まずdepends_onが空のサービスを追加
             remaining.retain(|name| {
@@ -1717,14 +1754,15 @@ async fn main() -> anyhow::Result<()> {
                     anyhow::anyhow!("サービス '{}' のイメージ設定が見つかりません", service_name)
                 })?;
 
-                // イメージの存在確認（pullしていない場合）
-                if !pull {
+                // イメージの存在確認（--no-pullの場合のみ、ローカルになければpull）
+                if no_pull {
                     match docker.inspect_image(image).await {
                         Ok(_) => {}
                         Err(bollard::errors::Error::DockerResponseServerError {
                             status_code: 404,
                             ..
                         }) => {
+                            println!("  ↓ ローカルにイメージがないためpull: {}", image);
                             pull_image(&docker, image).await?;
                         }
                         Err(e) => return Err(e.into()),
@@ -1881,6 +1919,8 @@ async fn main() -> anyhow::Result<()> {
             service,
             push,
             tag,
+            registry,
+            platform,
             no_cache,
         } => {
             handle_build_command(
@@ -1890,6 +1930,8 @@ async fn main() -> anyhow::Result<()> {
                 service.as_deref(),
                 push,
                 tag.as_deref(),
+                registry.as_deref(),
+                platform.as_deref(),
                 no_cache,
             )
             .await?;
@@ -2361,7 +2403,73 @@ async fn handle_cloud_command(
     Ok(())
 }
 
+/// docker buildx を使用したクロスプラットフォームビルド
+#[allow(clippy::too_many_arguments)]
+async fn build_with_buildx(
+    dockerfile_path: &std::path::Path,
+    context_path: &std::path::Path,
+    image_tag: &str,
+    platform: &str,
+    build_args: &std::collections::HashMap<String, String>,
+    target: Option<&str>,
+    no_cache: bool,
+    push: bool,
+) -> anyhow::Result<()> {
+    use std::process::Command;
+
+    println!("  {} docker buildx build を実行中...", "→".blue());
+
+    let mut cmd = Command::new("docker");
+    cmd.arg("buildx")
+        .arg("build")
+        .arg("--platform")
+        .arg(platform)
+        .arg("-t")
+        .arg(image_tag)
+        .arg("-f")
+        .arg(dockerfile_path);
+
+    // ビルド引数を追加
+    for (key, value) in build_args {
+        cmd.arg("--build-arg").arg(format!("{}={}", key, value));
+    }
+
+    // ターゲットステージ
+    if let Some(t) = target {
+        cmd.arg("--target").arg(t);
+    }
+
+    // キャッシュなし
+    if no_cache {
+        cmd.arg("--no-cache");
+    }
+
+    // プッシュフラグ
+    if push {
+        cmd.arg("--push");
+    } else {
+        // プッシュしない場合はローカルにロード
+        cmd.arg("--load");
+    }
+
+    // コンテキストパス
+    cmd.arg(context_path);
+
+    // コマンド実行
+    let output = cmd
+        .output()
+        .map_err(|e| anyhow::anyhow!("docker buildxの実行に失敗しました: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(anyhow::anyhow!("docker buildx build 失敗:\n{}", stderr));
+    }
+
+    Ok(())
+}
+
 /// ビルドコマンドを処理
+#[allow(clippy::too_many_arguments)]
 async fn handle_build_command(
     project_root: &std::path::Path,
     config: &fleetflow_core::Flow,
@@ -2369,20 +2477,37 @@ async fn handle_build_command(
     service_filter: Option<&str>,
     push: bool,
     cli_tag: Option<&str>,
+    registry: Option<&str>,
+    platform: Option<&str>,
     no_cache: bool,
 ) -> anyhow::Result<()> {
     use fleetflow_build::{BuildResolver, ContextBuilder, ImageBuilder, ImagePusher, resolve_tag};
     use std::collections::HashMap;
-
-    println!("{}", "Dockerイメージをビルド中...".green());
-    print_loaded_config_files(project_root);
-    println!("ステージ: {}", stage_name.cyan());
 
     // ステージの取得
     let stage_config = config
         .stages
         .get(stage_name)
         .ok_or_else(|| anyhow::anyhow!("ステージ '{}' が見つかりません", stage_name))?;
+
+    // localステージ以外はクロスプラットフォームビルドを使用
+    // registry優先順位: CLI > Stage > Flow（Service levelは後で個別に確認）
+    let is_local = stage_name == "local";
+    let has_config_registry =
+        registry.is_some() || stage_config.registry.is_some() || config.registry.is_some();
+    let use_buildx = !is_local && (platform.is_some() || has_config_registry || push);
+    let target_platform = platform.unwrap_or(if is_local { "" } else { "linux/amd64" });
+
+    println!("{}", "Dockerイメージをビルド中...".green());
+    print_loaded_config_files(project_root);
+    println!("ステージ: {}", stage_name.cyan());
+    if use_buildx && !target_platform.is_empty() {
+        println!("プラットフォーム: {}", target_platform.cyan());
+    }
+    // CLIで指定されたregistryを表示（config側のregistryは各サービスビルド時に表示）
+    if let Some(reg) = registry {
+        println!("レジストリ (CLI): {}", reg.cyan());
+    }
 
     // ビルド対象のサービスを決定
     let target_services: Vec<&String> = if let Some(filter) = service_filter {
@@ -2489,9 +2614,22 @@ async fn handle_build_command(
         };
 
         // イメージタグを解決
-        let image_name = service.image.as_deref().unwrap_or(service_name.as_str());
-        let (base_image, tag) = resolve_tag(cli_tag, image_name);
-        let full_image = format!("{}:{}", base_image, tag);
+        // registry優先順位: CLI > Service > Stage > Flow
+        let effective_registry = registry
+            .or(service.registry.as_deref())
+            .or(stage_config.registry.as_deref())
+            .or(config.registry.as_deref());
+
+        let (base_image, tag) = resolve_tag(
+            cli_tag,
+            service.image.as_deref().unwrap_or(service_name.as_str()),
+        );
+        let full_image = if let Some(reg) = effective_registry {
+            // registry/{project}-{stage}:{tag} 形式
+            format!("{}/{}-{}:{}", reg, config.name, stage_name, tag)
+        } else {
+            format!("{}:{}", base_image, tag)
+        };
 
         // ビルド引数を解決
         let variables: HashMap<String, String> = std::env::vars().collect();
@@ -2507,56 +2645,89 @@ async fn handle_build_command(
         println!("  → Context: {}", context_path.display().to_string().cyan());
         println!("  → Image: {}", full_image.cyan());
 
-        // ビルドコンテキストを作成
-        let context_data = match ContextBuilder::create_context(&context_path, &dockerfile_path) {
-            Ok(data) => data,
-            Err(e) => {
-                eprintln!("  {} コンテキスト作成エラー: {}", "✗".red().bold(), e);
-                return Err(anyhow::anyhow!("ビルドコンテキストの作成に失敗しました"));
-            }
-        };
-
         // ビルド実行
-        match builder
-            .build_image(
-                context_data,
+        if use_buildx && !target_platform.is_empty() {
+            // docker buildx build でクロスプラットフォームビルド
+            let result = build_with_buildx(
+                &dockerfile_path,
+                &context_path,
                 &full_image,
-                build_args,
+                target_platform,
+                &build_args,
                 target.as_deref(),
                 no_cache,
+                push,
             )
-            .await
-        {
-            Ok(_) => {
-                println!("  {} ビルド完了", "✓".green());
-                build_results.push((service_name.to_string(), full_image));
+            .await;
+
+            match result {
+                Ok(_) => {
+                    println!("  {} ビルド完了", "✓".green());
+                    build_results.push((service_name.to_string(), full_image));
+                }
+                Err(e) => {
+                    eprintln!("  {} ビルドエラー: {}", "✗".red().bold(), e);
+                    return Err(anyhow::anyhow!("ビルドに失敗しました"));
+                }
             }
-            Err(e) => {
-                eprintln!("  {} ビルドエラー: {}", "✗".red().bold(), e);
-                return Err(anyhow::anyhow!("ビルドに失敗しました"));
+        } else {
+            // 従来のbollard APIでローカルビルド
+            let context_data = match ContextBuilder::create_context(&context_path, &dockerfile_path)
+            {
+                Ok(data) => data,
+                Err(e) => {
+                    eprintln!("  {} コンテキスト作成エラー: {}", "✗".red().bold(), e);
+                    return Err(anyhow::anyhow!("ビルドコンテキストの作成に失敗しました"));
+                }
+            };
+
+            match builder
+                .build_image(
+                    context_data,
+                    &full_image,
+                    build_args.clone(),
+                    target.as_deref(),
+                    no_cache,
+                )
+                .await
+            {
+                Ok(_) => {
+                    println!("  {} ビルド完了", "✓".green());
+                    build_results.push((service_name.to_string(), full_image));
+                }
+                Err(e) => {
+                    eprintln!("  {} ビルドエラー: {}", "✗".red().bold(), e);
+                    return Err(anyhow::anyhow!("ビルドに失敗しました"));
+                }
             }
         }
     }
 
-    // プッシュ処理
+    // プッシュ処理（buildxで--push済みの場合はスキップ）
+    let already_pushed = use_buildx && push;
     if let Some(pusher) = pusher {
-        println!();
-        println!("{}", "📤 イメージをプッシュ中...".blue().bold());
-
-        for (service_name, full_image) in &build_results {
+        if already_pushed {
             println!();
-            println!("{}", format!("Pushing {}...", service_name).blue());
+            println!("{}", "📤 buildxで既にプッシュ済み".blue().bold());
+        } else {
+            println!();
+            println!("{}", "📤 イメージをプッシュ中...".blue().bold());
 
-            // イメージとタグを分離
-            let (image, tag) = fleetflow_build::split_image_tag(full_image);
+            for (service_name, full_image) in &build_results {
+                println!();
+                println!("{}", format!("Pushing {}...", service_name).blue());
 
-            match pusher.push(&image, &tag).await {
-                Ok(pushed_image) => {
-                    println!("  {} {}", "✓".green(), pushed_image.cyan());
-                }
-                Err(e) => {
-                    eprintln!("  {} プッシュエラー: {}", "✗".red().bold(), e);
-                    return Err(anyhow::anyhow!("プッシュに失敗しました"));
+                // イメージとタグを分離
+                let (image, tag) = fleetflow_build::split_image_tag(full_image);
+
+                match pusher.push(&image, &tag).await {
+                    Ok(pushed_image) => {
+                        println!("  {} {}", "✓".green(), pushed_image.cyan());
+                    }
+                    Err(e) => {
+                        eprintln!("  {} プッシュエラー: {}", "✗".red().bold(), e);
+                        return Err(anyhow::anyhow!("プッシュに失敗しました"));
+                    }
                 }
             }
         }

@@ -205,14 +205,14 @@ pub fn extract_variables(kdl_content: &str) -> Result<Variables> {
                 FlowError::InvalidConfig(format!("KDL パースエラー (変数抽出ブロック): {}", e))
             })?;
 
-            if let Some(node) = doc.nodes().first() {
-                if let Some(children) = node.children() {
-                    for var_node in children.nodes() {
-                        let key = var_node.name().value().to_string();
-                        if let Some(entry) = var_node.entries().first() {
-                            let value = kdl_value_to_json(entry.value());
-                            all_vars.insert(key, value);
-                        }
+            if let Some(node) = doc.nodes().first()
+                && let Some(children) = node.children()
+            {
+                for var_node in children.nodes() {
+                    let key = var_node.name().value().to_string();
+                    if let Some(entry) = var_node.entries().first() {
+                        let value = kdl_value_to_json(entry.value());
+                        all_vars.insert(key, value);
                     }
                 }
             }

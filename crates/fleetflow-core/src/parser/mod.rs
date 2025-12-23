@@ -53,6 +53,7 @@ pub fn parse_kdl_string_with_stage(
     let mut providers = HashMap::new();
     let mut servers = HashMap::new();
     let mut name = default_name;
+    let mut registry: Option<String> = None;
 
     for node in doc.nodes() {
         match node.name().value() {
@@ -96,6 +97,12 @@ pub fn parse_kdl_string_with_stage(
             "variables" => {
                 // TODO: 変数定義の実装
             }
+            "registry" => {
+                // トップレベルのレジストリURL設定
+                if let Some(reg) = node.entries().first().and_then(|e| e.value().as_string()) {
+                    registry = Some(reg.to_string());
+                }
+            }
             _ => {
                 // 不明なノードはスキップ（projectなどの追加ノードも許可）
             }
@@ -103,14 +110,14 @@ pub fn parse_kdl_string_with_stage(
     }
 
     // ステージが指定されている場合、そのステージのサービスオーバーライドを適用
-    if let Some(stage) = target_stage {
-        if let Some(overrides) = stage_service_overrides.get(stage) {
-            for (service_name, service) in overrides {
-                if let Some(existing) = services.get_mut(service_name) {
-                    existing.merge(service.clone());
-                } else {
-                    services.insert(service_name.clone(), service.clone());
-                }
+    if let Some(stage) = target_stage
+        && let Some(overrides) = stage_service_overrides.get(stage)
+    {
+        for (service_name, service) in overrides {
+            if let Some(existing) = services.get_mut(service_name) {
+                existing.merge(service.clone());
+            } else {
+                services.insert(service_name.clone(), service.clone());
             }
         }
     }
@@ -124,6 +131,7 @@ pub fn parse_kdl_string_with_stage(
         services,
         providers,
         servers,
+        registry,
     })
 }
 

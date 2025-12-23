@@ -75,12 +75,11 @@ pub fn parse_service(node: &KdlNode) -> Result<(String, Service)> {
                         // 子ノードがない場合は、フラットな env "KEY=VALUE" 形式をサポート
                         if let Some(val) =
                             child.entries().first().and_then(|e| e.value().as_string())
+                            && let Some((k, v)) = val.split_once('=')
                         {
-                            if let Some((k, v)) = val.split_once('=') {
-                                service
-                                    .environment
-                                    .insert(k.trim().to_string(), v.trim().to_string());
-                            }
+                            service
+                                .environment
+                                .insert(k.trim().to_string(), v.trim().to_string());
                         }
                     }
                 }
@@ -176,6 +175,14 @@ pub fn parse_service(node: &KdlNode) -> Result<(String, Service)> {
                         // 子ノードがなければデフォルト設定で有効化
                         service.wait_for = Some(WaitConfig::default());
                     }
+                }
+                // コンテナレジストリURL
+                "registry" => {
+                    service.registry = child
+                        .entries()
+                        .first()
+                        .and_then(|e| e.value().as_string())
+                        .map(|s| s.to_string());
                 }
                 _ => {}
             }

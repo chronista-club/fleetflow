@@ -17,6 +17,7 @@ impl TestProject {
         fs::write(path, content).unwrap();
     }
 
+    #[allow(dead_code)]
     pub fn write_workload(&self, name: &str, content: &str) {
         let dir = self.root.path().join("workloads");
         fs::create_dir_all(&dir).unwrap();
@@ -27,6 +28,7 @@ impl TestProject {
         self.root.path().to_path_buf()
     }
 
+    #[allow(dead_code)]
     pub async fn docker_container_exists(&self, name: &str) -> bool {
         let docker = bollard::Docker::connect_with_local_defaults().unwrap();
         docker
@@ -38,6 +40,7 @@ impl TestProject {
             .is_ok()
     }
 
+    #[allow(dead_code)]
     pub async fn docker_network_exists(&self, name: &str) -> bool {
         let docker = bollard::Docker::connect_with_local_defaults().unwrap();
         docker

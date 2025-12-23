@@ -79,19 +79,20 @@ impl Runtime {
             crate::port::ensure_port_available(port.host).await?;
         }
 
+        let container_name = format!("{}-{}-{}", project_name, stage_name, name);
         let (container_config, create_options) =
             crate::service_to_container_config(name, service, stage_name, project_name);
 
         // コンテナの作成と起動
         match self
             .docker
-            .create_container(Some(create_options.clone()), container_config)
+            .create_container(Some(create_options), container_config)
             .await
         {
             Ok(_) => {
                 self.docker
                     .start_container(
-                        &create_options.name,
+                        &container_name,
                         None::<bollard::query_parameters::StartContainerOptions>,
                     )
                     .await?;
@@ -103,7 +104,7 @@ impl Runtime {
                 // 既に存在する場合は再起動
                 self.docker
                     .restart_container(
-                        &create_options.name,
+                        &container_name,
                         None::<bollard::query_parameters::RestartContainerOptions>,
                     )
                     .await?;

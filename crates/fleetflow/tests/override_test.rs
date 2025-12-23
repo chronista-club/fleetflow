@@ -1,4 +1,4 @@
-use assert_cmd::Command;
+use assert_cmd::cargo::cargo_bin_cmd;
 mod common;
 use common::TestProject;
 use std::fs;
@@ -39,7 +39,7 @@ service "web" {
     .unwrap();
 
     // 3. 起動
-    let mut cmd = Command::cargo_bin("fleetflow").unwrap();
+    let mut cmd = cargo_bin_cmd!("fleetflow");
     cmd.current_dir(project.path())
         .arg("up")
         .arg("local")
@@ -63,7 +63,7 @@ service "web" {
     assert!(!env.contains(&"APP_NAME=original".to_string()));
 
     // 5. 削除
-    let mut cmd = Command::cargo_bin("fleetflow").unwrap();
+    let mut cmd = cargo_bin_cmd!("fleetflow");
     cmd.current_dir(project.path())
         .arg("down")
         .arg("local")

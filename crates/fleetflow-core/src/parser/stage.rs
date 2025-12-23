@@ -59,6 +59,14 @@ pub fn parse_stage(node: &KdlNode) -> Result<(String, Stage, HashMap<String, Ser
                         }
                     }
                 }
+                // コンテナレジストリURL
+                "registry" => {
+                    stage.registry = child
+                        .entries()
+                        .first()
+                        .and_then(|e| e.value().as_string())
+                        .map(|s| s.to_string());
+                }
                 _ => {}
             }
         }

@@ -43,6 +43,7 @@ mod tests {
                 services: vec!["api".to_string()],
                 servers: vec![],
                 variables: HashMap::new(),
+                registry: None,
             },
         );
 
@@ -52,6 +53,7 @@ mod tests {
             stages,
             providers: HashMap::new(),
             servers: HashMap::new(),
+            registry: None,
         };
 
         assert_eq!(flow.name, "my-project");
@@ -75,6 +77,7 @@ mod tests {
             stages: stages.clone(),
             providers: HashMap::new(),
             servers: HashMap::new(),
+            registry: None,
         };
 
         assert_eq!(flow.services.len(), 1);

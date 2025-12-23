@@ -28,6 +28,8 @@ pub struct Service {
     pub restart: Option<RestartPolicy>,
     /// 依存サービス待機設定（exponential backoff）
     pub wait_for: Option<WaitConfig>,
+    /// サービス固有のコンテナレジストリURL（例: ghcr.io/owner）
+    pub registry: Option<String>,
 }
 
 /// 再起動ポリシー
@@ -198,6 +200,9 @@ impl Service {
         }
         if other.wait_for.is_some() {
             self.wait_for = other.wait_for;
+        }
+        if other.registry.is_some() {
+            self.registry = other.registry;
         }
 
         // Vec<T>フィールド: otherが空でなければ上書き

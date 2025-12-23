@@ -1,5 +1,4 @@
-use assert_cmd::Command;
-use predicates::prelude::*;
+use assert_cmd::cargo::cargo_bin_cmd;
 mod common;
 use common::TestProject;
 
@@ -25,7 +24,7 @@ service "web" {
 "#,
     );
 
-    let mut cmd = Command::cargo_bin("fleetflow").unwrap();
+    let mut cmd = cargo_bin_cmd!("fleetflow");
     cmd.current_dir(project.path())
         .arg("up")
         .arg("local")
@@ -56,7 +55,7 @@ service "web" {
 "#,
     );
 
-    let mut cmd = Command::cargo_bin("fleetflow").unwrap();
+    let mut cmd = cargo_bin_cmd!("fleetflow");
     cmd.current_dir(project.path())
         .arg("up")
         .arg("local")
@@ -67,7 +66,7 @@ service "web" {
     assert!(project.docker_container_exists(container_name).await);
 
     // 3. 削除 (Down --remove)
-    let mut cmd = Command::cargo_bin("fleetflow").unwrap();
+    let mut cmd = cargo_bin_cmd!("fleetflow");
     cmd.current_dir(project.path())
         .arg("down")
         .arg("local")
