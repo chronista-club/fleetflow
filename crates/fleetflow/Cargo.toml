@@ -29,6 +29,7 @@ fleetflow-mcp = { version = "0.3.2", path = "../fleetflow-mcp" }
 # External dependencies
 clap.workspace = true
 colored.workspace = true
+kdl.workspace = true
 tokio.workspace = true
 anyhow.workspace = true
 tracing.workspace = true

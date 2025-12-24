@@ -394,6 +394,17 @@ enum Commands {
     Cloud(CloudCommands),
     /// MCP (Model Context Protocol) サーバーを起動
     Mcp,
+    /// Playbookを実行（リモートサーバーでサービスを起動）
+    Play {
+        /// Playbook名
+        playbook: String,
+        /// 確認なしで実行
+        #[arg(short, long)]
+        yes: bool,
+        /// 起動前に最新イメージをpullする
+        #[arg(long)]
+        pull: bool,
+    },
 }
 
 /// クラウド関連のサブコマンド
@@ -429,9 +440,35 @@ enum CloudCommands {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt::init();
-
     let cli = Cli::parse();
+
+    // Mcpコマンドは設定ファイル不要（ツール実行時に必要に応じてロード）
+    // stdoutはJSON-RPC通信に使うので、ログはファイルに出力
+    if matches!(cli.command, Commands::Mcp) {
+        use std::fs::OpenOptions;
+        let log_file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open("/tmp/fleetflow-mcp.log")
+            .ok();
+
+        if let Some(file) = log_file {
+            tracing_subscriber::fmt()
+                .with_writer(file)
+                .with_env_filter(
+                    tracing_subscriber::EnvFilter::from_default_env()
+                        .add_directive(tracing::Level::DEBUG.into()),
+                )
+                .with_ansi(false)
+                .init();
+        }
+
+        let mut server = fleetflow_mcp::McpServer::new();
+        return server.run().await;
+    }
+
+    // 通常のCLIコマンドはstderrにログ出力
+    tracing_subscriber::fmt::init();
 
     // Versionコマンドは設定ファイル不要
     if matches!(cli.command, Commands::Version) {
@@ -442,12 +479,6 @@ async fn main() -> anyhow::Result<()> {
     // SelfUpdateコマンドは設定ファイル不要
     if matches!(cli.command, Commands::SelfUpdate) {
         return self_update().await;
-    }
-
-    // Mcpコマンドは設定ファイル不要（ツール実行時に必要に応じてロード）
-    if matches!(cli.command, Commands::Mcp) {
-        let mut server = fleetflow_mcp::McpServer::new();
-        return server.run().await;
     }
 
     // プロジェクトルートを検索
@@ -1947,6 +1978,9 @@ async fn main() -> anyhow::Result<()> {
             // 早期リターンで処理済み（main関数冒頭）
             unreachable!("SelfUpdate is handled before config loading");
         }
+        Commands::Play { playbook, yes, pull } => {
+            handle_play_command(&project_root, &playbook, yes, pull).await?;
+        }
     }
 
     Ok(())
@@ -3052,4 +3086,343 @@ async fn cargo_install_update() -> anyhow::Result<()> {
             status.code()
         ))
     }
+}
+
+/// Playbookを実行（リモートサーバーでサービスを起動）
+async fn handle_play_command(
+    project_root: &std::path::Path,
+    playbook_name: &str,
+    yes: bool,
+    pull: bool,
+) -> anyhow::Result<()> {
+    use std::process::Command;
+
+    println!(
+        "{}",
+        format!("▶ Playbook '{}' を実行中...", playbook_name)
+            .green()
+            .bold()
+    );
+
+    // Playbook KDLファイルを探す
+    let playbook_path = project_root.join("playbooks").join(format!("{}.kdl", playbook_name));
+    if !playbook_path.exists() {
+        return Err(anyhow::anyhow!(
+            "Playbook '{}' が見つかりません: {}",
+            playbook_name,
+            playbook_path.display()
+        ));
+    }
+
+    println!("  Playbook: {}", playbook_path.display().to_string().cyan());
+
+    // KDLをパース
+    let kdl_content = std::fs::read_to_string(&playbook_path)?;
+    let doc: kdl::KdlDocument = kdl_content.parse().map_err(|e| {
+        anyhow::anyhow!("KDLパースエラー: {}", e)
+    })?;
+
+    // Playbookのメタデータを取得
+    let playbook_node = doc.get("playbook").ok_or_else(|| {
+        anyhow::anyhow!("Playbook定義が見つかりません")
+    })?;
+
+    // targetは子ノード: target "creo-dev"
+    let playbook_children = playbook_node.children().ok_or_else(|| {
+        anyhow::anyhow!("Playbook定義にchildrenがありません")
+    })?;
+    let target_node = playbook_children.get("target").ok_or_else(|| {
+        anyhow::anyhow!("target が指定されていません")
+    })?;
+    let target = target_node.entries().first()
+        .and_then(|e| e.value().as_string())
+        .ok_or_else(|| anyhow::anyhow!("target の値が取得できません"))?;
+
+    println!("  Target: {}", target.cyan());
+
+    // 変数を取得
+    let mut variables: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    if let Some(vars_node) = doc.get("variables") {
+        if let Some(children) = vars_node.children() {
+            for node in children.nodes() {
+                let var_name = node.name().value();
+                if let Some(entry) = node.entries().first() {
+                    if let Some(value) = entry.value().as_string() {
+                        variables.insert(var_name.to_string(), value.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    // ステージを取得
+    let mut stages: Vec<(String, Vec<PlaybookService>)> = Vec::new();
+    for node in doc.nodes() {
+        if node.name().value() == "stage" {
+            let stage_name = node.entries().first()
+                .and_then(|e| e.value().as_string())
+                .unwrap_or("default")
+                .to_string();
+
+            let mut services = Vec::new();
+            if let Some(children) = node.children() {
+                for child in children.nodes() {
+                    if child.name().value() == "service" {
+                        if let Some(service) = parse_playbook_service(child) {
+                            services.push(service);
+                        }
+                    }
+                }
+            }
+            stages.push((stage_name, services));
+        }
+    }
+
+    if stages.is_empty() {
+        return Err(anyhow::anyhow!("ステージが定義されていません"));
+    }
+
+    // 実行計画を表示
+    println!();
+    println!("{}", "実行計画:".bold());
+    for (stage_name, services) in &stages {
+        println!("  Stage: {}", stage_name.cyan());
+        for service in services {
+            println!("    • {} ({})", service.name.cyan(), service.image);
+        }
+    }
+
+    // 確認
+    if !yes {
+        println!();
+        println!(
+            "{}",
+            "リモートサーバーにサービスをデプロイします。続行するには --yes を指定してください。"
+                .yellow()
+        );
+        return Ok(());
+    }
+
+    println!();
+    println!("{}", format!("SSHで {} に接続中...", target).blue());
+
+    // 各ステージを実行
+    for (stage_name, services) in &stages {
+        println!();
+        println!(
+            "{}",
+            format!("▶ Stage '{}' を実行中...", stage_name).green().bold()
+        );
+
+        for service in services {
+            println!();
+            println!(
+                "{}",
+                format!("  ▶ {} を起動中...", service.name).cyan().bold()
+            );
+
+            // 既存コンテナを停止・削除
+            let stop_cmd = format!(
+                "docker stop {} 2>/dev/null || true && docker rm {} 2>/dev/null || true",
+                service.name, service.name
+            );
+            let ssh_stop = Command::new("ssh")
+                .arg(target)
+                .arg(&stop_cmd)
+                .status();
+
+            if let Err(e) = ssh_stop {
+                println!("    ⚠ 既存コンテナの停止でエラー: {}", e);
+            }
+
+            // pullが指定されている場合はイメージをpull
+            if pull {
+                println!("    ↓ イメージをpull中...");
+                let pull_cmd = format!("docker pull {}", service.image);
+                let ssh_pull = Command::new("ssh")
+                    .arg(target)
+                    .arg(&pull_cmd)
+                    .status()?;
+                if !ssh_pull.success() {
+                    println!("    ⚠ イメージpullでエラー（続行します）");
+                }
+            }
+
+            // docker run コマンドを構築
+            let mut docker_cmd = format!("docker run -d --name {}", service.name);
+
+            // ポートマッピング
+            for port in &service.ports {
+                docker_cmd.push_str(&format!(" -p {}:{}", port.host, port.container));
+            }
+
+            // 環境変数（変数展開付き）
+            for (key, value) in &service.env {
+                let expanded_value = expand_variables(value, &variables);
+                docker_cmd.push_str(&format!(" -e {}={}", key, shell_escape(&expanded_value)));
+            }
+
+            // ボリューム
+            for vol in &service.volumes {
+                docker_cmd.push_str(&format!(" -v {}:{}", vol.host, vol.container));
+                if vol.read_only {
+                    docker_cmd.push_str(":ro");
+                }
+            }
+
+            // イメージとコマンド
+            docker_cmd.push_str(&format!(" {}", service.image));
+            if let Some(cmd) = &service.command {
+                docker_cmd.push_str(&format!(" {}", cmd));
+            }
+
+            println!("    $ {}", docker_cmd.dimmed());
+
+            // SSH経由で実行
+            let ssh_result = Command::new("ssh")
+                .arg(target)
+                .arg(&docker_cmd)
+                .output()?;
+
+            if ssh_result.status.success() {
+                println!("    ✓ 起動完了");
+            } else {
+                let stderr = String::from_utf8_lossy(&ssh_result.stderr);
+                println!("    ✗ 起動エラー: {}", stderr.trim());
+            }
+        }
+    }
+
+    println!();
+    println!(
+        "{}",
+        format!("✓ Playbook '{}' の実行が完了しました！", playbook_name)
+            .green()
+            .bold()
+    );
+
+    Ok(())
+}
+
+/// Playbook用のサービス定義
+struct PlaybookService {
+    name: String,
+    image: String,
+    command: Option<String>,
+    ports: Vec<PlaybookPort>,
+    env: std::collections::HashMap<String, String>,
+    volumes: Vec<PlaybookVolume>,
+}
+
+struct PlaybookPort {
+    host: u16,
+    container: u16,
+}
+
+struct PlaybookVolume {
+    host: String,
+    container: String,
+    read_only: bool,
+}
+
+/// KDLノードからPlaybookServiceをパース
+fn parse_playbook_service(node: &kdl::KdlNode) -> Option<PlaybookService> {
+    let name = node.entries().first()?.value().as_string()?.to_string();
+
+    let children = node.children()?;
+
+    // image
+    let image_node = children.get("image")?;
+    let image = image_node.entries().first()?.value().as_string()?.to_string();
+
+    // command
+    let command = children.get("command")
+        .and_then(|n| n.entries().first())
+        .and_then(|e| e.value().as_string())
+        .map(|s| s.to_string());
+
+    // ports
+    let mut ports = Vec::new();
+    if let Some(ports_node) = children.get("ports") {
+        if let Some(ports_children) = ports_node.children() {
+            for port_node in ports_children.nodes() {
+                if port_node.name().value() == "port" {
+                    let host = port_node.get("host")
+                        .and_then(|v| v.as_integer())
+                        .map(|v| v as u16);
+                    let container = port_node.get("container")
+                        .and_then(|v| v.as_integer())
+                        .map(|v| v as u16);
+                    if let (Some(h), Some(c)) = (host, container) {
+                        ports.push(PlaybookPort { host: h, container: c });
+                    }
+                }
+            }
+        }
+    }
+
+    // env
+    let mut env = std::collections::HashMap::new();
+    if let Some(env_node) = children.get("env") {
+        if let Some(env_children) = env_node.children() {
+            for env_entry in env_children.nodes() {
+                let key = env_entry.name().value().to_string();
+                if let Some(value) = env_entry.entries().first().and_then(|e| e.value().as_string()) {
+                    env.insert(key, value.to_string());
+                }
+            }
+        }
+    }
+
+    // volumes
+    let mut volumes = Vec::new();
+    if let Some(vols_node) = children.get("volumes") {
+        if let Some(vols_children) = vols_node.children() {
+            for vol_node in vols_children.nodes() {
+                if vol_node.name().value() == "volume" {
+                    let host = vol_node.get("host")
+                        .and_then(|v| v.as_string())
+                        .map(|s| s.to_string());
+                    let container = vol_node.get("container")
+                        .and_then(|v| v.as_string())
+                        .map(|s| s.to_string());
+                    let read_only = vol_node.get("read_only")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false);
+                    if let (Some(h), Some(c)) = (host, container) {
+                        volumes.push(PlaybookVolume {
+                            host: h,
+                            container: c,
+                            read_only,
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    Some(PlaybookService {
+        name,
+        image,
+        command,
+        ports,
+        env,
+        volumes,
+    })
+}
+
+/// 変数を展開する ({{ VAR_NAME }} 形式)
+fn expand_variables(value: &str, variables: &std::collections::HashMap<String, String>) -> String {
+    let mut result = value.to_string();
+    for (key, val) in variables {
+        let pattern = format!("{{{{ {} }}}}", key);
+        result = result.replace(&pattern, val);
+    }
+    result
+}
+
+/// シェル用にエスケープ
+fn shell_escape(s: &str) -> String {
+    // シングルクォートでラップしてエスケープ
+    format!("'{}'", s.replace('\'', "'\\''"))
 }
