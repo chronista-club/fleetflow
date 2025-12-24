@@ -29,6 +29,9 @@ spec.old/
 *.tar.gz
 *.zip
 
+# Local data (not to be tracked)
+data/
+
 # Vantage development database
 .vantage/
 
