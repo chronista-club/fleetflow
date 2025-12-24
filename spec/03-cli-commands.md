@@ -192,6 +192,104 @@ fleetflow down
 **制約**:
 - Docker が起動している必要がある
 
+#### FS-005: fleetflow deploy - ステージデプロイ（CI/CD向け）
+
+**目的**: 既存コンテナを強制停止・削除し、最新イメージで再起動する
+
+**入力**:
+- `<STAGE>`: ステージ名（必須）
+- `-n, --service <SERVICE>`: デプロイ対象のサービス（省略時は全サービス）
+- `--no-pull`: イメージのpullをスキップ（デフォルトは常にpull）
+- `-y, --yes`: 確認なしで実行
+- 環境変数 `FLEETFLOW_STAGE`: ステージ名（オプション）
+
+**出力**:
+- デプロイプロセスの進行状況
+- 各ステップ（停止・削除・起動）の結果
+- エラー時は詳細なメッセージ
+
+**振る舞い**:
+1. flow.kdl を読み込む
+2. 指定されたステージの定義を取得
+3. `--service` が指定されていれば対象をフィルタ
+4. `--yes` がなければ確認メッセージを表示して終了
+5. Docker に接続
+6. 【Step 1/3】既存コンテナを停止・削除
+   - 各サービスのコンテナを停止
+   - 各サービスのコンテナを強制削除（ポート解放）
+7. 【Step 2/3】最新イメージをダウンロード（`--no-pull` でスキップ可能）
+8. 【Step 3/3】依存関係順にコンテナを作成・起動
+
+**制約**:
+- ステージ名は必須
+- Docker が起動している必要がある
+- `--yes` オプションがないと実行されない（安全装置）
+
+**使用例**:
+```bash
+# 全サービスをデプロイ（最新イメージを自動pull）
+fleetflow deploy prod --yes
+
+# 特定サービスのみデプロイ
+fleetflow deploy prod --service db --yes
+
+# ローカルイメージを使用（pullスキップ）
+fleetflow deploy prod --yes --no-pull
+```
+
+#### FS-006: fleetflow build - イメージビルド
+
+**目的**: Dockerイメージをビルドし、オプションでレジストリにプッシュする
+
+**入力**:
+- `<STAGE>`: ステージ名（必須）
+- `-n, --service <SERVICE>`: ビルド対象のサービス（省略時は全サービス）
+- `--push`: ビルド後にレジストリにプッシュ
+- `--tag <TAG>`: イメージタグを指定
+- `--registry <REGISTRY>`: レジストリURL（例: `ghcr.io/owner`）
+- `--platform <PLATFORM>`: ターゲットプラットフォーム（例: `linux/amd64`）
+- `--no-cache`: キャッシュを使用しない
+
+**出力**:
+- ビルドプロセスの進行状況
+- 各サービスのビルド結果
+- プッシュ時はプッシュ先URL
+
+**振る舞い**:
+1. flow.kdl を読み込む
+2. 指定されたステージの定義を取得
+3. ビルド対象のサービスを決定（build 設定があるもののみ）
+4. **localステージの場合**:
+   - ネイティブプラットフォームでビルド（bollard API使用）
+5. **local以外のステージの場合**:
+   - docker buildx を使用してクロスプラットフォームビルド
+   - デフォルトプラットフォーム: `linux/amd64`
+   - `--push` 指定時はビルドと同時にプッシュ
+6. イメージ名形式:
+   - `--registry` 指定時: `{registry}/{project}-{stage}:{tag}`
+   - `--registry` 未指定時: 従来のイメージ名
+
+**制約**:
+- ステージ名は必須
+- Docker が起動している必要がある
+- `--registry` + `--push` でクラウドへのプッシュが可能
+- local以外でpush時は docker buildx が必要
+
+**使用例**:
+```bash
+# ローカル開発用ビルド（ネイティブ）
+fleetflow build local
+
+# dev環境用: ghcr.ioにpush（linux/amd64）
+fleetflow build dev --registry ghcr.io/myorg --push
+
+# prod環境用: 特定サービスのみビルド＆push
+fleetflow build prod --registry ghcr.io/myorg --push --service api
+
+# キャッシュなしでリビルド
+fleetflow build prod --registry ghcr.io/myorg --push --no-cache
+```
+
 ### インターフェース仕様
 
 ```bash

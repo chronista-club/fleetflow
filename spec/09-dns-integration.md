@@ -94,66 +94,98 @@ fleetflow cloud dns add --subdomain mcp-prod --ip 203.0.113.1
 fleetflow cloud dns remove --subdomain mcp-prod
 ```
 
-## DNSエイリアス機能
+## DNS設定
 
 ### 概要
 
-サーバー設定に`dns_aliases`を追加することで、メインのDNSレコード(`{service}-{stage}.{domain}`)に加えて、任意のCNAMEエイリアスを自動作成できます。
+サーバー設定に`dns`ブロックを追加することで、Cloudflare DNSレコードを宣言的に管理できます。
+サーバー作成時にIPアドレスを動的取得し、A/AAAAレコードとCNAMEエイリアスを自動作成します。
 
-### KDL設定
+### KDL構文
 
 ```kdl
-server "creo-vps" {
+server "creo-dev" {
     provider "sakura-cloud"
     plan "4core-8gb"
 
-    // DNSエイリアスを指定
-    dns_aliases "app" "api" "www"
-
-    // ...
+    dns {
+        hostname "dev"       // A + AAAAレコード（IPは動的取得）
+        aliases "forge"      // CNAME: forge.domain → dev.domain
+    }
 }
 ```
+
+### 構文要素
+
+| 要素 | 説明 | 例 |
+|------|------|-----|
+| `hostname` | A/AAAAレコードのサブドメイン名。IPはサーバーから動的取得 | `hostname "dev"` |
+| `aliases` | CNAMEレコード。hostnameへの参照を作成 | `aliases "forge" "build"` |
 
 ### 動作
 
 1. **cloud up時**:
-   - メインのAレコード作成: `vps-prod.example.com` → `203.0.113.1`
-   - CNAMEエイリアス作成:
-     - `app.example.com` → `vps-prod.example.com`
-     - `api.example.com` → `vps-prod.example.com`
-     - `www.example.com` → `vps-prod.example.com`
+   - さくらクラウドでサーバー作成
+   - IPv4/IPv6アドレスを動的取得
+   - Aレコード作成: `dev.example.com` → IPv4
+   - AAAAレコード作成: `dev.example.com` → IPv6
+   - CNAMEエイリアス作成: `forge.example.com` → `dev.example.com`
 
 2. **cloud down時**:
    - CNAMEエイリアスを削除
-   - メインのAレコードを削除
+   - A/AAAAレコードを削除
+   - サーバーを削除
 
 ### 使用例
 
 ```kdl
+// Cloudflareプロバイダー設定
+provider "cloudflare" {
+    zone "creo-memories.in"  // Zone IDは環境変数 CLOUDFLARE_ZONE_ID
+}
+
 provider "sakura-cloud" {
     zone "tk1a"
 }
 
+// 本番サーバー
 server "creo-vps" {
     provider "sakura-cloud"
     plan "4core-8gb"
-    disk_size 100
-    os "ubuntu-24.04"
 
-    // アプリケーションへのアクセスを複数のサブドメインで可能に
-    dns_aliases "app" "api" "www"
+    dns {
+        hostname "vps-prod"
+        aliases "app"
+    }
 }
 
-stage "production" {
-    servers "creo-vps"
+// 開発サーバー（ビルド拠点兼用）
+server "creo-dev" {
+    provider "sakura-cloud"
+    plan "4core-8gb"
+
+    dns {
+        hostname "dev"
+        aliases "forge"
+    }
+}
+
+stage "prod" {
+    server "creo-vps"
+}
+
+stage "dev" {
+    server "creo-dev"
 }
 ```
 
-結果:
-- `vps-production.example.com` (Aレコード) → サーバーIP
-- `app.example.com` (CNAME) → `vps-production.example.com`
-- `api.example.com` (CNAME) → `vps-production.example.com`
-- `www.example.com` (CNAME) → `vps-production.example.com`
+結果（prod）:
+- `vps-prod.creo-memories.in` (A/AAAA) → サーバーIP
+- `app.creo-memories.in` (CNAME) → `vps-prod.creo-memories.in`
+
+結果（dev）:
+- `dev.creo-memories.in` (A/AAAA) → サーバーIP
+- `forge.creo-memories.in` (CNAME) → `dev.creo-memories.in`
 
 ## KDL設定 (将来拡張)
 

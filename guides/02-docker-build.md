@@ -821,6 +821,137 @@ service "backend" {
 }
 ```
 
+## コンテナレジストリへのプッシュ
+
+### 1. CLI からのレジストリ指定
+
+```bash
+# ghcr.io にプッシュ
+fleetflow build api prod --push --registry ghcr.io/myorg --tag v1.0.0
+
+# プラットフォームも指定（ARM Mac から x86 イメージを作成）
+fleetflow build api prod --push --registry ghcr.io/myorg --platform linux/amd64
+```
+
+### 2. KDL でレジストリを設定
+
+レジストリは3つのレベルで設定でき、優先順位は CLI > Service > Stage > Flow です。
+
+**プロジェクト全体のデフォルト設定**:
+```kdl
+project "myapp"
+
+// プロジェクト全体のデフォルトレジストリ
+registry "ghcr.io/myorg"
+
+stage "prod" {
+    service "api"
+    service "worker"
+}
+```
+
+**ステージごとに異なるレジストリ**:
+```kdl
+project "myapp"
+
+stage "dev" {
+    // 開発環境は別のレジストリを使用
+    registry "gcr.io/dev-project"
+    service "api"
+}
+
+stage "prod" {
+    // 本番環境用レジストリ
+    registry "ghcr.io/prod-org"
+    service "api"
+}
+```
+
+**サービスごとのレジストリ指定**:
+```kdl
+project "myapp"
+
+// プロジェクトデフォルト
+registry "ghcr.io/myorg"
+
+stage "prod" {
+    service "api"
+    service "db"
+}
+
+// APIサービスはデフォルトレジストリ（ghcr.io/myorg）を使用
+service "api" {
+    dockerfile "./services/api/Dockerfile"
+}
+
+// DBサービスはDocker Hub（registry指定なし）から取得
+service "db" {
+    image "postgres:16"
+    // registry を指定しない → Docker Hub
+}
+```
+
+**ユースケース: 自社サービスと公開イメージの混在**:
+```kdl
+project "vantage"
+
+// 自社サービスのデフォルトレジストリ
+registry "ghcr.io/vantage-hub"
+
+stage "prod" {
+    service "api"       // ghcr.io/vantage-hub からビルド・プッシュ
+    service "surrealdb" // Docker Hub から取得（registryなし）
+    service "redis"     // Docker Hub から取得（registryなし）
+}
+
+service "api" {
+    dockerfile "./services/api/Dockerfile"
+    // registry は Flow の設定を継承 → ghcr.io/vantage-hub
+}
+
+service "surrealdb" {
+    image "surrealdb/surrealdb:v2.2.1"
+    // registry 指定なし → Docker Hub
+}
+
+service "redis" {
+    image "redis:7-alpine"
+    // registry 指定なし → Docker Hub
+}
+```
+
+### 3. レジストリ認証
+
+レジストリへの認証は Docker CLI の認証情報を使用します。
+
+```bash
+# ghcr.io の認証
+echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin
+
+# gcr.io の認証
+gcloud auth configure-docker
+
+# ECR の認証
+aws ecr get-login-password --region ap-northeast-1 | docker login --username AWS --password-stdin <account>.dkr.ecr.ap-northeast-1.amazonaws.com
+```
+
+### 4. CI/CDでの活用
+
+GitHub Actions での例:
+
+```yaml
+- name: Login to GitHub Container Registry
+  uses: docker/login-action@v3
+  with:
+    registry: ghcr.io
+    username: ${{ github.actor }}
+    password: ${{ secrets.GITHUB_TOKEN }}
+
+- name: Build and push
+  run: |
+    fleetflow build api prod --push --tag ${{ github.sha }}
+```
+
 ## 次のステップ
 
 - [変数展開の詳細](./03-variables.md)（将来追加予定）

@@ -1978,7 +1978,11 @@ async fn main() -> anyhow::Result<()> {
             // 早期リターンで処理済み（main関数冒頭）
             unreachable!("SelfUpdate is handled before config loading");
         }
-        Commands::Play { playbook, yes, pull } => {
+        Commands::Play {
+            playbook,
+            yes,
+            pull,
+        } => {
             handle_play_command(&project_root, &playbook, yes, pull).await?;
         }
     }
@@ -3105,7 +3109,9 @@ async fn handle_play_command(
     );
 
     // Playbook KDLファイルを探す
-    let playbook_path = project_root.join("playbooks").join(format!("{}.kdl", playbook_name));
+    let playbook_path = project_root
+        .join("playbooks")
+        .join(format!("{}.kdl", playbook_name));
     if !playbook_path.exists() {
         return Err(anyhow::anyhow!(
             "Playbook '{}' が見つかりません: {}",
@@ -3118,23 +3124,25 @@ async fn handle_play_command(
 
     // KDLをパース
     let kdl_content = std::fs::read_to_string(&playbook_path)?;
-    let doc: kdl::KdlDocument = kdl_content.parse().map_err(|e| {
-        anyhow::anyhow!("KDLパースエラー: {}", e)
-    })?;
+    let doc: kdl::KdlDocument = kdl_content
+        .parse()
+        .map_err(|e| anyhow::anyhow!("KDLパースエラー: {}", e))?;
 
     // Playbookのメタデータを取得
-    let playbook_node = doc.get("playbook").ok_or_else(|| {
-        anyhow::anyhow!("Playbook定義が見つかりません")
-    })?;
+    let playbook_node = doc
+        .get("playbook")
+        .ok_or_else(|| anyhow::anyhow!("Playbook定義が見つかりません"))?;
 
     // targetは子ノード: target "creo-dev"
-    let playbook_children = playbook_node.children().ok_or_else(|| {
-        anyhow::anyhow!("Playbook定義にchildrenがありません")
-    })?;
-    let target_node = playbook_children.get("target").ok_or_else(|| {
-        anyhow::anyhow!("target が指定されていません")
-    })?;
-    let target = target_node.entries().first()
+    let playbook_children = playbook_node
+        .children()
+        .ok_or_else(|| anyhow::anyhow!("Playbook定義にchildrenがありません"))?;
+    let target_node = playbook_children
+        .get("target")
+        .ok_or_else(|| anyhow::anyhow!("target が指定されていません"))?;
+    let target = target_node
+        .entries()
+        .first()
         .and_then(|e| e.value().as_string())
         .ok_or_else(|| anyhow::anyhow!("target の値が取得できません"))?;
 
@@ -3142,15 +3150,15 @@ async fn handle_play_command(
 
     // 変数を取得
     let mut variables: std::collections::HashMap<String, String> = std::collections::HashMap::new();
-    if let Some(vars_node) = doc.get("variables") {
-        if let Some(children) = vars_node.children() {
-            for node in children.nodes() {
-                let var_name = node.name().value();
-                if let Some(entry) = node.entries().first() {
-                    if let Some(value) = entry.value().as_string() {
-                        variables.insert(var_name.to_string(), value.to_string());
-                    }
-                }
+    if let Some(vars_node) = doc.get("variables")
+        && let Some(children) = vars_node.children()
+    {
+        for node in children.nodes() {
+            let var_name = node.name().value();
+            if let Some(entry) = node.entries().first()
+                && let Some(value) = entry.value().as_string()
+            {
+                variables.insert(var_name.to_string(), value.to_string());
             }
         }
     }
@@ -3159,7 +3167,9 @@ async fn handle_play_command(
     let mut stages: Vec<(String, Vec<PlaybookService>)> = Vec::new();
     for node in doc.nodes() {
         if node.name().value() == "stage" {
-            let stage_name = node.entries().first()
+            let stage_name = node
+                .entries()
+                .first()
                 .and_then(|e| e.value().as_string())
                 .unwrap_or("default")
                 .to_string();
@@ -3167,10 +3177,10 @@ async fn handle_play_command(
             let mut services = Vec::new();
             if let Some(children) = node.children() {
                 for child in children.nodes() {
-                    if child.name().value() == "service" {
-                        if let Some(service) = parse_playbook_service(child) {
-                            services.push(service);
-                        }
+                    if child.name().value() == "service"
+                        && let Some(service) = parse_playbook_service(child)
+                    {
+                        services.push(service);
                     }
                 }
             }
@@ -3211,7 +3221,9 @@ async fn handle_play_command(
         println!();
         println!(
             "{}",
-            format!("▶ Stage '{}' を実行中...", stage_name).green().bold()
+            format!("▶ Stage '{}' を実行中...", stage_name)
+                .green()
+                .bold()
         );
 
         for service in services {
@@ -3226,10 +3238,7 @@ async fn handle_play_command(
                 "docker stop {} 2>/dev/null || true && docker rm {} 2>/dev/null || true",
                 service.name, service.name
             );
-            let ssh_stop = Command::new("ssh")
-                .arg(target)
-                .arg(&stop_cmd)
-                .status();
+            let ssh_stop = Command::new("ssh").arg(target).arg(&stop_cmd).status();
 
             if let Err(e) = ssh_stop {
                 println!("    ⚠ 既存コンテナの停止でエラー: {}", e);
@@ -3239,10 +3248,7 @@ async fn handle_play_command(
             if pull {
                 println!("    ↓ イメージをpull中...");
                 let pull_cmd = format!("docker pull {}", service.image);
-                let ssh_pull = Command::new("ssh")
-                    .arg(target)
-                    .arg(&pull_cmd)
-                    .status()?;
+                let ssh_pull = Command::new("ssh").arg(target).arg(&pull_cmd).status()?;
                 if !ssh_pull.success() {
                     println!("    ⚠ イメージpullでエラー（続行します）");
                 }
@@ -3279,10 +3285,7 @@ async fn handle_play_command(
             println!("    $ {}", docker_cmd.dimmed());
 
             // SSH経由で実行
-            let ssh_result = Command::new("ssh")
-                .arg(target)
-                .arg(&docker_cmd)
-                .output()?;
+            let ssh_result = Command::new("ssh").arg(target).arg(&docker_cmd).output()?;
 
             if ssh_result.status.success() {
                 println!("    ✓ 起動完了");
@@ -3333,29 +3336,40 @@ fn parse_playbook_service(node: &kdl::KdlNode) -> Option<PlaybookService> {
 
     // image
     let image_node = children.get("image")?;
-    let image = image_node.entries().first()?.value().as_string()?.to_string();
+    let image = image_node
+        .entries()
+        .first()?
+        .value()
+        .as_string()?
+        .to_string();
 
     // command
-    let command = children.get("command")
+    let command = children
+        .get("command")
         .and_then(|n| n.entries().first())
         .and_then(|e| e.value().as_string())
         .map(|s| s.to_string());
 
     // ports
     let mut ports = Vec::new();
-    if let Some(ports_node) = children.get("ports") {
-        if let Some(ports_children) = ports_node.children() {
-            for port_node in ports_children.nodes() {
-                if port_node.name().value() == "port" {
-                    let host = port_node.get("host")
-                        .and_then(|v| v.as_integer())
-                        .map(|v| v as u16);
-                    let container = port_node.get("container")
-                        .and_then(|v| v.as_integer())
-                        .map(|v| v as u16);
-                    if let (Some(h), Some(c)) = (host, container) {
-                        ports.push(PlaybookPort { host: h, container: c });
-                    }
+    if let Some(ports_node) = children.get("ports")
+        && let Some(ports_children) = ports_node.children()
+    {
+        for port_node in ports_children.nodes() {
+            if port_node.name().value() == "port" {
+                let host = port_node
+                    .get("host")
+                    .and_then(|v| v.as_integer())
+                    .map(|v| v as u16);
+                let container = port_node
+                    .get("container")
+                    .and_then(|v| v.as_integer())
+                    .map(|v| v as u16);
+                if let (Some(h), Some(c)) = (host, container) {
+                    ports.push(PlaybookPort {
+                        host: h,
+                        container: c,
+                    });
                 }
             }
         }
@@ -3363,39 +3377,46 @@ fn parse_playbook_service(node: &kdl::KdlNode) -> Option<PlaybookService> {
 
     // env
     let mut env = std::collections::HashMap::new();
-    if let Some(env_node) = children.get("env") {
-        if let Some(env_children) = env_node.children() {
-            for env_entry in env_children.nodes() {
-                let key = env_entry.name().value().to_string();
-                if let Some(value) = env_entry.entries().first().and_then(|e| e.value().as_string()) {
-                    env.insert(key, value.to_string());
-                }
+    if let Some(env_node) = children.get("env")
+        && let Some(env_children) = env_node.children()
+    {
+        for env_entry in env_children.nodes() {
+            let key = env_entry.name().value().to_string();
+            if let Some(value) = env_entry
+                .entries()
+                .first()
+                .and_then(|e| e.value().as_string())
+            {
+                env.insert(key, value.to_string());
             }
         }
     }
 
     // volumes
     let mut volumes = Vec::new();
-    if let Some(vols_node) = children.get("volumes") {
-        if let Some(vols_children) = vols_node.children() {
-            for vol_node in vols_children.nodes() {
-                if vol_node.name().value() == "volume" {
-                    let host = vol_node.get("host")
-                        .and_then(|v| v.as_string())
-                        .map(|s| s.to_string());
-                    let container = vol_node.get("container")
-                        .and_then(|v| v.as_string())
-                        .map(|s| s.to_string());
-                    let read_only = vol_node.get("read_only")
-                        .and_then(|v| v.as_bool())
-                        .unwrap_or(false);
-                    if let (Some(h), Some(c)) = (host, container) {
-                        volumes.push(PlaybookVolume {
-                            host: h,
-                            container: c,
-                            read_only,
-                        });
-                    }
+    if let Some(vols_node) = children.get("volumes")
+        && let Some(vols_children) = vols_node.children()
+    {
+        for vol_node in vols_children.nodes() {
+            if vol_node.name().value() == "volume" {
+                let host = vol_node
+                    .get("host")
+                    .and_then(|v| v.as_string())
+                    .map(|s| s.to_string());
+                let container = vol_node
+                    .get("container")
+                    .and_then(|v| v.as_string())
+                    .map(|s| s.to_string());
+                let read_only = vol_node
+                    .get("read_only")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                if let (Some(h), Some(c)) = (host, container) {
+                    volumes.push(PlaybookVolume {
+                        host: h,
+                        container: c,
+                        read_only,
+                    });
                 }
             }
         }

@@ -246,7 +246,67 @@ service "api" {
 }
 ```
 
-### 6. ビルドターゲット（マルチステージビルド対応）
+### 6. コンテナレジストリ設定
+
+#### 6.1 レジストリ階層
+
+レジストリは3つのレベルで設定でき、以下の優先順位で解決されます：
+
+```
+CLI --registry > Service.registry > Stage.registry > Flow.registry
+```
+
+#### 6.2 Flow レベル（プロジェクト全体）
+
+```kdl
+project "myapp"
+
+// プロジェクト全体のデフォルトレジストリ
+registry "ghcr.io/myorg"
+```
+
+このレジストリは、下位レベルで上書きされない限り、全てのサービスに適用されます。
+
+#### 6.3 Stage レベル（ステージ/環境ごと）
+
+```kdl
+stage "dev" {
+    registry "gcr.io/dev-project"
+    service "api"
+}
+
+stage "prod" {
+    registry "ghcr.io/prod-org"
+    service "api"
+}
+```
+
+ステージごとに異なるレジストリを使用できます（例：開発と本番で異なるレジストリ）。
+
+#### 6.4 Service レベル（サービスごと）
+
+```kdl
+service "api" {
+    registry "ghcr.io/special-org"
+    dockerfile "./Dockerfile"
+}
+
+// registryを指定しない → 上位レベルの設定を継承、または Docker Hub
+service "db" {
+    image "postgres:16"
+}
+```
+
+特定のサービスのみ別のレジストリを使用する場合に指定します。
+
+#### 6.5 CLI オプション
+
+```bash
+# CLI引数が最優先
+fleetflow build api prod --registry ghcr.io/override
+```
+
+### 7. ビルドターゲット（マルチステージビルド対応）
 
 ```kdl
 service "api" {

@@ -1,0 +1,1 @@
+2025/12/23-18:40:37.795952 281473290035232 [WARN] [db/db_impl/db_impl_open.cc:2687] DB::Open() failed: IO error: While lock file: /data/database.db/LOCK: Resource temporarily unavailable

@@ -166,7 +166,7 @@ impl McpServer {
                     ]
                 }))
             }
-            "fleetflow_status" => {
+            "fleetflow_ps" => {
                 let docker = bollard::Docker::connect_with_local_defaults()?;
                 let project_root = fleetflow_core::find_project_root()?;
                 let config = fleetflow_core::load_project_from_root(&project_root)?;
@@ -277,6 +277,311 @@ impl McpServer {
                     })),
                 }
             }
+            "fleetflow_logs" => {
+                use futures_util::StreamExt;
+
+                let stage = arguments
+                    .get("stage")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| anyhow::anyhow!("Missing stage argument"))?;
+                let service = arguments.get("service").and_then(|v| v.as_str());
+                let tail = arguments.get("tail").and_then(|v| v.as_u64()).unwrap_or(50) as usize;
+
+                let project_root = fleetflow_core::find_project_root()?;
+                let config = fleetflow_core::load_project_from_root(&project_root)?;
+                let docker = bollard::Docker::connect_with_local_defaults()?;
+
+                let container_name = if let Some(svc) = service {
+                    format!("{}-{}-{}", config.name, stage, svc)
+                } else {
+                    let stage_config = config
+                        .stages
+                        .get(stage)
+                        .ok_or_else(|| anyhow::anyhow!("Stage '{}' not found", stage))?;
+                    let first_service = stage_config
+                        .services
+                        .first()
+                        .ok_or_else(|| anyhow::anyhow!("No services in stage '{}'", stage))?;
+                    format!("{}-{}-{}", config.name, stage, first_service)
+                };
+
+                #[allow(deprecated)]
+                let options = bollard::container::LogsOptions::<String> {
+                    stdout: true,
+                    stderr: true,
+                    tail: tail.to_string(),
+                    ..Default::default()
+                };
+
+                let mut logs_stream = docker.logs(&container_name, Some(options));
+                let mut logs = String::new();
+
+                while let Some(log_result) = logs_stream.next().await {
+                    match log_result {
+                        Ok(log) => logs.push_str(&log.to_string()),
+                        Err(e) => {
+                            return Ok(json!({
+                                "isError": true,
+                                "content": [{ "type": "text", "text": format!("ログ取得エラー: {}", e) }]
+                            }));
+                        }
+                    }
+                }
+
+                Ok(json!({
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": format!("Logs for {}:\n\n{}", container_name, logs)
+                        }
+                    ]
+                }))
+            }
+            "fleetflow_restart" => {
+                let stage = arguments
+                    .get("stage")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| anyhow::anyhow!("Missing stage argument"))?;
+                let service = arguments
+                    .get("service")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| anyhow::anyhow!("Missing service argument"))?;
+
+                let project_root = fleetflow_core::find_project_root()?;
+                let config = fleetflow_core::load_project_from_root(&project_root)?;
+                let docker = bollard::Docker::connect_with_local_defaults()?;
+
+                let container_name = format!("{}-{}-{}", config.name, stage, service);
+
+                // コンテナを再起動
+                match docker
+                    .restart_container(
+                        &container_name,
+                        None::<bollard::query_parameters::RestartContainerOptions>,
+                    )
+                    .await
+                {
+                    Ok(_) => Ok(json!({
+                        "content": [{
+                            "type": "text",
+                            "text": format!("サービス '{}' を再起動しました (コンテナ: {})", service, container_name)
+                        }]
+                    })),
+                    Err(e) => Ok(json!({
+                        "isError": true,
+                        "content": [{
+                            "type": "text",
+                            "text": format!("再起動に失敗しました: {}", e)
+                        }]
+                    })),
+                }
+            }
+            "fleetflow_validate" => {
+                let project_root = match fleetflow_core::find_project_root() {
+                    Ok(root) => root,
+                    Err(e) => {
+                        return Ok(json!({
+                            "isError": true,
+                            "content": [{
+                                "type": "text",
+                                "text": format!("プロジェクトルートが見つかりません: {}", e)
+                            }]
+                        }));
+                    }
+                };
+
+                match fleetflow_core::load_project_from_root(&project_root) {
+                    Ok(config) => {
+                        let mut result = "✓ 設定は有効です\n\n".to_string();
+                        result.push_str(&format!("プロジェクト: {}\n", config.name));
+                        result.push_str(&format!("ステージ数: {}\n", config.stages.len()));
+                        result.push_str(&format!("サービス数: {}\n", config.services.len()));
+
+                        if !config.stages.is_empty() {
+                            result.push_str("\nステージ:\n");
+                            for (name, stage) in &config.stages {
+                                result.push_str(&format!(
+                                    "  - {} ({} services)\n",
+                                    name,
+                                    stage.services.len()
+                                ));
+                            }
+                        }
+
+                        Ok(json!({
+                            "content": [{
+                                "type": "text",
+                                "text": result
+                            }]
+                        }))
+                    }
+                    Err(e) => Ok(json!({
+                        "isError": true,
+                        "content": [{
+                            "type": "text",
+                            "text": format!("✗ 設定エラー: {}", e)
+                        }]
+                    })),
+                }
+            }
+            "fleetflow_build" => {
+                let stage = arguments
+                    .get("stage")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| anyhow::anyhow!("Missing stage argument"))?;
+                let service_filter = arguments.get("service").and_then(|v| v.as_str());
+                let no_cache = arguments
+                    .get("no_cache")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+
+                let project_root = fleetflow_core::find_project_root()?;
+                let config = fleetflow_core::load_project_from_root(&project_root)?;
+
+                // ステージのサービス一覧を取得
+                let stage_config = match config.stages.get(stage) {
+                    Some(s) => s,
+                    None => {
+                        return Ok(json!({
+                            "isError": true,
+                            "content": [{
+                                "type": "text",
+                                "text": format!("ステージ '{}' が見つかりません。利用可能: {}",
+                                    stage, config.stages.keys().cloned().collect::<Vec<_>>().join(", "))
+                            }]
+                        }));
+                    }
+                };
+
+                let docker = bollard::Docker::connect_with_local_defaults()?;
+                let resolver = fleetflow_build::BuildResolver::new(project_root.clone());
+                let builder = fleetflow_build::ImageBuilder::new(docker);
+
+                let mut built_services = Vec::new();
+                let mut skipped_services = Vec::new();
+                let mut errors = Vec::new();
+
+                // ビルド対象のサービスを決定
+                let services_to_build: Vec<String> = if let Some(svc) = service_filter {
+                    if stage_config.services.contains(&svc.to_string()) {
+                        vec![svc.to_string()]
+                    } else {
+                        return Ok(json!({
+                            "isError": true,
+                            "content": [{
+                                "type": "text",
+                                "text": format!("サービス '{}' はステージ '{}' に含まれていません", svc, stage)
+                            }]
+                        }));
+                    }
+                } else {
+                    stage_config.services.clone()
+                };
+
+                for service_name in &services_to_build {
+                    let service = match config.services.get(service_name) {
+                        Some(s) => s,
+                        None => {
+                            skipped_services.push(format!("{} (定義なし)", service_name));
+                            continue;
+                        }
+                    };
+
+                    // Dockerfileの解決
+                    let dockerfile = match resolver.resolve_dockerfile(service_name, service) {
+                        Ok(Some(path)) => path,
+                        Ok(None) => {
+                            skipped_services.push(format!("{} (Dockerfileなし)", service_name));
+                            continue;
+                        }
+                        Err(e) => {
+                            errors.push(format!("{}: {}", service_name, e));
+                            continue;
+                        }
+                    };
+
+                    // コンテキストとタグの解決
+                    let context_path = match resolver.resolve_context(service) {
+                        Ok(path) => path,
+                        Err(e) => {
+                            errors.push(format!("{}: {}", service_name, e));
+                            continue;
+                        }
+                    };
+
+                    let image_tag =
+                        resolver.resolve_image_tag(service_name, service, &config.name, stage);
+                    let build_args =
+                        resolver.resolve_build_args(service, &std::collections::HashMap::new());
+
+                    // ビルドコンテキストの作成
+                    let context_data = match fleetflow_build::ContextBuilder::create_context(
+                        &context_path,
+                        &dockerfile,
+                    ) {
+                        Ok(data) => data,
+                        Err(e) => {
+                            errors.push(format!("{}: コンテキスト作成失敗 - {}", service_name, e));
+                            continue;
+                        }
+                    };
+
+                    // ビルド実行
+                    match builder
+                        .build_image(context_data, &image_tag, build_args, None, no_cache)
+                        .await
+                    {
+                        Ok(_) => {
+                            built_services.push(format!("{} → {}", service_name, image_tag));
+                        }
+                        Err(e) => {
+                            errors.push(format!("{}: ビルド失敗 - {}", service_name, e));
+                        }
+                    }
+                }
+
+                // 結果のフォーマット
+                let mut result = String::new();
+
+                if !built_services.is_empty() {
+                    result.push_str("✓ ビルド成功:\n");
+                    for s in &built_services {
+                        result.push_str(&format!("  - {}\n", s));
+                    }
+                }
+
+                if !skipped_services.is_empty() {
+                    if !result.is_empty() {
+                        result.push('\n');
+                    }
+                    result.push_str("⊘ スキップ:\n");
+                    for s in &skipped_services {
+                        result.push_str(&format!("  - {}\n", s));
+                    }
+                }
+
+                if !errors.is_empty() {
+                    if !result.is_empty() {
+                        result.push('\n');
+                    }
+                    result.push_str("✗ エラー:\n");
+                    for e in &errors {
+                        result.push_str(&format!("  - {}\n", e));
+                    }
+                }
+
+                if result.is_empty() {
+                    result = "ビルド対象のサービスがありません".to_string();
+                }
+
+                Ok(json!({
+                    "isError": !errors.is_empty(),
+                    "content": [{
+                        "type": "text",
+                        "text": result
+                    }]
+                }))
+            }
             _ => Ok(json!({
                 "isError": true,
                 "content": [
@@ -314,8 +619,8 @@ impl McpServer {
                     }
                 },
                 {
-                    "name": "fleetflow_status",
-                    "description": "現在実行中または停止中のコンテナの稼働状況を取得します。プロジェクトに関連するコンテナのみをフィルタリングして表示します。デバッグや現状確認に便利です。",
+                    "name": "fleetflow_ps",
+                    "description": "コンテナの一覧を表示します。プロジェクトに関連するコンテナの稼働状況を確認できます。CLIの 'fleetflow ps' と同等。",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
@@ -353,6 +658,76 @@ impl McpServer {
                             "remove": {
                                 "type": "boolean",
                                 "description": "コンテナとネットワークを完全に削除する場合は true"
+                            }
+                        },
+                        "required": ["stage"]
+                    }
+                },
+                {
+                    "name": "fleetflow_logs",
+                    "description": "指定されたステージのコンテナログを取得します。特定のサービスを指定することも可能です。",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "stage": {
+                                "type": "string",
+                                "description": "ステージ名"
+                            },
+                            "service": {
+                                "type": "string",
+                                "description": "サービス名（オプション、未指定時は最初のサービス）"
+                            },
+                            "tail": {
+                                "type": "integer",
+                                "description": "取得する行数（デフォルト: 50）"
+                            }
+                        },
+                        "required": ["stage"]
+                    }
+                },
+                {
+                    "name": "fleetflow_restart",
+                    "description": "指定されたサービスのコンテナを再起動します。設定変更後やアプリケーションのリセットに使用します。",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "stage": {
+                                "type": "string",
+                                "description": "ステージ名（例: local, dev, stg, prod）"
+                            },
+                            "service": {
+                                "type": "string",
+                                "description": "再起動するサービス名"
+                            }
+                        },
+                        "required": ["stage", "service"]
+                    }
+                },
+                {
+                    "name": "fleetflow_validate",
+                    "description": "FleetFlow設定ファイル（flow.kdl等）の構文と整合性を検証します。エラーがあれば詳細を報告します。",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {}
+                    }
+                },
+                {
+                    "name": "fleetflow_build",
+                    "description": "指定されたサービスのDockerイメージをビルドします。Dockerfileが設定されているサービスのみ対象。",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "stage": {
+                                "type": "string",
+                                "description": "ステージ名（例: local, dev, stg, prod）"
+                            },
+                            "service": {
+                                "type": "string",
+                                "description": "ビルド対象のサービス名（オプション、未指定時は全てのビルド可能サービス）"
+                            },
+                            "no_cache": {
+                                "type": "boolean",
+                                "description": "キャッシュを使用せずにビルドする場合は true"
                             }
                         },
                         "required": ["stage"]
