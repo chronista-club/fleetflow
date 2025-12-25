@@ -160,8 +160,12 @@ impl Usacloud {
             args.push(disk_size.as_str());
         }
 
-        // Add OS type (usacloud uses --disk-os-type)
-        if let Some(ref os) = config.os_type {
+        // Add archive or OS type (archive takes priority)
+        if let Some(ref archive) = config.archive {
+            args.push("--disk-source-archive-id");
+            args.push(archive.as_str());
+        } else if let Some(ref os) = config.os_type {
+            // Add OS type (usacloud uses --disk-os-type)
             args.push("--disk-os-type");
             args.push(os.as_str());
         }
@@ -174,8 +178,29 @@ impl Usacloud {
             }
         }
 
-        // Add startup script note IDs (usacloud uses --disk-edit-note-ids)
-        if let Some(ref note_ids) = config.note_ids {
+        // Build note vars JSON array if provided
+        // Format: [{"ID": 123456789012, "Variables": {"key": "value"}}]
+        let note_vars_json: Option<String> = if let Some(ref note_vars) = config.note_vars {
+            let notes_array: Vec<serde_json::Value> = note_vars
+                .iter()
+                .map(|(note_id, vars)| {
+                    serde_json::json!({
+                        "ID": note_id.parse::<u64>().unwrap_or(0),
+                        "Variables": vars
+                    })
+                })
+                .collect();
+            Some(serde_json::to_string(&notes_array).unwrap_or_default())
+        } else {
+            None
+        };
+
+        // Add startup script notes with variables (if note_vars is provided)
+        // Otherwise fall back to note_ids
+        if let Some(ref json) = note_vars_json {
+            args.push("--disk-edit-notes");
+            args.push(json.as_str());
+        } else if let Some(ref note_ids) = config.note_ids {
             for id in note_ids {
                 args.push("--disk-edit-note-ids");
                 args.push(id.as_str());
@@ -191,6 +216,9 @@ impl Usacloud {
         // Connect to shared network for public IP
         args.push("--network-interface-upstream");
         args.push("shared");
+
+        // Boot the server after creation
+        args.push("--boot-after-create");
 
         let output = self.run_command(&args).await?;
 
@@ -312,6 +340,45 @@ impl Usacloud {
         }
         self.create_note(name, content, class).await
     }
+
+    /// List archives
+    pub async fn list_archives(&self) -> Result<Vec<ArchiveInfo>> {
+        let output = self
+            .run_command(&["archive", "list", "--output-type", "json"])
+            .await?;
+
+        if output.trim().is_empty() || output.trim() == "[]" {
+            return Ok(Vec::new());
+        }
+
+        let archives: Vec<ArchiveInfo> = serde_json::from_str(&output)?;
+        Ok(archives)
+    }
+
+    /// Find archive by name
+    pub async fn find_archive_by_name(&self, name: &str) -> Result<Option<ArchiveInfo>> {
+        let archives = self.list_archives().await?;
+        Ok(archives.into_iter().find(|a| a.name == name))
+    }
+
+    /// Resolve archive name or ID to ID
+    /// If input is already a numeric ID, returns it as-is
+    /// Otherwise, looks up by name
+    pub async fn resolve_archive_id(&self, name_or_id: &str) -> Result<String> {
+        // If it's already a numeric ID, return it
+        if name_or_id.chars().all(|c| c.is_ascii_digit()) {
+            return Ok(name_or_id.to_string());
+        }
+
+        // Otherwise, look up by name
+        match self.find_archive_by_name(name_or_id).await? {
+            Some(archive) => Ok(archive.id_str()),
+            None => Err(SakuraError::CommandFailed(format!(
+                "アーカイブが見つかりません: {}",
+                name_or_id
+            ))),
+        }
+    }
 }
 
 /// Authentication status from usacloud
@@ -388,8 +455,14 @@ pub struct CreateServerConfig {
     pub memory: i32,
     pub disk_size: Option<i32>,
     pub os_type: Option<String>,
+    /// アーカイブIDまたは名前（os_type より優先）
+    pub archive: Option<String>,
     pub ssh_key_ids: Option<Vec<String>>,
     pub note_ids: Option<Vec<String>>,
+    /// Note variables to pass to startup scripts
+    /// Format: HashMap<note_id, HashMap<var_name, var_value>>
+    pub note_vars:
+        Option<std::collections::HashMap<String, std::collections::HashMap<String, String>>>,
     pub tags: Vec<String>,
 }
 
@@ -440,6 +513,29 @@ pub struct NoteInfo {
 }
 
 impl NoteInfo {
+    /// Get ID as string
+    pub fn id_str(&self) -> String {
+        self.id.to_string()
+    }
+}
+
+/// Archive information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ArchiveInfo {
+    #[serde(rename = "ID")]
+    pub id: u64,
+
+    #[serde(rename = "Name")]
+    pub name: String,
+
+    #[serde(rename = "SizeMB")]
+    pub size_mb: Option<i64>,
+
+    #[serde(rename = "Scope")]
+    pub scope: Option<String>,
+}
+
+impl ArchiveInfo {
     /// Get ID as string
     pub fn id_str(&self) -> String {
         self.id.to_string()

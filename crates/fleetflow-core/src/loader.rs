@@ -125,6 +125,7 @@ fn expand_all_files(
         + discovered.workloads.len()
         + discovered.stages.len()
         + if discovered.root.is_some() { 1 } else { 0 }
+        + if discovered.cloud.is_some() { 1 } else { 0 }
         + if discovered.stage_override.is_some() {
             1
         } else {
@@ -143,6 +144,14 @@ fn expand_all_files(
     for workload_file in &discovered.workloads {
         debug!(file = %workload_file.display(), "Rendering workload file");
         let rendered = processor.render_file(workload_file)?;
+        expanded.push_str(&rendered);
+        expanded.push_str("\n\n");
+    }
+
+    // 0.5. cloud.kdl（クラウドインフラ定義 - プロバイダー、サーバー）
+    if let Some(cloud_file) = &discovered.cloud {
+        debug!(file = %cloud_file.display(), "Rendering cloud config file");
+        let rendered = processor.render_file(cloud_file)?;
         expanded.push_str(&rendered);
         expanded.push_str("\n\n");
     }
@@ -202,6 +211,12 @@ pub fn load_project_with_debug(project_root: &Path) -> Result<Flow> {
         println!("  flow.kdl: ✓ 検出");
     } else {
         println!("  flow.kdl: ✗ 未検出");
+    }
+
+    if discovered.cloud.is_some() {
+        println!("  cloud.kdl: ✓ 検出");
+    } else {
+        println!("  cloud.kdl: ✗ 未検出");
     }
 
     println!("\n🔍 ディレクトリスキャン");

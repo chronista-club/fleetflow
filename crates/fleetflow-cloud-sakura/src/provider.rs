@@ -38,8 +38,13 @@ pub struct CreateServerOptions {
     pub plan: Option<String>,
     pub disk_size: Option<i32>,
     pub os: Option<String>,
+    /// アーカイブ名またはID（os より優先）
+    pub archive: Option<String>,
     pub ssh_keys: Vec<String>,
     pub startup_scripts: Vec<String>,
+    /// Variables to pass to startup scripts
+    /// Format: HashMap<var_name, var_value>
+    pub init_script_vars: std::collections::HashMap<String, String>,
     pub tags: Vec<String>,
 }
 
@@ -94,6 +99,13 @@ impl SakuraCloudProvider {
         // Parse plan to get core and memory
         let (core, memory) = parse_plan(&options.plan);
 
+        // Resolve archive name to ID (if provided)
+        let archive_id = if let Some(ref archive) = options.archive {
+            Some(self.usacloud.resolve_archive_id(archive).await?)
+        } else {
+            None
+        };
+
         // Look up SSH key IDs
         let ssh_key_ids = if options.ssh_keys.is_empty() {
             None
@@ -112,30 +124,55 @@ impl SakuraCloudProvider {
             if ids.is_empty() { None } else { Some(ids) }
         };
 
-        // Look up startup script (note) IDs
-        // Built-in scripts are automatically created if not present
-        let note_ids = if options.startup_scripts.is_empty() {
-            None
-        } else {
+        // Look up startup script (note) IDs and build note_vars if provided
+        // If init_script_vars is provided, use note_vars format instead of note_ids
+        let has_init_script_vars = !options.init_script_vars.is_empty();
+        let mut note_ids: Option<Vec<String>> = None;
+        let mut note_vars: Option<
+            std::collections::HashMap<String, std::collections::HashMap<String, String>>,
+        > = None;
+
+        if !options.startup_scripts.is_empty() {
             let mut ids: Vec<String> = Vec::new();
+            let mut vars_map: std::collections::HashMap<
+                String,
+                std::collections::HashMap<String, String>,
+            > = std::collections::HashMap::new();
+
             for name in &options.startup_scripts {
                 // Check if it's a built-in script
-                if let Some(content) = crate::startup_scripts::get_builtin_script(name) {
-                    // Get or create the built-in script
-                    let note = self
-                        .usacloud
-                        .get_or_create_note(name, content, "shell")
-                        .await?;
-                    ids.push(note.id_str());
-                } else {
-                    // Look up existing script by name
-                    if let Some(note) = self.usacloud.find_note_by_name(name).await? {
-                        ids.push(note.id_str());
+                let note_id =
+                    if let Some(content) = crate::startup_scripts::get_builtin_script(name) {
+                        // Get or create the built-in script
+                        let note = self
+                            .usacloud
+                            .get_or_create_note(name, content, "shell")
+                            .await?;
+                        Some(note.id_str())
+                    } else {
+                        // Look up existing script by name
+                        self.usacloud
+                            .find_note_by_name(name)
+                            .await?
+                            .map(|note| note.id_str())
+                    };
+
+                if let Some(id) = note_id {
+                    if has_init_script_vars {
+                        // Use note_vars format with variables
+                        vars_map.insert(id.clone(), options.init_script_vars.clone());
+                    } else {
+                        ids.push(id);
                     }
                 }
             }
-            if ids.is_empty() { None } else { Some(ids) }
-        };
+
+            if has_init_script_vars && !vars_map.is_empty() {
+                note_vars = Some(vars_map);
+            } else if !ids.is_empty() {
+                note_ids = Some(ids);
+            }
+        }
 
         let config = CreateServerConfig {
             name: options.name.clone(),
@@ -143,8 +180,10 @@ impl SakuraCloudProvider {
             memory,
             disk_size: options.disk_size,
             os_type: options.os.clone(),
+            archive: archive_id,
             ssh_key_ids,
             note_ids,
+            note_vars,
             tags: options.tags.clone(),
         };
 
@@ -155,6 +194,16 @@ impl SakuraCloudProvider {
     /// Delete a server
     pub async fn delete_server(&self, id: &str, with_disks: bool) -> Result<()> {
         self.usacloud.delete_server(id, with_disks).await
+    }
+
+    /// サーバーを起動（電源ON）
+    pub async fn power_on(&self, id: &str) -> Result<()> {
+        self.usacloud.power_on(id).await
+    }
+
+    /// サーバーを停止（電源OFF、グレースフルシャットダウン）
+    pub async fn power_off(&self, id: &str) -> Result<()> {
+        self.usacloud.power_off(id).await
     }
 
     /// Parse server configuration from ResourceConfig
@@ -330,8 +379,10 @@ impl CloudProvider for SakuraCloudProvider {
                         memory: 1,
                         disk_size: Some(20),
                         os_type: Some("ubuntu2404".to_string()),
+                        archive: None,
                         ssh_key_ids: None,
                         note_ids: None,
+                        note_vars: None,
                         tags: Vec::new(),
                     };
 

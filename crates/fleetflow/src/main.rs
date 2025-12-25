@@ -436,6 +436,42 @@ enum CloudCommands {
         #[arg(short, long)]
         yes: bool,
     },
+    /// サーバーの管理（作成・削除・一覧）
+    #[command(subcommand)]
+    Server(ServerCommands),
+}
+
+/// サーバー管理のサブコマンド
+#[derive(Subcommand)]
+enum ServerCommands {
+    /// サーバーを作成
+    Create {
+        /// サーバー名（flow.kdlで定義されたもの）
+        name: String,
+        /// 確認なしで実行
+        #[arg(short, long)]
+        yes: bool,
+    },
+    /// サーバーを停止（電源OFF）
+    Stop {
+        /// サーバー名
+        name: String,
+    },
+    /// サーバーを起動（電源ON）
+    Start {
+        /// サーバー名
+        name: String,
+    },
+    /// サーバーを削除（⚠️ 完全削除）
+    Delete {
+        /// サーバー名
+        name: String,
+        /// 確認なしで実行
+        #[arg(short, long)]
+        yes: bool,
+    },
+    /// サーバー一覧を表示
+    List,
 }
 
 #[tokio::main]
@@ -1990,6 +2026,367 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// サーバー管理コマンドを処理
+async fn handle_server_command(
+    cmd: ServerCommands,
+    config: &fleetflow_core::Flow,
+) -> anyhow::Result<()> {
+    use fleetflow_cloud_cloudflare::{CloudflareDns, DnsConfig};
+    use fleetflow_cloud_sakura::SakuraCloudProvider;
+
+    match cmd {
+        ServerCommands::List => {
+            println!("{}", "登録済みサーバー一覧:".blue().bold());
+            if config.servers.is_empty() {
+                println!("  {}", "サーバーが定義されていません".yellow());
+            } else {
+                for (name, server) in &config.servers {
+                    println!("\n  {} {}", "•".cyan(), name.bold());
+                    println!("    プロバイダー: {}", server.provider.cyan());
+                    if let Some(plan) = &server.plan {
+                        println!("    プラン: {}", plan);
+                    }
+                    if let Some(disk) = server.disk_size {
+                        println!("    ディスク: {}GB", disk);
+                    }
+                    if let Some(os) = &server.os {
+                        println!("    OS: {}", os);
+                    }
+                    if !server.dns_aliases.is_empty() {
+                        println!("    DNSエイリアス: {}", server.dns_aliases.join(", "));
+                    }
+                }
+            }
+        }
+        ServerCommands::Create { name, yes } => {
+            let server = config.servers.get(&name).ok_or_else(|| {
+                anyhow::anyhow!(
+                    "サーバー '{}' が見つかりません。flow.kdl で定義してください。",
+                    name
+                )
+            })?;
+
+            println!("{}", format!("サーバー '{}' を作成します...", name).blue());
+            println!("  プロバイダー: {}", server.provider.cyan());
+            if let Some(plan) = &server.plan {
+                println!("  プラン: {}", plan);
+            }
+            if let Some(disk) = server.disk_size {
+                println!("  ディスク: {}GB", disk);
+            }
+            if let Some(os) = &server.os {
+                println!("  OS: {}", os);
+            }
+
+            if !yes {
+                println!("\n実行するには --yes オプションを指定してください");
+                return Ok(());
+            }
+
+            if server.provider != "sakura-cloud" {
+                return Err(anyhow::anyhow!(
+                    "プロバイダー '{}' はサポートされていません",
+                    server.provider
+                ));
+            }
+
+            // プロバイダー設定からzoneを取得
+            let zone = config
+                .providers
+                .get("sakura-cloud")
+                .and_then(|p| p.zone.as_deref())
+                .unwrap_or("tk1a");
+
+            let provider = SakuraCloudProvider::new(zone);
+
+            // 既存サーバーチェック
+            println!("  ↓ 既存サーバーを確認中...");
+            if let Ok(Some(existing)) = provider.find_server_by_tag(&config.name, &name).await {
+                println!(
+                    "  {} サーバー '{}' は既に存在します (ID: {})",
+                    "⚠".yellow(),
+                    name,
+                    existing.id.cyan()
+                );
+                return Ok(());
+            }
+
+            // サーバー作成
+            println!("  ↓ サーバーを作成中...");
+            let create_config = fleetflow_cloud_sakura::CreateServerOptions {
+                name: name.clone(),
+                plan: server.plan.clone(),
+                disk_size: server.disk_size.map(|d| d as i32),
+                os: server.os.clone(),
+                archive: server.archive.clone(),
+                ssh_keys: server.ssh_keys.clone(),
+                startup_scripts: server.startup_script.clone().into_iter().collect(),
+                init_script_vars: server.init_script_vars.clone(),
+                tags: vec![
+                    format!("fleetflow:{}:{}", config.name, name),
+                    format!("fleetflow:project:{}", config.name),
+                ],
+            };
+
+            match provider.create_server(&create_config).await {
+                Ok(info) => {
+                    println!("  {} サーバー作成完了!", "✓".green().bold());
+                    println!("    ID: {}", info.id.cyan());
+                    if let Some(ip) = &info.ip_address {
+                        println!("    IP: {}", ip.cyan());
+
+                        // DNS設定（環境変数が設定されている場合）
+                        if let Ok(dns_config) = DnsConfig::from_env() {
+                            let dns = CloudflareDns::new(dns_config);
+                            let subdomain = &name; // サーバー名をそのままサブドメインに
+                            println!("  ↓ DNSレコードを設定中...");
+                            match dns.ensure_record(subdomain, ip).await {
+                                Ok(record) => {
+                                    println!(
+                                        "  {} DNS: {}",
+                                        "✓".green().bold(),
+                                        record.name.cyan()
+                                    );
+
+                                    // DNSエイリアス（CNAME）の設定
+                                    if !server.dns_aliases.is_empty() {
+                                        println!("  ↓ DNSエイリアスを設定中...");
+                                        for alias in &server.dns_aliases {
+                                            let target = dns.full_domain(subdomain);
+                                            match dns.ensure_cname_record(alias, &target).await {
+                                                Ok(cname_record) => {
+                                                    println!(
+                                                        "    {} CNAME: {} → {}",
+                                                        "✓".green().bold(),
+                                                        cname_record.name.cyan(),
+                                                        target
+                                                    );
+                                                }
+                                                Err(e) => {
+                                                    println!(
+                                                        "    {} CNAMEエラー ({}): {}",
+                                                        "✗".red().bold(),
+                                                        alias,
+                                                        e
+                                                    );
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    println!("  {} DNS設定エラー: {}", "✗".red().bold(), e);
+                                }
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    println!("  {} サーバー作成エラー: {}", "✗".red().bold(), e);
+                    return Err(e.into());
+                }
+            }
+
+            println!("\n{}", "✓ サーバーの作成が完了しました".green().bold());
+        }
+        ServerCommands::Stop { name } => {
+            let server = config
+                .servers
+                .get(&name)
+                .ok_or_else(|| anyhow::anyhow!("サーバー '{}' が見つかりません", name))?;
+
+            if server.provider != "sakura-cloud" {
+                return Err(anyhow::anyhow!(
+                    "プロバイダー '{}' はサポートされていません",
+                    server.provider
+                ));
+            }
+
+            let zone = config
+                .providers
+                .get("sakura-cloud")
+                .and_then(|p| p.zone.as_deref())
+                .unwrap_or("tk1a");
+
+            let provider = SakuraCloudProvider::new(zone);
+
+            println!("  ↓ サーバーを検索中...");
+            match provider.find_server_by_tag(&config.name, &name).await {
+                Ok(Some(existing)) => {
+                    println!("  ℹ サーバー発見: {} (ID: {})", name, existing.id.cyan());
+                    println!("  ↓ サーバーを停止中...");
+                    match provider.power_off(&existing.id).await {
+                        Ok(_) => {
+                            println!("  {} サーバー停止完了!", "✓".green().bold());
+                        }
+                        Err(e) => {
+                            println!("  {} 停止エラー: {}", "✗".red().bold(), e);
+                            return Err(e.into());
+                        }
+                    }
+                }
+                Ok(None) => {
+                    println!("  {} サーバー '{}' が見つかりません", "⚠".yellow(), name);
+                }
+                Err(e) => {
+                    return Err(e.into());
+                }
+            }
+        }
+        ServerCommands::Start { name } => {
+            let server = config
+                .servers
+                .get(&name)
+                .ok_or_else(|| anyhow::anyhow!("サーバー '{}' が見つかりません", name))?;
+
+            if server.provider != "sakura-cloud" {
+                return Err(anyhow::anyhow!(
+                    "プロバイダー '{}' はサポートされていません",
+                    server.provider
+                ));
+            }
+
+            let zone = config
+                .providers
+                .get("sakura-cloud")
+                .and_then(|p| p.zone.as_deref())
+                .unwrap_or("tk1a");
+
+            let provider = SakuraCloudProvider::new(zone);
+
+            println!("  ↓ サーバーを検索中...");
+            match provider.find_server_by_tag(&config.name, &name).await {
+                Ok(Some(existing)) => {
+                    println!("  ℹ サーバー発見: {} (ID: {})", name, existing.id.cyan());
+                    println!("  ↓ サーバーを起動中...");
+                    match provider.power_on(&existing.id).await {
+                        Ok(_) => {
+                            println!("  {} サーバー起動完了!", "✓".green().bold());
+                        }
+                        Err(e) => {
+                            println!("  {} 起動エラー: {}", "✗".red().bold(), e);
+                            return Err(e.into());
+                        }
+                    }
+                }
+                Ok(None) => {
+                    println!("  {} サーバー '{}' が見つかりません", "⚠".yellow(), name);
+                }
+                Err(e) => {
+                    return Err(e.into());
+                }
+            }
+        }
+        ServerCommands::Delete { name, yes } => {
+            let server = config
+                .servers
+                .get(&name)
+                .ok_or_else(|| anyhow::anyhow!("サーバー '{}' が見つかりません", name))?;
+
+            println!("{}", format!("サーバー '{}' を削除します...", name).red());
+
+            if !yes {
+                println!("\n{}", "警告: この操作は取り消せません!".red().bold());
+                println!("実行するには --yes オプションを指定してください");
+                return Ok(());
+            }
+
+            if server.provider != "sakura-cloud" {
+                return Err(anyhow::anyhow!(
+                    "プロバイダー '{}' はサポートされていません",
+                    server.provider
+                ));
+            }
+
+            let zone = config
+                .providers
+                .get("sakura-cloud")
+                .and_then(|p| p.zone.as_deref())
+                .unwrap_or("tk1a");
+
+            let provider = SakuraCloudProvider::new(zone);
+
+            // サーバー検索
+            println!("  ↓ サーバーを検索中...");
+            match provider.find_server_by_tag(&config.name, &name).await {
+                Ok(Some(existing)) => {
+                    println!("  ℹ サーバー発見: {} (ID: {})", name, existing.id.cyan());
+
+                    // DNS削除（環境変数が設定されている場合）
+                    if let Ok(dns_config) = DnsConfig::from_env() {
+                        let dns = CloudflareDns::new(dns_config);
+
+                        // DNSエイリアス（CNAME）の削除
+                        if !server.dns_aliases.is_empty() {
+                            println!("  ↓ DNSエイリアスを削除中...");
+                            for alias in &server.dns_aliases {
+                                match dns.remove_cname_record(alias).await {
+                                    Ok(_) => {
+                                        println!(
+                                            "    {} CNAME削除: {}.{}",
+                                            "✓".green().bold(),
+                                            alias,
+                                            dns.domain()
+                                        );
+                                    }
+                                    Err(e) => {
+                                        println!(
+                                            "    {} CNAME削除エラー ({}): {}",
+                                            "⚠".yellow(),
+                                            alias,
+                                            e
+                                        );
+                                    }
+                                }
+                            }
+                        }
+
+                        // メインのAレコードを削除
+                        let subdomain = &name;
+                        println!("  ↓ DNSレコードを削除中...");
+                        match dns.remove_record(subdomain).await {
+                            Ok(_) => {
+                                println!(
+                                    "  {} DNS削除: {}.{}",
+                                    "✓".green().bold(),
+                                    subdomain,
+                                    dns.domain()
+                                );
+                            }
+                            Err(e) => {
+                                println!("  {} DNS削除エラー: {}", "⚠".yellow(), e);
+                            }
+                        }
+                    }
+
+                    // サーバー削除
+                    println!("  ↓ サーバーを削除中...");
+                    match provider.delete_server(&existing.id, true).await {
+                        Ok(_) => {
+                            println!("  {} サーバー削除完了!", "✓".green().bold());
+                        }
+                        Err(e) => {
+                            println!("  {} サーバー削除エラー: {}", "✗".red().bold(), e);
+                            return Err(e.into());
+                        }
+                    }
+                }
+                Ok(None) => {
+                    println!("  {} サーバー '{}' が見つかりません", "⚠".yellow(), name);
+                }
+                Err(e) => {
+                    println!("  {} 検索エラー: {}", "✗".red().bold(), e);
+                    return Err(e.into());
+                }
+            }
+
+            println!("\n{}", "✓ サーバーの削除処理が完了しました".green().bold());
+        }
+    }
+
+    Ok(())
+}
+
 /// クラウドコマンドを処理
 async fn handle_cloud_command(
     cmd: CloudCommands,
@@ -2212,8 +2609,10 @@ async fn handle_cloud_command(
                         plan: server.plan.clone(),
                         disk_size: server.disk_size.map(|d| d as i32),
                         os: server.os.clone(),
+                        archive: server.archive.clone(),
                         ssh_keys: server.ssh_keys.clone(),
                         startup_scripts: server.startup_script.clone().into_iter().collect(),
+                        init_script_vars: server.init_script_vars.clone(),
                         tags: vec![
                             format!("fleetflow:{}:{}", config.name, server_name),
                             format!("fleetflow:project:{}", config.name),
@@ -2435,6 +2834,9 @@ async fn handle_cloud_command(
                 "\n{}",
                 "✓ クラウドリソースの削除処理が完了しました".green().bold()
             );
+        }
+        CloudCommands::Server(server_cmd) => {
+            handle_server_command(server_cmd, config).await?;
         }
     }
 
@@ -3216,6 +3618,15 @@ async fn handle_play_command(
     println!();
     println!("{}", format!("SSHで {} に接続中...", target).blue());
 
+    // Dockerネットワークを作成（既存なら無視）
+    let network_name = playbook_name;
+    println!("  🔗 ネットワーク '{}' を作成中...", network_name.cyan());
+    let create_network_cmd = format!("docker network create {} 2>/dev/null || true", network_name);
+    let _ = Command::new("ssh")
+        .arg(target)
+        .arg(&create_network_cmd)
+        .status();
+
     // 各ステージを実行
     for (stage_name, services) in &stages {
         println!();
@@ -3255,7 +3666,10 @@ async fn handle_play_command(
             }
 
             // docker run コマンドを構築
-            let mut docker_cmd = format!("docker run -d --name {}", service.name);
+            let mut docker_cmd = format!(
+                "docker run -d --name {} --network {}",
+                service.name, network_name
+            );
 
             // ポートマッピング
             for port in &service.ports {
@@ -3435,6 +3849,23 @@ fn parse_playbook_service(node: &kdl::KdlNode) -> Option<PlaybookService> {
 /// 変数を展開する ({{ VAR_NAME }} 形式)
 fn expand_variables(value: &str, variables: &std::collections::HashMap<String, String>) -> String {
     let mut result = value.to_string();
+
+    // まず {{ env.XXX }} パターンを展開（ローカル環境変数から取得）
+    let env_pattern = regex::Regex::new(r"\{\{\s*env\.(\w+)\s*\}\}").unwrap();
+    result = env_pattern
+        .replace_all(&result, |caps: &regex::Captures| {
+            let env_var_name = &caps[1];
+            match std::env::var(env_var_name) {
+                Ok(val) => val,
+                Err(_) => {
+                    eprintln!("    ⚠ 環境変数 {} が見つかりません", env_var_name.yellow());
+                    format!("{{{{ env.{} }}}}", env_var_name) // 展開失敗時は元のまま
+                }
+            }
+        })
+        .to_string();
+
+    // 次に playbook内の変数を展開
     for (key, val) in variables {
         let pattern = format!("{{{{ {} }}}}", key);
         result = result.replace(&pattern, val);

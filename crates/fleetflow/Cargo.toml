@@ -17,14 +17,14 @@ path = "src/main.rs"
 
 [dependencies]
 # Workspace crates
-fleetflow-core = { version = "0.4.0", path = "../fleetflow-core" }
-fleetflow-container = { version = "0.4.0", path = "../fleetflow-container" }
-fleetflow-config = { version = "0.4.0", path = "../fleetflow-config" }
-fleetflow-build = { version = "0.4.0", path = "../fleetflow-build" }
-fleetflow-cloud = { version = "0.4.0", path = "../fleetflow-cloud" }
-fleetflow-cloud-sakura = { version = "0.4.0", path = "../fleetflow-cloud-sakura" }
-fleetflow-cloud-cloudflare = { version = "0.4.0", path = "../fleetflow-cloud-cloudflare" }
-fleetflow-mcp = { version = "0.4.0", path = "../fleetflow-mcp" }
+fleetflow-core = { version = "0.4.1", path = "../fleetflow-core" }
+fleetflow-container = { version = "0.4.1", path = "../fleetflow-container" }
+fleetflow-config = { version = "0.4.1", path = "../fleetflow-config" }
+fleetflow-build = { version = "0.4.1", path = "../fleetflow-build" }
+fleetflow-cloud = { version = "0.4.1", path = "../fleetflow-cloud" }
+fleetflow-cloud-sakura = { version = "0.4.1", path = "../fleetflow-cloud-sakura" }
+fleetflow-cloud-cloudflare = { version = "0.4.1", path = "../fleetflow-cloud-cloudflare" }
+fleetflow-mcp = { version = "0.4.1", path = "../fleetflow-mcp" }
 
 # External dependencies
 clap.workspace = true
@@ -46,6 +46,9 @@ crossterm.workspace = true
 
 # Self-update
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+
+# Regex for template expansion
+regex = "1"
 
 [dev-dependencies]
 assert_cmd = "2.0"

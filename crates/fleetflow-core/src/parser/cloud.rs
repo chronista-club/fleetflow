@@ -71,7 +71,7 @@ pub fn parse_server(node: &KdlNode) -> Result<(String, ServerResource)> {
                         .and_then(|e| e.value().as_string())
                         .map(|s| s.to_string());
                 }
-                "disk_size" => {
+                "disk_size" | "disk-size" => {
                     server.disk_size = child
                         .entries()
                         .first()
@@ -85,14 +85,37 @@ pub fn parse_server(node: &KdlNode) -> Result<(String, ServerResource)> {
                         .and_then(|e| e.value().as_string())
                         .map(|s| s.to_string());
                 }
-                "startup_script" => {
+                "archive" => {
+                    server.archive = child
+                        .entries()
+                        .first()
+                        .and_then(|e| e.value().as_string())
+                        .map(|s| s.to_string());
+                }
+                "startup_script" | "startup-script" | "init_script" | "init-script" => {
                     server.startup_script = child
                         .entries()
                         .first()
                         .and_then(|e| e.value().as_string())
                         .map(|s| s.to_string());
                 }
-                "ssh_keys" => {
+                "init_script_vars" | "init-script-vars" => {
+                    // init-script-varsブロックをパース
+                    // 例: init-script-vars { SSH_PUBKEY "ssh-rsa ..." TAILSCALE_AUTHKEY "tskey-..." }
+                    if let Some(vars_children) = child.children() {
+                        for var_child in vars_children.nodes() {
+                            let key = var_child.name().value().to_string();
+                            if let Some(value) = var_child
+                                .entries()
+                                .first()
+                                .and_then(|e| e.value().as_string())
+                            {
+                                server.init_script_vars.insert(key, value.to_string());
+                            }
+                        }
+                    }
+                }
+                "ssh_keys" | "ssh-keys" | "ssh_key" | "ssh-key" => {
                     // 複数のSSHキーを引数として受け取る
                     server.ssh_keys = child
                         .entries()
@@ -108,7 +131,7 @@ pub fn parse_server(node: &KdlNode) -> Result<(String, ServerResource)> {
                         .filter_map(|e| e.value().as_string().map(|s| s.to_string()))
                         .collect();
                 }
-                "dns_alias" | "dns_aliases" => {
+                "dns_alias" | "dns_aliases" | "dns-alias" | "dns-aliases" => {
                     // 複数のDNSエイリアスを引数として受け取る
                     server.dns_aliases = child
                         .entries()
@@ -116,7 +139,39 @@ pub fn parse_server(node: &KdlNode) -> Result<(String, ServerResource)> {
                         .filter_map(|e| e.value().as_string().map(|s| s.to_string()))
                         .collect();
                 }
-                "deploy_path" => {
+                "dns" => {
+                    // dnsブロックをパース（hostname, aliasesを含む）
+                    if let Some(dns_children) = child.children() {
+                        for dns_child in dns_children.nodes() {
+                            match dns_child.name().value() {
+                                "hostname" => {
+                                    // hostnameは今のところconfigに格納
+                                    if let Some(hostname) = dns_child
+                                        .entries()
+                                        .first()
+                                        .and_then(|e| e.value().as_string())
+                                    {
+                                        server.config.insert(
+                                            "dns_hostname".to_string(),
+                                            hostname.to_string(),
+                                        );
+                                    }
+                                }
+                                "aliases" => {
+                                    server.dns_aliases = dns_child
+                                        .entries()
+                                        .iter()
+                                        .filter_map(|e| {
+                                            e.value().as_string().map(|s| s.to_string())
+                                        })
+                                        .collect();
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+                "deploy_path" | "deploy-path" => {
                     server.deploy_path = child
                         .entries()
                         .first()
@@ -300,5 +355,42 @@ mod tests {
         assert_eq!(server.ssh_keys, vec!["my-key"]);
         assert_eq!(server.dns_aliases, vec!["app", "api"]);
         assert_eq!(server.deploy_path, Some("/opt/myapp".to_string()));
+    }
+
+    #[test]
+    fn test_parse_server_kebab_case() {
+        // kebab-case naming (as used in cloud.kdl)
+        let kdl = r#"
+            server "creo-dev" {
+                provider "sakura-cloud"
+                plan "4core-8gb"
+                disk-size 100
+                os "debian12"
+                ssh-key "mito-mac.local"
+                init-script "scripts/init-server.sh"
+                deploy-path "/opt/creo-memories"
+                dns {
+                    hostname "dev"
+                    aliases "forge"
+                }
+            }
+        "#;
+        let doc: kdl::KdlDocument = kdl.parse().unwrap();
+        let node = doc.nodes().first().unwrap();
+
+        let (name, server) = parse_server(node).unwrap();
+        assert_eq!(name, "creo-dev");
+        assert_eq!(server.provider, "sakura-cloud");
+        assert_eq!(server.plan, Some("4core-8gb".to_string()));
+        assert_eq!(server.disk_size, Some(100));
+        assert_eq!(server.os, Some("debian12".to_string()));
+        assert_eq!(server.ssh_keys, vec!["mito-mac.local"]);
+        assert_eq!(
+            server.startup_script,
+            Some("scripts/init-server.sh".to_string())
+        );
+        assert_eq!(server.deploy_path, Some("/opt/creo-memories".to_string()));
+        assert_eq!(server.dns_aliases, vec!["forge"]);
+        assert_eq!(server.config.get("dns_hostname"), Some(&"dev".to_string()));
     }
 }

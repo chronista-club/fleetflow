@@ -33,11 +33,19 @@ pub struct ServerResource {
     /// SSHキー名
     pub ssh_keys: Vec<String>,
 
-    /// OSイメージ
+    /// OSイメージ（archive未指定時に使用）
     pub os: Option<String>,
 
-    /// スタートアップスクリプト
+    /// アーカイブ名またはID（os より優先）
+    /// 例: "creo-base-v1" または "113703014367"
+    pub archive: Option<String>,
+
+    /// スタートアップスクリプト（note名）
     pub startup_script: Option<String>,
+
+    /// スタートアップスクリプトに渡す変数
+    /// 例: {"SSH_PUBKEY": "ssh-rsa ...", "TAILSCALE_AUTHKEY": "tskey-..."}
+    pub init_script_vars: HashMap<String, String>,
 
     /// タグ
     pub tags: Vec<String>,

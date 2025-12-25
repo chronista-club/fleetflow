@@ -12,6 +12,8 @@ use tracing::{debug, info, warn};
 pub struct DiscoveredFiles {
     /// ルートファイル (flow.kdl)
     pub root: Option<PathBuf>,
+    /// クラウドインフラ定義ファイル (cloud.kdl)
+    pub cloud: Option<PathBuf>,
     /// サービス定義ファイル (services/**/*.kdl)
     pub services: Vec<PathBuf>,
     /// ワークロード定義ファイル (workloads/*.kdl)
@@ -109,6 +111,17 @@ pub fn discover_files_with_stage(
     } else {
         None
     };
+
+    // cloud.kdl または .fleetflow/cloud.kdl（クラウドインフラ定義）
+    let cloud_file = project_root.join("cloud.kdl");
+    let fleetflow_cloud_file = project_root.join(".fleetflow/cloud.kdl");
+    if cloud_file.exists() {
+        debug!(file = %cloud_file.display(), "Found cloud config file");
+        discovered.cloud = Some(cloud_file);
+    } else if fleetflow_cloud_file.exists() {
+        debug!(file = %fleetflow_cloud_file.display(), "Found cloud config file in .fleetflow/");
+        discovered.cloud = Some(fleetflow_cloud_file);
+    }
 
     // workload 宣言の解析とファイル発見
     if let Some(root_path) = actual_root
