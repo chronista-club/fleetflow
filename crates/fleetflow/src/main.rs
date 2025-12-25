@@ -3552,6 +3552,16 @@ async fn handle_play_command(
 
     // 変数を取得
     let mut variables: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+
+    // ビルトイン変数を追加（環境変数から取得）
+    let builtin_vars = ["FLEETFLOW_STAGE", "FLEETFLOW_PROJECT_ROOT"];
+    for var_name in builtin_vars {
+        if let Ok(value) = std::env::var(var_name) {
+            variables.insert(var_name.to_string(), value);
+        }
+    }
+
+    // Playbook内の変数定義を追加（ビルトイン変数を上書き可能）
     if let Some(vars_node) = doc.get("variables")
         && let Some(children) = vars_node.children()
     {
@@ -3870,6 +3880,25 @@ fn expand_variables(value: &str, variables: &std::collections::HashMap<String, S
         let pattern = format!("{{{{ {} }}}}", key);
         result = result.replace(&pattern, val);
     }
+
+    // 残りの {{ VAR_NAME }} パターンを環境変数からフォールバック
+    let var_pattern = regex::Regex::new(r"\{\{\s*(\w+)\s*\}\}").unwrap();
+    result = var_pattern
+        .replace_all(&result, |caps: &regex::Captures| {
+            let var_name = &caps[1];
+            match std::env::var(var_name) {
+                Ok(val) => val,
+                Err(_) => {
+                    eprintln!(
+                        "    ⚠ 変数 {} が未定義です（環境変数にもありません）",
+                        var_name.yellow()
+                    );
+                    format!("{{{{ {} }}}}", var_name) // 展開失敗時は元のまま
+                }
+            }
+        })
+        .to_string();
+
     result
 }
 
@@ -3877,4 +3906,132 @@ fn expand_variables(value: &str, variables: &std::collections::HashMap<String, S
 fn shell_escape(s: &str) -> String {
     // シングルクォートでラップしてエスケープ
     format!("'{}'", s.replace('\'', "'\\''"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    #[test]
+    fn test_expand_variables_basic() {
+        let mut variables = HashMap::new();
+        variables.insert("NAME".to_string(), "Alice".to_string());
+        variables.insert("GREETING".to_string(), "Hello".to_string());
+
+        // 単一変数の展開
+        assert_eq!(expand_variables("{{ NAME }}", &variables), "Alice");
+
+        // 複数変数の展開
+        assert_eq!(
+            expand_variables("{{ GREETING }}, {{ NAME }}!", &variables),
+            "Hello, Alice!"
+        );
+
+        // 変数なしの文字列はそのまま
+        assert_eq!(
+            expand_variables("No variables here", &variables),
+            "No variables here"
+        );
+    }
+
+    #[test]
+    fn test_expand_variables_env_pattern() {
+        let variables = HashMap::new();
+
+        // SAFETY: テスト環境での環境変数設定
+        unsafe {
+            std::env::set_var("TEST_EXPAND_VAR", "test_value");
+        }
+
+        // {{ env.XXX }} パターンの展開
+        assert_eq!(
+            expand_variables("Value: {{ env.TEST_EXPAND_VAR }}", &variables),
+            "Value: test_value"
+        );
+
+        // クリーンアップ
+        unsafe {
+            std::env::remove_var("TEST_EXPAND_VAR");
+        }
+    }
+
+    #[test]
+    fn test_expand_variables_builtin_fallback() {
+        let variables = HashMap::new();
+
+        // SAFETY: テスト環境での環境変数設定
+        unsafe {
+            std::env::set_var("FLEETFLOW_STAGE_TEST", "production");
+        }
+
+        // {{ VAR_NAME }} パターンが環境変数にフォールバック
+        assert_eq!(
+            expand_variables("Stage: {{ FLEETFLOW_STAGE_TEST }}", &variables),
+            "Stage: production"
+        );
+
+        // クリーンアップ
+        unsafe {
+            std::env::remove_var("FLEETFLOW_STAGE_TEST");
+        }
+    }
+
+    #[test]
+    fn test_expand_variables_priority() {
+        let mut variables = HashMap::new();
+        variables.insert("MY_VAR".to_string(), "from_hashmap".to_string());
+
+        // SAFETY: テスト環境での環境変数設定
+        unsafe {
+            std::env::set_var("MY_VAR", "from_env");
+        }
+
+        // HashMapの値が優先される
+        assert_eq!(expand_variables("{{ MY_VAR }}", &variables), "from_hashmap");
+
+        // クリーンアップ
+        unsafe {
+            std::env::remove_var("MY_VAR");
+        }
+    }
+
+    #[test]
+    fn test_expand_variables_undefined() {
+        let variables = HashMap::new();
+
+        // 未定義の変数はそのまま残る
+        let result = expand_variables("{{ UNDEFINED_VAR_12345 }}", &variables);
+        assert_eq!(result, "{{ UNDEFINED_VAR_12345 }}");
+    }
+
+    #[test]
+    fn test_expand_variables_mixed() {
+        let mut variables = HashMap::new();
+        variables.insert("PROJECT".to_string(), "myproject".to_string());
+
+        // SAFETY: テスト環境での環境変数設定
+        unsafe {
+            std::env::set_var("TEST_STAGE", "dev");
+        }
+
+        // 混合パターン
+        let result = expand_variables(
+            "{{ PROJECT }}-{{ TEST_STAGE }}-{{ env.TEST_STAGE }}",
+            &variables,
+        );
+        assert_eq!(result, "myproject-dev-dev");
+
+        // クリーンアップ
+        unsafe {
+            std::env::remove_var("TEST_STAGE");
+        }
+    }
+
+    #[test]
+    fn test_shell_escape() {
+        assert_eq!(shell_escape("hello"), "'hello'");
+        assert_eq!(shell_escape("it's"), "'it'\\''s'");
+        assert_eq!(shell_escape(""), "''");
+    }
 }

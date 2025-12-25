@@ -163,9 +163,9 @@ guides/            # Usage（使い方・ベストプラクティス）
 ### 環境変数プレフィックス
 - **プレフィックス**: `FLEETFLOW_` (旧 `FLOW_`)
 - **例**:
-  - `FLEETFLOW_ENV`: 環境名
-  - `FLEETFLOW_PROJECT_ROOT`: プロジェクトルート
   - `FLEETFLOW_STAGE`: ステージ名 (local/dev/stg/prod)
+  - `FLEETFLOW_PROJECT_ROOT`: プロジェクトルート
+  - `FLEETFLOW_CONFIG_PATH`: 設定ファイルパス
 
 ## 重要な設計原則
 

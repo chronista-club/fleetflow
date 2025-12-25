@@ -168,7 +168,7 @@ Geminiは`.claude/skills/`以下のドキュメントを参照し、必要に応
     - **正式名称**: `FleetFlow` (表記ゆれを防ぐため、FとFを大文字にする)
     - **プロジェクト名（コード内）**: `fleetflow` (旧 `fleetflow-cli`)
     - **環境変数プレフィックス**: `FLEETFLOW_` (旧 `FLOW_`)
-    - 例: `FLEETFLOW_ENV`, `FLEETFLOW_PROJECT_ROOT`, `FLEETFLOW_STAGE`
+    - 例: `FLEETFLOW_STAGE`, `FLEETFLOW_PROJECT_ROOT`, `FLEETFLOW_CONFIG_PATH`
 
 3.  **コンテキスト把握**:
     - `GEMINI.md` (本ファイル) および `.claude/CLAUDE.md` を確認。
