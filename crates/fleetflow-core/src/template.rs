@@ -44,12 +44,12 @@ impl TemplateProcessor {
     /// 環境変数を追加（安全なもののみ）
     ///
     /// セキュリティ上の理由から、以下のプレフィックスを持つ環境変数のみを許可:
-    /// - FLEETFLOW_*: FleetFlow専用の環境変数
+    /// - FLEET_*: FleetFlow専用の環境変数
     /// - CI_*: CI/CD環境の変数
     /// - APP_*: アプリケーション設定
     #[tracing::instrument(skip(self))]
     pub fn add_env_variables(&mut self) {
-        const ALLOWED_PREFIXES: &[&str] = &["FLEETFLOW_", "CI_", "APP_"];
+        const ALLOWED_PREFIXES: &[&str] = &["FLEET_", "CI_", "APP_"];
         let mut count = 0;
 
         for (key, value) in std::env::vars() {
@@ -397,7 +397,7 @@ variables {
     fn test_env_variables_filtering() {
         // 環境変数を設定
         unsafe {
-            std::env::set_var("FLEETFLOW_VERSION", "1.0.0");
+            std::env::set_var("FLEET_VERSION", "1.0.0");
             std::env::set_var("CI_PIPELINE_ID", "12345");
             std::env::set_var("APP_NAME", "myapp");
             std::env::set_var("SECRET_KEY", "should_not_be_included");
@@ -408,7 +408,7 @@ variables {
         processor.add_env_variables();
 
         // 許可されたプレフィックスの変数は展開できる
-        let template1 = "{{ FLEETFLOW_VERSION }}";
+        let template1 = "{{ FLEET_VERSION }}";
         assert_eq!(processor.render_str(template1).unwrap(), "1.0.0");
 
         let template2 = "{{ CI_PIPELINE_ID }}";
@@ -426,7 +426,7 @@ variables {
 
         // クリーンアップ
         unsafe {
-            std::env::remove_var("FLEETFLOW_VERSION");
+            std::env::remove_var("FLEET_VERSION");
             std::env::remove_var("CI_PIPELINE_ID");
             std::env::remove_var("APP_NAME");
             std::env::remove_var("SECRET_KEY");

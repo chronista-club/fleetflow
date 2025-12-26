@@ -184,7 +184,7 @@ flow mcp              # MCPサーバーを起動
 ### 環境変数プレフィックス
 - **プレフィックス**: `FLEETFLOW_`
 - **例**:
-  - `FLEETFLOW_STAGE`: ステージ名 (local/dev/stg/prod)
+  - `FLEET_STAGE`: ステージ名 (local/dev/stg/prod)
   - `FLEETFLOW_PROJECT_ROOT`: プロジェクトルート
   - `FLEETFLOW_CONFIG_PATH`: 設定ファイルパス
 

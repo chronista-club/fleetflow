@@ -28,21 +28,26 @@ pub struct DiscoveredFiles {
     pub stage_override: Option<PathBuf>,
     /// 環境変数ファイル (.env)
     pub env_file: Option<PathBuf>,
+    /// 外部サービス環境変数ファイル (.env.external)
+    /// AUTH0, STRIPE, Discord等の外部サービス設定を分離
+    pub external_env_file: Option<PathBuf>,
+    /// ステージ固有環境変数ファイル (.env.{stage})
+    pub stage_env_file: Option<PathBuf>,
 }
 
 /// プロジェクトルートを検出
 ///
 /// 以下の優先順位で検索:
-/// 1. 環境変数 FLEETFLOW_PROJECT_ROOT
+/// 1. 環境変数 FLEET_PROJECT_ROOT
 /// 2. カレントディレクトリから上に向かって以下を探す:
 ///    - flow.kdl
 ///    - .fleetflow/flow.kdl
 #[tracing::instrument]
 pub fn find_project_root() -> Result<PathBuf> {
     // 1. 環境変数
-    if let Ok(root) = std::env::var("FLEETFLOW_PROJECT_ROOT") {
+    if let Ok(root) = std::env::var("FLEET_PROJECT_ROOT") {
         let path = PathBuf::from(&root);
-        debug!(env_root = %root, "Checking FLEETFLOW_PROJECT_ROOT");
+        debug!(env_root = %root, "Checking FLEET_PROJECT_ROOT");
         if path.join("flow.kdl").exists() || path.join(".fleetflow/flow.kdl").exists() {
             info!(project_root = %path.display(), "Found project root from environment variable");
             return Ok(path);
@@ -206,6 +211,30 @@ pub fn discover_files_with_stage(
     } else if fleetflow_env_file.exists() {
         debug!(file = %fleetflow_env_file.display(), "Found .env file in .fleetflow/");
         discovered.env_file = Some(fleetflow_env_file);
+    }
+
+    // .env.external または .fleetflow/.env.external（外部サービス用）
+    let external_env_file = project_root.join(".env.external");
+    let fleetflow_external_env_file = project_root.join(".fleetflow/.env.external");
+    if external_env_file.exists() {
+        debug!(file = %external_env_file.display(), "Found .env.external file");
+        discovered.external_env_file = Some(external_env_file);
+    } else if fleetflow_external_env_file.exists() {
+        debug!(file = %fleetflow_external_env_file.display(), "Found .env.external file in .fleetflow/");
+        discovered.external_env_file = Some(fleetflow_external_env_file);
+    }
+
+    // ステージ固有の .env.{stage} または .fleetflow/.env.{stage}
+    if let Some(stage) = stage {
+        let stage_env_file = project_root.join(format!(".env.{}", stage));
+        let fleetflow_stage_env_file = project_root.join(format!(".fleetflow/.env.{}", stage));
+        if stage_env_file.exists() {
+            debug!(file = %stage_env_file.display(), "Found stage-specific .env file");
+            discovered.stage_env_file = Some(stage_env_file);
+        } else if fleetflow_stage_env_file.exists() {
+            debug!(file = %fleetflow_stage_env_file.display(), "Found stage-specific .env file in .fleetflow/");
+            discovered.stage_env_file = Some(fleetflow_stage_env_file);
+        }
     }
 
     Ok(discovered)

@@ -169,7 +169,7 @@ Geminiは`.claude/skills/`以下のドキュメントを参照し、必要に応
     - **CLIコマンド名**: `flow` (シンプルで入力しやすい)
     - **プロジェクト名（コード内）**: `fleetflow` (crate名、ディレクトリ名)
     - **環境変数プレフィックス**: `FLEETFLOW_`
-    - 例: `FLEETFLOW_STAGE`, `FLEETFLOW_PROJECT_ROOT`, `FLEETFLOW_CONFIG_PATH`
+    - 例: `FLEET_STAGE`, `FLEETFLOW_PROJECT_ROOT`, `FLEETFLOW_CONFIG_PATH`
 
 3.  **CLIコマンド例**:
     ```bash

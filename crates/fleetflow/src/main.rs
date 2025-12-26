@@ -1,3 +1,4 @@
+mod setup;
 mod tui;
 
 use clap::{Parser, Subcommand};
@@ -75,7 +76,7 @@ fn determine_stage_name(
         Ok(config.stages.keys().next().unwrap().clone())
     } else {
         Err(anyhow::anyhow!(
-            "ステージ名を指定してください: --stage=<stage> または FLEETFLOW_STAGE=<stage>\n利用可能なステージ: {}",
+            "ステージ名を指定してください: --stage=<stage> または FLEET_STAGE=<stage>\n利用可能なステージ: {}",
             config
                 .stages
                 .keys()
@@ -272,8 +273,8 @@ enum Commands {
     /// ステージを起動
     Up {
         /// ステージ名 (local, dev, stg, prd)
-        /// 環境変数 FLEETFLOW_STAGE からも読み込み可能
-        #[arg(env = "FLEETFLOW_STAGE")]
+        /// 環境変数 FLEET_STAGE からも読み込み可能
+        #[arg(env = "FLEET_STAGE")]
         stage: Option<String>,
         /// 起動前に最新イメージをpullする
         #[arg(short, long)]
@@ -282,8 +283,8 @@ enum Commands {
     /// ステージを停止
     Down {
         /// ステージ名 (local, dev, stg, prd)
-        /// 環境変数 FLEETFLOW_STAGE からも読み込み可能
-        #[arg(env = "FLEETFLOW_STAGE")]
+        /// 環境変数 FLEET_STAGE からも読み込み可能
+        #[arg(env = "FLEET_STAGE")]
         stage: Option<String>,
         /// コンテナを削除する（デフォルトは停止のみ）
         #[arg(short, long)]
@@ -292,8 +293,8 @@ enum Commands {
     /// コンテナのログを表示
     Logs {
         /// ステージ名 (local, dev, stg, prd)
-        /// 環境変数 FLEETFLOW_STAGE からも読み込み可能
-        #[arg(env = "FLEETFLOW_STAGE")]
+        /// 環境変数 FLEET_STAGE からも読み込み可能
+        #[arg(env = "FLEET_STAGE")]
         stage: Option<String>,
         /// サービス名（指定しない場合は全サービス）
         #[arg(short = 'n', long)]
@@ -308,8 +309,8 @@ enum Commands {
     /// コンテナの一覧を表示
     Ps {
         /// ステージ名 (local, dev, stg, prd)
-        /// 環境変数 FLEETFLOW_STAGE からも読み込み可能
-        #[arg(env = "FLEETFLOW_STAGE")]
+        /// 環境変数 FLEET_STAGE からも読み込み可能
+        #[arg(env = "FLEET_STAGE")]
         stage: Option<String>,
         /// 停止中のコンテナも表示
         #[arg(short, long)]
@@ -320,8 +321,8 @@ enum Commands {
         /// サービス名
         service: String,
         /// ステージ名 (local, dev, stg, prd)
-        /// 環境変数 FLEETFLOW_STAGE からも読み込み可能
-        #[arg(env = "FLEETFLOW_STAGE")]
+        /// 環境変数 FLEET_STAGE からも読み込み可能
+        #[arg(env = "FLEET_STAGE")]
         stage: Option<String>,
     },
     /// サービスを停止
@@ -329,8 +330,8 @@ enum Commands {
         /// サービス名
         service: String,
         /// ステージ名 (local, dev, stg, prd)
-        /// 環境変数 FLEETFLOW_STAGE からも読み込み可能
-        #[arg(env = "FLEETFLOW_STAGE")]
+        /// 環境変数 FLEET_STAGE からも読み込み可能
+        #[arg(env = "FLEET_STAGE")]
         stage: Option<String>,
     },
     /// サービスを起動
@@ -338,8 +339,8 @@ enum Commands {
         /// サービス名
         service: String,
         /// ステージ名 (local, dev, stg, prd)
-        /// 環境変数 FLEETFLOW_STAGE からも読み込み可能
-        #[arg(env = "FLEETFLOW_STAGE")]
+        /// 環境変数 FLEET_STAGE からも読み込み可能
+        #[arg(env = "FLEET_STAGE")]
         stage: Option<String>,
     },
     /// 設定を検証
@@ -353,8 +354,8 @@ enum Commands {
     /// 既存コンテナを強制停止・削除し、最新イメージで再起動
     Deploy {
         /// ステージ名 (local, dev, stg, prd)
-        /// 環境変数 FLEETFLOW_STAGE からも読み込み可能
-        #[arg(env = "FLEETFLOW_STAGE")]
+        /// 環境変数 FLEET_STAGE からも読み込み可能
+        #[arg(env = "FLEET_STAGE")]
         stage: Option<String>,
         /// デプロイ対象のサービス（省略時は全サービス）
         #[arg(short = 'n', long)]
@@ -404,6 +405,19 @@ enum Commands {
         /// 起動前に最新イメージをpullする
         #[arg(long)]
         pull: bool,
+    },
+    /// ステージの環境をセットアップ（冪等）
+    Setup {
+        /// ステージ名 (local, dev, stg, prd)
+        /// 環境変数 FLEET_STAGE からも読み込み可能
+        #[arg(env = "FLEET_STAGE")]
+        stage: Option<String>,
+        /// 確認なしで実行
+        #[arg(short, long)]
+        yes: bool,
+        /// セットアップをスキップするステップ（カンマ区切り）
+        #[arg(long)]
+        skip: Option<String>,
     },
 }
 
@@ -564,14 +578,17 @@ async fn main() -> anyhow::Result<()> {
     };
 
     // プロジェクト全体をロード（flow.kdl + stage固有設定 + localを自動マージ）
-    let stage_name_hint = match &cli.command {
+    // コマンドからステージを取得、または FLEET_STAGE 環境変数から取得
+    let stage_from_env = std::env::var("FLEET_STAGE").ok();
+    let stage_name_hint: Option<&str> = match &cli.command {
         Commands::Up { stage, .. } => stage.as_deref(),
         Commands::Down { stage, .. } => stage.as_deref(),
         Commands::Restart { stage, .. } => stage.as_deref(),
         Commands::Stop { stage, .. } => stage.as_deref(),
         Commands::Start { stage, .. } => stage.as_deref(),
         Commands::Deploy { stage, .. } => stage.as_deref(),
-        _ => None,
+        Commands::Setup { stage, .. } => stage.as_deref(),
+        _ => stage_from_env.as_deref(),
     };
 
     let config = fleetflow_core::load_project_from_root_with_stage(&project_root, stage_name_hint)?;
@@ -597,7 +614,7 @@ async fn main() -> anyhow::Result<()> {
                 config.stages.keys().next().unwrap().clone()
             } else {
                 return Err(anyhow::anyhow!(
-                    "ステージ名を指定してください: --stage=<stage> または FLEETFLOW_STAGE=<stage>\n利用可能なステージ: {}",
+                    "ステージ名を指定してください: --stage=<stage> または FLEET_STAGE=<stage>\n利用可能なステージ: {}",
                     available_stages.join(", ")
                 ));
             };
@@ -995,7 +1012,7 @@ async fn main() -> anyhow::Result<()> {
                 config.stages.keys().next().unwrap().clone()
             } else {
                 return Err(anyhow::anyhow!(
-                    "ステージ名を指定してください: --stage=<stage> または FLEETFLOW_STAGE=<stage>\n利用可能なステージ: {}",
+                    "ステージ名を指定してください: --stage=<stage> または FLEET_STAGE=<stage>\n利用可能なステージ: {}",
                     config
                         .stages
                         .keys()
@@ -2020,6 +2037,9 @@ async fn main() -> anyhow::Result<()> {
             pull,
         } => {
             handle_play_command(&project_root, &playbook, yes, pull).await?;
+        }
+        Commands::Setup { stage, yes, skip } => {
+            handle_setup_command(&project_root, &config, stage, yes, skip).await?;
         }
     }
 
@@ -3554,7 +3574,7 @@ async fn handle_play_command(
     let mut variables: std::collections::HashMap<String, String> = std::collections::HashMap::new();
 
     // ビルトイン変数を追加（環境変数から取得）
-    let builtin_vars = ["FLEETFLOW_STAGE", "FLEETFLOW_PROJECT_ROOT"];
+    let builtin_vars = ["FLEET_STAGE", "FLEET_PROJECT_ROOT"];
     for var_name in builtin_vars {
         if let Ok(value) = std::env::var(var_name) {
             variables.insert(var_name.to_string(), value);
@@ -3902,6 +3922,229 @@ fn expand_variables(value: &str, variables: &std::collections::HashMap<String, S
     result
 }
 
+/// セットアップコマンドを処理（冪等な環境構築）
+async fn handle_setup_command(
+    project_root: &std::path::Path,
+    config: &fleetflow_core::Flow,
+    stage_arg: Option<String>,
+    yes: bool,
+    skip_arg: Option<String>,
+) -> anyhow::Result<()> {
+    use crate::setup::{parse_skip_steps, SetupLogger, SetupStep};
+    use std::io::{self, Write};
+
+    println!(
+        "{}",
+        "╔══════════════════════════════════════════╗".cyan()
+    );
+    println!(
+        "{}",
+        "║        FleetFlow Setup                   ║".cyan().bold()
+    );
+    println!(
+        "{}",
+        "╚══════════════════════════════════════════╝".cyan()
+    );
+    println!();
+
+    // ステージ名を決定
+    let stage_name = determine_stage_name(stage_arg, config)?;
+    let is_local = stage_name == "local";
+
+    println!("  ステージ: {}", stage_name.cyan().bold());
+    println!(
+        "  モード:   {}",
+        if is_local {
+            "ローカル".green()
+        } else {
+            "リモート".yellow()
+        }
+    );
+
+    // スキップするステップを解析
+    let skip_steps = parse_skip_steps(skip_arg.as_deref());
+    if !skip_steps.is_empty() {
+        println!(
+            "  スキップ: {}",
+            skip_steps
+                .iter()
+                .map(|s| s.id())
+                .collect::<Vec<_>>()
+                .join(", ")
+                .dimmed()
+        );
+    }
+
+    // 確認
+    if !yes {
+        print!("\nセットアップを開始しますか？ [y/N] ");
+        io::stdout().flush()?;
+        let mut input = String::new();
+        io::stdin().read_line(&mut input)?;
+        if !input.trim().eq_ignore_ascii_case("y") {
+            println!("キャンセルしました");
+            return Ok(());
+        }
+    }
+
+    println!();
+
+    // セットアップロガー初期化
+    let mut logger = SetupLogger::new();
+
+    // 実行するステップを決定
+    let steps = if is_local {
+        SetupStep::local_steps()
+    } else {
+        SetupStep::remote_steps()
+    };
+
+    // 各ステップを実行
+    for step in steps {
+        // スキップ指定されている場合
+        if skip_steps.contains(&step) {
+            logger.start_step(step);
+            logger.step_skipped("--skip で指定");
+            continue;
+        }
+
+        match step {
+            SetupStep::LoadCloudConfig => {
+                logger.start_step(step);
+
+                // cloud.kdl の存在確認
+                let cloud_config_path = project_root.join("cloud.kdl");
+                if cloud_config_path.exists() {
+                    logger.log_detail(&format!("cloud.kdl: {}", cloud_config_path.display()));
+                    logger.step_success(Some("cloud.kdl 読み込み完了"));
+                } else {
+                    // サーバー定義がconfig内にあるかチェック
+                    if config.servers.is_empty() {
+                        logger.step_skipped("サーバー定義なし");
+                    } else {
+                        logger.log_detail(&format!("{}個のサーバー定義を検出", config.servers.len()));
+                        logger.step_success(Some("サーバー設定を読み込み完了"));
+                    }
+                }
+            }
+
+            SetupStep::CheckServer => {
+                logger.start_step(step);
+                // TODO: リモートサーバー確認の実装
+                // 現時点ではスキップ
+                logger.step_skipped("実装予定");
+            }
+
+            SetupStep::CreateServer => {
+                logger.start_step(step);
+                // TODO: リモートサーバー作成の実装
+                // 現時点ではスキップ
+                logger.step_skipped("実装予定");
+            }
+
+            SetupStep::WaitSsh => {
+                logger.start_step(step);
+                // TODO: SSH接続待機の実装
+                logger.step_skipped("実装予定");
+            }
+
+            SetupStep::InstallTools => {
+                logger.start_step(step);
+                // TODO: ツールインストールの実装
+                logger.step_skipped("実装予定");
+            }
+
+            SetupStep::CreateDirectories => {
+                logger.start_step(step);
+
+                // ローカルセットアップの場合はデータディレクトリを作成
+                if is_local {
+                    let data_dir = project_root.join("data");
+                    if data_dir.exists() {
+                        logger.log_detail("data/: 既に存在");
+                    } else {
+                        std::fs::create_dir_all(&data_dir)?;
+                        logger.log_detail("data/: 作成完了");
+                    }
+                    logger.step_success(None);
+                } else {
+                    // リモートの場合はSSH経由でディレクトリ作成
+                    logger.step_skipped("実装予定");
+                }
+            }
+
+            SetupStep::StartContainers => {
+                logger.start_step(step);
+
+                // Docker初期化
+                let docker = init_docker_with_error_handling().await?;
+
+                // コンテナ起動（flow up相当）
+                let stage_config = match config.stages.get(&stage_name) {
+                    Some(s) => s,
+                    None => {
+                        logger.step_skipped("ステージ設定なし");
+                        continue;
+                    }
+                };
+
+                let container_prefix = format!("{}-{}", config.name, stage_name);
+
+                for service_name in &stage_config.services {
+                    if config.services.contains_key(service_name) {
+                        let container_name = format!("{}-{}", container_prefix, service_name);
+                        logger.log_detail(&format!("{}: 確認中...", service_name));
+
+                        // コンテナが既に存在するかチェック
+                        let existing = docker
+                            .inspect_container(&container_name, None::<bollard::query_parameters::InspectContainerOptions>)
+                            .await
+                            .ok();
+
+                        if let Some(container) = existing {
+                            if container.state.as_ref().map_or(false, |s| s.running.unwrap_or(false)) {
+                                logger.log_detail(&format!("{}: 起動中", service_name));
+                            } else {
+                                // 停止中なら起動
+                                docker.start_container(&container_name, None::<bollard::query_parameters::StartContainerOptions>).await?;
+                                logger.log_detail(&format!("{}: 起動完了", service_name));
+                            }
+                        } else {
+                            // コンテナが存在しない場合
+                            logger.log_detail(&format!("{}: 未作成（flow up を実行してください）", service_name));
+                        }
+                    }
+                }
+
+                logger.step_success(Some(&format!("{}個のサービスを確認", stage_config.services.len())));
+            }
+
+            SetupStep::InitDatabase => {
+                logger.start_step(step);
+                // TODO: DB初期化（マイグレーション適用）
+                logger.step_skipped("実装予定");
+            }
+        }
+    }
+
+    // サマリー出力
+    logger.print_summary(&stage_name);
+
+    if logger.all_success() {
+        println!(
+            "\n{} セットアップが完了しました！",
+            "✓".green().bold()
+        );
+    } else {
+        println!(
+            "\n{} セットアップ中にエラーが発生しました",
+            "✗".red().bold()
+        );
+    }
+
+    Ok(())
+}
+
 /// シェル用にエスケープ
 fn shell_escape(s: &str) -> String {
     // シングルクォートでラップしてエスケープ
@@ -3962,18 +4205,18 @@ mod tests {
 
         // SAFETY: テスト環境での環境変数設定
         unsafe {
-            std::env::set_var("FLEETFLOW_STAGE_TEST", "production");
+            std::env::set_var("FLEET_STAGE_TEST", "production");
         }
 
         // {{ VAR_NAME }} パターンが環境変数にフォールバック
         assert_eq!(
-            expand_variables("Stage: {{ FLEETFLOW_STAGE_TEST }}", &variables),
+            expand_variables("Stage: {{ FLEET_STAGE_TEST }}", &variables),
             "Stage: production"
         );
 
         // クリーンアップ
         unsafe {
-            std::env::remove_var("FLEETFLOW_STAGE_TEST");
+            std::env::remove_var("FLEET_STAGE_TEST");
         }
     }
 

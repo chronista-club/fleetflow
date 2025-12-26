@@ -36,11 +36,11 @@ flow ps --all
 
 #### 3. **環境変数との統合**
 
-`FLEETFLOW_STAGE`環境変数でステージを指定できることで、繰り返し入力の手間を省く。
+`FLEET_STAGE`環境変数でステージを指定できることで、繰り返し入力の手間を省く。
 
 ```bash
 # 毎回 --stage=local を打つ必要がない
-export FLEETFLOW_STAGE=local
+export FLEET_STAGE=local
 flow up
 flow logs
 flow down
@@ -90,7 +90,7 @@ flow down
 
 **入力**:
 - `--stage <STAGE>`: ステージ名（必須）
-- 環境変数 `FLEETFLOW_STAGE`: ステージ名（オプション）
+- 環境変数 `FLEET_STAGE`: ステージ名（オプション）
 
 **出力**:
 - 起動プロセスの進行状況
@@ -118,7 +118,7 @@ flow down
 **入力**:
 - `--stage <STAGE>`: ステージ名（必須）
 - `--remove`: コンテナを削除するフラグ（オプション）
-- 環境変数 `FLEETFLOW_STAGE`: ステージ名（オプション）
+- 環境変数 `FLEET_STAGE`: ステージ名（オプション）
 
 **出力**:
 - 停止プロセスの進行状況
@@ -146,7 +146,7 @@ flow down
 - `--service <SERVICE>`: サービス名（ステージ名と排他）
 - `--lines <N>`: 表示行数（デフォルト: 100）
 - `--follow`: リアルタイム追跡モード
-- 環境変数 `FLEETFLOW_STAGE`: ステージ名（オプション）
+- 環境変数 `FLEET_STAGE`: ステージ名（オプション）
 
 **出力**:
 - サービスごとに色分けされたログ
@@ -174,7 +174,7 @@ flow down
 **入力**:
 - `--stage <STAGE>`: ステージでフィルタ（オプション）
 - `--all`: 停止中のコンテナも表示
-- 環境変数 `FLEETFLOW_STAGE`: ステージ名（オプション）
+- 環境変数 `FLEET_STAGE`: ステージ名（オプション）
 
 **出力**:
 - 表形式のコンテナ一覧
@@ -201,7 +201,7 @@ flow down
 - `-n, --service <SERVICE>`: デプロイ対象のサービス（省略時は全サービス）
 - `--no-pull`: イメージのpullをスキップ（デフォルトは常にpull）
 - `-y, --yes`: 確認なしで実行
-- 環境変数 `FLEETFLOW_STAGE`: ステージ名（オプション）
+- 環境変数 `FLEET_STAGE`: ステージ名（オプション）
 
 **出力**:
 - デプロイプロセスの進行状況
@@ -300,7 +300,7 @@ flow logs --stage=local
 flow ps --stage=local
 
 # 環境変数を使用
-export FLEETFLOW_STAGE=local
+export FLEET_STAGE=local
 flow up
 flow logs --follow
 flow down --remove
@@ -360,7 +360,7 @@ Flowは「本当に必要な機能」だけを提供することで、学習コ�
 
 ```bash
 $ flow up
-✗ ステージ名を指定してください: --stage=local または FLEETFLOW_STAGE=local
+✗ ステージ名を指定してください: --stage=local または FLEET_STAGE=local
 ```
 
 この一文で「何をすればいいか」が分かる。
@@ -368,7 +368,7 @@ $ flow up
 #### 日常的に使う人
 
 ```bash
-$ export FLEETFLOW_STAGE=local
+$ export FLEET_STAGE=local
 $ flow up
 $ flow logs -f
 # 開発作業

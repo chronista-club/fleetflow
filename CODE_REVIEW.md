@@ -318,7 +318,7 @@ fn expand_all_files(discovered: &DiscoveredFiles, processor: &TemplateProcessor)
 /// 環境変数を追加（ホワイトリスト方式）
 pub fn add_env_variables(&mut self) {
     const ALLOWED_ENV_VARS: &[&str] = &[
-        "FLEETFLOW_STAGE",
+        "FLEET_STAGE",
         "FLEETFLOW_PROJECT_ROOT",
         "HOME",
         "USER",

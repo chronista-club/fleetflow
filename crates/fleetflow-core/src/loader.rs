@@ -105,10 +105,20 @@ fn prepare_template_processor(discovered: &DiscoveredFiles) -> Result<TemplatePr
         processor.add_env_file_variables(env_file)?;
     }
 
-    // 4. 環境変数を追加（FLEETFLOW_*, CI_*, APP_* プレフィックスのみ、最優先）
+    // 4. .env.external ファイルから変数を追加（外部サービス用、.env を上書き）
+    if let Some(external_env_file) = &discovered.external_env_file {
+        processor.add_env_file_variables(external_env_file)?;
+    }
+
+    // 5. ステージ固有の .env.{stage} ファイルから変数を追加（.env, .env.external を上書き）
+    if let Some(stage_env_file) = &discovered.stage_env_file {
+        processor.add_env_file_variables(stage_env_file)?;
+    }
+
+    // 6. 環境変数を追加（FLEET_*, CI_*, APP_* プレフィックスのみ、最優先）
     processor.add_env_variables();
 
-    // 5. 収集した変数を追加（最も優先度が高い）
+    // 7. 収集した変数を追加（最も優先度が高い）
     debug!(vars = ?all_variables, "Adding all collected variables to processor");
     processor.add_variables(all_variables);
 
@@ -200,12 +210,21 @@ fn expand_all_files(
 }
 
 /// デバッグ情報を表示しながらロード
+///
+/// 環境変数 `FLEET_STAGE` が設定されている場合、ステージ固有の設定も読み込みます。
 pub fn load_project_with_debug(project_root: &Path) -> Result<Flow> {
+    // FLEET_STAGE 環境変数を取得
+    let stage = std::env::var("FLEET_STAGE").ok();
+    let stage_ref = stage.as_deref();
+
     println!("🔍 プロジェクト検出");
     println!("  ルート: {}", project_root.display());
+    if let Some(s) = &stage {
+        println!("  ステージ: {}", s);
+    }
 
-    // ファイル発見
-    let discovered = discover_files(project_root)?;
+    // ファイル発見（ステージ指定あり）
+    let discovered = discover_files_with_stage(project_root, stage_ref)?;
 
     if discovered.root.is_some() {
         println!("  flow.kdl: ✓ 検出");
@@ -274,9 +293,20 @@ pub fn load_project_with_debug(project_root: &Path) -> Result<Flow> {
     }
 
     // .env ファイルの表示
-    if let Some(env_file) = &discovered.env_file {
+    if discovered.env_file.is_some()
+        || discovered.external_env_file.is_some()
+        || discovered.stage_env_file.is_some()
+    {
         println!("\n🔐 環境変数ファイル");
-        println!("  ✓ {}", env_file.display());
+        if let Some(env_file) = &discovered.env_file {
+            println!("  ✓ {} (base)", env_file.display());
+        }
+        if let Some(external_env_file) = &discovered.external_env_file {
+            println!("  ✓ {} (external services)", external_env_file.display());
+        }
+        if let Some(stage_env_file) = &discovered.stage_env_file {
+            println!("  ✓ {} (stage-specific)", stage_env_file.display());
+        }
     }
 
     println!("\n📖 変数収集");
@@ -293,7 +323,7 @@ pub fn load_project_with_debug(project_root: &Path) -> Result<Flow> {
         .and_then(|n| n.to_str())
         .unwrap_or("unnamed")
         .to_string();
-    let flow = parse_kdl_string(&expanded, name)?;
+    let flow = parse_kdl_string_with_stage(&expanded, name, stage_ref)?;
     println!("  サービス: {}個", flow.services.len());
     println!("  ステージ: {}個", flow.stages.len());
 
