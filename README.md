@@ -1,6 +1,6 @@
 # FleetFlow
 
-> **「宣言だけで、開発も本番も」**  
+> **「宣言だけで、開発も本番も」**
 > Docker Compose よりシンプル。AI と協調する、次世代のコンテナオーケストレーションツール。
 
 [![CI](https://github.com/chronista-club/fleetflow/actions/workflows/ci.yml/badge.svg)](https://github.com/chronista-club/fleetflow/actions/workflows/ci.yml)
@@ -13,82 +13,121 @@ FleetFlow は、KDL (KDL Document Language) をベースにした革新的な環
 
 ### なぜ FleetFlow？
 
-- **超シンプル**: Docker Compose 同等かそれ以下の記述量。
-- **AI ネイティブ**: MCP (Model Context Protocol) を標準サポート。AI があなたの代わりにインフラを操作します。
-- **ワークロード**: 共通の構成（Web + DB 等）を「ワークロード」としてパッケージ化し、一瞬で再利用。
-- **二環境の原則**: 「開発」と「本番」の分離を前提とした、安全で堅牢な設計。
-- **美しい構文**: YAML のインデント地獄から解放される、構造的で読みやすい KDL 構文。
+- **超シンプル**: Docker Compose 同等かそれ以下の記述量
+- **AI ネイティブ**: MCP (Model Context Protocol) を標準サポート。AI があなたの代わりにインフラを操作
+- **環境統一**: 開発から本番まで同じ設定ファイルで管理
+- **美しい構文**: YAML のインデント地獄から解放される、構造的で読みやすい KDL 構文
 
 ---
 
 ## クイックスタート
 
-### 1. インストール (一括セットアップ)
-
-以下のワンライナーで、FleetFlow 本体のインストールと AI エージェント（Gemini CLI / Claude Code）向けの MCP 連携設定を一度に行えます。
+### 1. インストール
 
 ```bash
+# Homebrew (macOS)
+brew install chronista-club/tap/fleetflow
+
+# または curl
 curl -sSf https://raw.githubusercontent.com/chronista-club/fleetflow/main/install.sh | sh
 ```
 
-> **Note**: 大学生の皆さんへ  
-> 常に **FleetFlow** (FとFが大文字) と呼びましょう。これは「群（Fleet）」を「流す（Flow）」という、このツールの核心を表しています。
-
-### 2. プロジェクトの開始
-
-ディレクトリを作成し、初期化ウィザードを実行します。
+### 2. プロジェクトの初期化
 
 ```bash
 mkdir my-project && cd my-project
-fleetflow
+flow init
 ```
 
-### 3. AI エージェントとの対話
-
-Gemini CLI や Claude Code をお使いの場合は、セットアップ直後から AI にインフラ操作を依頼できます。
-
-- 「今のプロジェクトの構成を教えて」
-- 「開発環境（local）を起動して」
-- 「コンテナが正常に動いているか ps で確認して」
-
----
-
-## 主要な概念
-
-### 1. ワークロード (Workload)
-共通のサービス構成を定義したパッケージです。`flow.kdl` で宣言するだけで、必要なサービスが暗黙的にインクルードされます。
-
-```kdl
-// flow.kdl
-project "my-app"
-workload "fullstack-web" // 自動的に必要なサービスが読み込まれる
-```
-
-### 2. ステージ (Stage)
-FleetFlow は、**「開発（local）」と「本番（production）」の最低 2 環境**が必ず存在することを前提としています。
-
-```kdl
-stage "local" {
-    service "app"
-    variables { DEBUG "true" }
-}
-
-stage "production" {
-    service "app"
-    variables { DEBUG "false" }
-}
-```
-
----
-
-## コマンド一覧
+### 3. 環境のセットアップと起動
 
 ```bash
-fleetflow up <stage>      # ステージを起動
-fleetflow down <stage>    # ステージを停止
-fleetflow ps              # コンテナ一覧を表示
-fleetflow logs            # ログを表示
-fleetflow mcp             # MCP サーバーを起動 (AI連携用)
+# 環境をセットアップ（初回）
+flow setup local
+
+# 起動
+flow up local
+```
+
+---
+
+## CLI コマンド
+
+```bash
+# セットアップ（冪等）
+flow setup <stage>    # ステージのインフラを構築
+
+# ライフサイクル
+flow up <stage>       # ステージを起動
+flow down <stage>     # ステージを停止
+flow restart <stage>  # ステージを再起動
+flow deploy <stage>   # デプロイ（CI/CD向け）
+
+# 状態確認
+flow ps               # コンテナ一覧
+flow logs             # ログ表示
+
+# ビルド
+flow build <stage>    # Dockerイメージをビルド
+
+# AI連携
+flow mcp              # MCPサーバーを起動
+
+# 検証
+flow validate         # 設定ファイルを検証
+```
+
+---
+
+## 設定ファイル
+
+### flow.kdl
+
+```kdl
+project "my-app"
+
+// ステージ定義
+stage "local" {
+    service "app"
+    service "db"
+}
+
+stage "dev" {
+    server "my-dev-server"
+    service "app"
+    service "db"
+}
+
+// サービス定義
+service "app" {
+    image "node:22-alpine"
+    ports {
+        port host=3000 container=3000
+    }
+    env {
+        NODE_ENV "{{ NODE_ENV }}"
+    }
+}
+
+service "db" {
+    image "postgres:16"
+    ports {
+        port host=5432 container=5432
+    }
+    volumes {
+        volume host="{{ PROJECT_ROOT }}/data/postgres" container="/var/lib/postgresql/data"
+    }
+}
+```
+
+### 環境変数（.fleetflow/）
+
+```
+.fleetflow/
+├── .env           # グローバル（共通）
+├── .env.local     # local 固有
+├── .env.dev       # dev 固有
+└── .env.prod      # prod 固有
 ```
 
 ---
@@ -98,12 +137,12 @@ fleetflow mcp             # MCP サーバーを起動 (AI連携用)
 ```
 fleetflow/
 ├── crates/
-│   ├── fleetflow/              # CLIエントリーポイント
-│   ├── fleetflow-mcp/          # AIエージェント連携 (MCP)
-│   ├── fleetflow-core/         # KDLパーサー・データモデル
-│   ├── fleetflow-container/    # コンテナ操作・ランタイム
-│   └── ...
-├── workloads/                  # 共有ワークロード定義
+│   ├── fleetflow/              # CLI エントリーポイント (bin: flow)
+│   ├── fleetflow-core/         # KDL パーサー・データモデル
+│   ├── fleetflow-container/    # コンテナ操作
+│   ├── fleetflow-build/        # Docker ビルド
+│   ├── fleetflow-cloud/        # クラウドインフラ抽象化
+│   └── fleetflow-mcp/          # AI エージェント連携 (MCP)
 ├── spec/                       # 仕様書 (What & Why)
 ├── design/                     # 設計書 (How)
 └── guides/                     # 利用ガイド (Usage)

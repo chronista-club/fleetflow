@@ -21,15 +21,15 @@ FleetFlowのCLIコマンド一覧と詳細な使い方です。
 
 ## 詳細
 
-### `fleetflow up`
+### `flow up`
 
 指定したステージのコンテナを起動します。
 
 ```bash
-fleetflow up <stage>
-fleetflow up local
-fleetflow up --build local      # ビルドしてから起動
-fleetflow up --build --no-cache local  # キャッシュなしでビルド
+flow up <stage>
+flow up local
+flow up --build local      # ビルドしてから起動
+flow up --build --no-cache local  # キャッシュなしでビルド
 ```
 
 **オプション**:
@@ -47,13 +47,13 @@ fleetflow up --build --no-cache local  # キャッシュなしでビルド
 5. コンテナを起動
 6. サービスごとに進捗を表示
 
-### `fleetflow down`
+### `flow down`
 
 指定したステージのコンテナを停止・削除します。
 
 ```bash
-fleetflow down <stage>
-fleetflow down local
+flow down <stage>
+flow down local
 ```
 
 **動作**:
@@ -61,13 +61,13 @@ fleetflow down local
 2. コンテナを削除
 3. ボリュームは削除しない（データ保持）
 
-### `fleetflow ps`
+### `flow ps`
 
 コンテナの状態を表示します。
 
 ```bash
-fleetflow ps            # 実行中のコンテナのみ
-fleetflow ps --all      # 停止中も含む
+flow ps            # 実行中のコンテナのみ
+flow ps --all      # 停止中も含む
 ```
 
 **表示内容**:
@@ -75,16 +75,16 @@ fleetflow ps --all      # 停止中も含む
 - 状態（Running/Stopped）
 - ポートマッピング
 
-### `fleetflow logs`
+### `flow logs`
 
 コンテナのログを表示します。
 
 ```bash
-fleetflow logs                    # 全サービス
-fleetflow logs [service]          # 特定サービス
-fleetflow logs --follow           # リアルタイム表示
-fleetflow logs --lines 100        # 行数指定
-fleetflow logs -f -n 50 web       # 組み合わせ
+flow logs                    # 全サービス
+flow logs [service]          # 特定サービス
+flow logs --follow           # リアルタイム表示
+flow logs --lines 100        # 行数指定
+flow logs -f -n 50 web       # 組み合わせ
 ```
 
 **オプション**:
@@ -94,28 +94,28 @@ fleetflow logs -f -n 50 web       # 組み合わせ
 | `--follow` | `-f` | リアルタイムで追従 |
 | `--lines` | `-n` | 表示する行数（デフォルト: 100） |
 
-### `fleetflow start`
+### `flow start`
 
 停止中のサービスを起動します（コンテナは既に存在している場合）。
 
 ```bash
-fleetflow start <stage>           # ステージ内の全サービス
-fleetflow start <stage> [service] # 特定サービスのみ
-fleetflow start local db
+flow start <stage>           # ステージ内の全サービス
+flow start <stage> [service] # 特定サービスのみ
+flow start local db
 ```
 
 **動作**:
 - `docker start` 相当
 - コンテナが存在しない場合はエラー
 
-### `fleetflow stop`
+### `flow stop`
 
 サービスを停止します（コンテナは保持）。
 
 ```bash
-fleetflow stop <stage>            # ステージ内の全サービス
-fleetflow stop <stage> [service]  # 特定サービスのみ
-fleetflow stop local db
+flow stop <stage>            # ステージ内の全サービス
+flow stop <stage> [service]  # 特定サービスのみ
+flow stop local db
 ```
 
 **動作**:
@@ -123,33 +123,33 @@ fleetflow stop local db
 - コンテナは削除されない
 - `start` で再起動可能
 
-### `fleetflow restart`
+### `flow restart`
 
 サービスを再起動します。
 
 ```bash
-fleetflow restart <stage>           # ステージ内の全サービス
-fleetflow restart <stage> [service] # 特定サービスのみ
-fleetflow restart local web
+flow restart <stage>           # ステージ内の全サービス
+flow restart <stage> [service] # 特定サービスのみ
+flow restart local web
 ```
 
 **動作**:
 - `docker restart` 相当
 - 停止 → 起動を実行
 
-### `fleetflow build`
+### `flow build`
 
 イメージをビルドします（コンテナは起動しない）。
 
 ```bash
-fleetflow build <stage>                 # ステージ内の全サービス
-fleetflow build <stage> -n <service>    # 特定サービスのみ
-fleetflow build local -n api
-fleetflow build local --no-cache        # キャッシュなしでビルド
+flow build <stage>                 # ステージ内の全サービス
+flow build <stage> -n <service>    # 特定サービスのみ
+flow build local -n api
+flow build local --no-cache        # キャッシュなしでビルド
 
 # レジストリにプッシュ
-fleetflow build local -n api --push
-fleetflow build local -n api --push --tag v1.0.0
+flow build local -n api --push
+flow build local -n api --push --tag v1.0.0
 ```
 
 **オプション**:
@@ -172,15 +172,15 @@ Docker標準の認証方式を使用：
 2. KDL設定の `image` フィールドのタグ
 3. デフォルト: `latest`
 
-### `fleetflow rebuild`
+### `flow rebuild`
 
 イメージを再ビルドしてコンテナを再起動します。
 
 ```bash
-fleetflow rebuild <service>           # サービスをリビルド
-fleetflow rebuild <service> [stage]   # ステージを指定
-fleetflow rebuild api local
-fleetflow rebuild api --no-cache      # キャッシュなしでリビルド
+flow rebuild <service>           # サービスをリビルド
+flow rebuild <service> [stage]   # ステージを指定
+flow rebuild api local
+flow rebuild api --no-cache      # キャッシュなしでリビルド
 ```
 
 **動作**:
@@ -188,12 +188,12 @@ fleetflow rebuild api --no-cache      # キャッシュなしでリビルド
 2. イメージをリビルド
 3. コンテナを再作成・起動
 
-### `fleetflow validate`
+### `flow validate`
 
 設定ファイルの構文チェックを行います。
 
 ```bash
-fleetflow validate
+flow validate
 ```
 
 **チェック内容**:
@@ -201,26 +201,26 @@ fleetflow validate
 - 必須フィールドの欠落
 - 論理的な矛盾
 
-### `fleetflow cloud`
+### `flow cloud`
 
 クラウドインフラを管理します。
 
 ```bash
 # クラウド環境を構築
-fleetflow cloud up --stage <stage>
-fleetflow cloud up --stage dev --yes  # 確認をスキップ
+flow cloud up --stage <stage>
+flow cloud up --stage dev --yes  # 確認をスキップ
 
 # クラウド環境を削除
-fleetflow cloud down --stage <stage>
-fleetflow cloud down --stage dev --yes
+flow cloud down --stage <stage>
+flow cloud down --stage dev --yes
 
 # 差分を確認（dry-run）
-fleetflow cloud plan --stage <stage>
+flow cloud plan --stage <stage>
 
 # DNS管理（オプション）
-fleetflow cloud dns list
-fleetflow cloud dns add --subdomain api-prod --ip 203.0.113.1
-fleetflow cloud dns remove --subdomain api-prod
+flow cloud dns list
+flow cloud dns add --subdomain api-prod --ip 203.0.113.1
+flow cloud dns remove --subdomain api-prod
 ```
 
 **サブコマンド**:
@@ -250,13 +250,13 @@ fleetflow cloud dns remove --subdomain api-prod
 | `CLOUDFLARE_API_TOKEN` | Cloudflare APIトークン |
 | `CLOUDFLARE_ZONE_ID` | ドメインのZone ID |
 
-### `fleetflow version`
+### `flow version`
 
 バージョン情報を表示します。
 
 ```bash
-fleetflow version
-# 出力: fleetflow 0.2.5
+flow version
+# 出力: flow 0.4.2
 ```
 
 ## 環境変数
@@ -286,7 +286,7 @@ fleetflow version
 **解決方法**:
 1. カレントディレクトリに`flow.kdl`があるか確認
 2. 環境変数`FLEETFLOW_CONFIG_PATH`を確認
-3. `fleetflow validate`で検証
+3. `flow validate`で検証
 
 ### イメージが見つからない
 
@@ -313,7 +313,7 @@ fleetflow version
 ### コンテナが起動しない
 
 **解決方法**:
-1. ログを確認: `fleetflow logs` または `docker logs {container}`
+1. ログを確認: `flow logs` または `docker logs {container}`
 2. 環境変数が正しいか確認
 3. ボリュームマウントのパスを確認
 4. コマンドが正しいか確認

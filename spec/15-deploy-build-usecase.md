@@ -59,16 +59,16 @@
 
 ```bash
 # ローカル開発用ビルド（ネイティブ、pushなし）
-fleetflow build local
+flow build local
 
 # dev環境用: ghcr.ioにpush（linux/amd64）
-fleetflow build dev --registry ghcr.io/myorg --push
+flow build dev --registry ghcr.io/myorg --push
 
 # prod環境用: 特定サービスのみビルド＆push
-fleetflow build prod --registry ghcr.io/myorg --push --service api
+flow build prod --registry ghcr.io/myorg --push --service api
 
 # プラットフォーム明示（複数アーキテクチャ対応時）
-fleetflow build prod --registry ghcr.io/myorg --platform linux/arm64 --push
+flow build prod --registry ghcr.io/myorg --platform linux/arm64 --push
 ```
 
 ## デプロイ要件
@@ -96,13 +96,13 @@ fleetflow build prod --registry ghcr.io/myorg --platform linux/arm64 --push
 
 ```bash
 # 全サービスをデプロイ（最新イメージを自動pull）
-fleetflow deploy prod --yes
+flow deploy prod --yes
 
 # 特定サービスのみデプロイ
-fleetflow deploy prod --service db --yes
+flow deploy prod --service db --yes
 
 # ローカルイメージを使用（pullスキップ）
-fleetflow deploy prod --yes --no-pull
+flow deploy prod --yes --no-pull
 ```
 
 ## 未実装・検討事項

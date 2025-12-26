@@ -49,10 +49,10 @@ jobs:
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
       - name: Build and Push
-        run: fleetflow build prod --push --tag ${{ github.sha }}
+        run: flow build prod --push --tag ${{ github.sha }}
 
       - name: Deploy to Production
-        run: fleetflow cloud up --stage prod --yes
+        run: flow cloud up --stage prod --yes
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
@@ -90,7 +90,7 @@ jobs:
         run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
       - name: Build and Push
-        run: fleetflow build prod --push --tag ${{ steps.version.outputs.VERSION }}
+        run: flow build prod --push --tag ${{ steps.version.outputs.VERSION }}
 ```
 
 ### ステージング → 本番のフロー
@@ -113,9 +113,9 @@ jobs:
       - name: Login to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
       - name: Build and Push
-        run: fleetflow build staging --push --tag staging-${{ github.sha }}
+        run: flow build staging --push --tag staging-${{ github.sha }}
       - name: Deploy
-        run: fleetflow cloud up --stage staging --yes
+        run: flow cloud up --stage staging --yes
 ```
 
 ```yaml
@@ -137,7 +137,7 @@ jobs:
       - name: Install FleetFlow
         run: cargo install --git https://github.com/chronista-club/fleetflow
       - name: Deploy
-        run: fleetflow cloud up --stage prod --yes
+        run: flow cloud up --stage prod --yes
         env:
           IMAGE_TAG: ${{ github.event.inputs.tag }}
 ```
@@ -230,20 +230,20 @@ service "worker" {
 docker login ghcr.io
 
 # 2. ビルド & プッシュ
-fleetflow build prod --push --tag v1.2.0
+flow build prod --push --tag v1.2.0
 
 # 3. 本番にデプロイ
-fleetflow cloud up --stage prod
+flow cloud up --stage prod
 ```
 
 ### 特定サービスのみ更新
 
 ```bash
 # APIサービスのみビルド & プッシュ
-fleetflow build prod -n api --push --tag v1.2.1
+flow build prod -n api --push --tag v1.2.1
 
 # 本番サーバーでAPIのみ再起動
-fleetflow cloud restart api --stage prod
+flow cloud restart api --stage prod
 ```
 
 ## ベストプラクティス
@@ -316,7 +316,7 @@ service "api" {
 ### デプロイ後にサービスが起動しない
 
 **確認手順**:
-1. `fleetflow logs --stage prod` でログを確認
+1. `flow logs --stage prod` でログを確認
 2. イメージタグが正しいか確認
 3. 環境変数が設定されているか確認
 

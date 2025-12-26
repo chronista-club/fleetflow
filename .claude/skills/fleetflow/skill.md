@@ -68,10 +68,10 @@ service "db" {
 ### 基本操作
 
 ```bash
-fleetflow up local      # 起動
-fleetflow ps            # 状態確認
-fleetflow logs          # ログ表示
-fleetflow down local    # 停止・削除
+flow up local      # 起動
+flow ps            # 状態確認
+flow logs          # ログ表示
+flow down local    # 停止・削除
 ```
 
 ## CLIコマンド一覧
@@ -210,13 +210,13 @@ service "worker" {
 
 ```bash
 # ビルドのみ
-fleetflow build local -n api
+flow build local -n api
 
 # ビルド＆プッシュ
-fleetflow build local -n api --push
+flow build local -n api --push
 
 # タグを指定してビルド＆プッシュ
-fleetflow build local -n api --push --tag v1.0.0
+flow build local -n api --push --tag v1.0.0
 ```
 
 **認証方式**:
@@ -329,10 +329,10 @@ CI/CDパイプラインからの自動デプロイに最適化されたコマン
 
 ```bash
 # 基本的な使い方
-fleetflow deploy prod --pull --yes
+flow deploy prod --pull --yes
 
 # GitHub Actionsから
-ssh user@vps "cd /app && fleetflow deploy prod --pull --yes"
+ssh user@vps "cd /app && flow deploy prod --pull --yes"
 ```
 
 **オプション:**
@@ -350,14 +350,14 @@ ssh user@vps "cd /app && fleetflow deploy prod --pull --yes"
 
 ### セルフアップデート
 
-`fleetflow up`実行時に自動的にバージョンチェックを行い、新しいバージョンがあれば通知します：
+`flow up`実行時に自動的にバージョンチェックを行い、新しいバージョンがあれば通知します：
 
 ```bash
 # 手動でアップデート
-fleetflow self-update
+flow self-update
 
 # upコマンド時に自動チェック
-fleetflow up local  # 新バージョンがあれば通知
+flow up local  # 新バージョンがあれば通知
 ```
 
 ## コンテナ命名規則

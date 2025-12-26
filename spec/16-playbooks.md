@@ -13,7 +13,7 @@
 - **メンテナンス終了**: 依存関係を考慮した起動順序
 
 これらを毎回手動でコマンド実行するのは煩雑でミスが起きやすいため、
-Playbookとして宣言的に定義し、`fleetflow play <env>/<name>` で一括実行できるようにします。
+Playbookとして宣言的に定義し、`flow play <env>/<name>` で一括実行できるようにします。
 
 ### Workloadとの違い
 
@@ -54,13 +54,13 @@ playbooks/
 
 ```bash
 # 環境/Playbook名 で実行
-fleetflow play <env>/<playbook-name> [OPTIONS]
+flow play <env>/<playbook-name> [OPTIONS]
 
 # 例
-fleetflow play prod/update-apps
-fleetflow play stg/deploy
-fleetflow play dev/reset-all
-fleetflow play common/healthcheck
+flow play prod/update-apps
+flow play stg/deploy
+flow play dev/reset-all
+flow play common/healthcheck
 ```
 
 ### オプション
@@ -74,7 +74,7 @@ fleetflow play common/healthcheck
 ### Playbook一覧表示
 
 ```bash
-fleetflow play --list
+flow play --list
 ```
 
 出力例:
@@ -171,7 +171,7 @@ playbook "update-apps" {
 ## 5. 実行フロー
 
 ```
-fleetflow play prod/update-apps
+flow play prod/update-apps
     │
     ├─ 1. playbooks/prod/update-apps.kdl をロード
     │
@@ -204,8 +204,8 @@ fleetflow play prod/update-apps
 - [ ] 基本的なplaybook定義とパース
 - [ ] services + action の組み合わせ
 - [ ] rolling / parallel 戦略
-- [ ] `fleetflow play <env>/<name>` コマンド
-- [ ] `fleetflow play --list`
+- [ ] `flow play <env>/<name>` コマンド
+- [ ] `flow play --list`
 
 ### Phase 2
 - [ ] ヘルスチェック統合

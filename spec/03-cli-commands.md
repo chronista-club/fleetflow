@@ -25,13 +25,13 @@ Docker Composeの冗長さを排除し、本当に必要なコマンドだけを
 
 ```bash
 # 削除したい → --remove
-fleetflow down --remove
+flow down --remove
 
 # ログを追いたい → --follow
-fleetflow logs --follow
+flow logs --follow
 
 # 全部見たい → --all
-fleetflow ps --all
+flow ps --all
 ```
 
 #### 3. **環境変数との統合**
@@ -41,9 +41,9 @@ fleetflow ps --all
 ```bash
 # 毎回 --stage=local を打つ必要がない
 export FLEETFLOW_STAGE=local
-fleetflow up
-fleetflow logs
-fleetflow down
+flow up
+flow logs
+flow down
 ```
 
 #### 4. **エラーメッセージの親切さ**
@@ -57,7 +57,7 @@ fleetflow down
   port 5432 is already allocated
 
 解決方法:
-  • 既存のコンテナを停止: fleetflow down --stage=local
+  • 既存のコンテナを停止: flow down --stage=local
   • 別のポート番号を使用してください
 ```
 
@@ -84,7 +84,7 @@ fleetflow down
 
 ### 機能仕様
 
-#### FS-001: fleetflow up - コンテナ起動
+#### FS-001: flow up - コンテナ起動
 
 **目的**: 指定したステージのサービスを起動する
 
@@ -111,7 +111,7 @@ fleetflow down
 - Docker が起動している必要がある
 - イメージが存在する必要がある
 
-#### FS-002: fleetflow down - コンテナ停止
+#### FS-002: flow down - コンテナ停止
 
 **目的**: 指定したステージのサービスを停止する
 
@@ -137,7 +137,7 @@ fleetflow down
 - ステージ名は必須
 - Docker が起動している必要がある
 
-#### FS-003: fleetflow logs - ログ表示
+#### FS-003: flow logs - ログ表示
 
 **目的**: コンテナのログを表示する
 
@@ -167,7 +167,7 @@ fleetflow down
 - Docker が起動している必要がある
 - コンテナが存在する必要がある
 
-#### FS-004: fleetflow ps - コンテナ一覧表示
+#### FS-004: flow ps - コンテナ一覧表示
 
 **目的**: 管理中のコンテナの状態を確認する
 
@@ -192,7 +192,7 @@ fleetflow down
 **制約**:
 - Docker が起動している必要がある
 
-#### FS-005: fleetflow deploy - ステージデプロイ（CI/CD向け）
+#### FS-005: flow deploy - ステージデプロイ（CI/CD向け）
 
 **目的**: 既存コンテナを強制停止・削除し、最新イメージで再起動する
 
@@ -228,16 +228,16 @@ fleetflow down
 **使用例**:
 ```bash
 # 全サービスをデプロイ（最新イメージを自動pull）
-fleetflow deploy prod --yes
+flow deploy prod --yes
 
 # 特定サービスのみデプロイ
-fleetflow deploy prod --service db --yes
+flow deploy prod --service db --yes
 
 # ローカルイメージを使用（pullスキップ）
-fleetflow deploy prod --yes --no-pull
+flow deploy prod --yes --no-pull
 ```
 
-#### FS-006: fleetflow build - イメージビルド
+#### FS-006: flow build - イメージビルド
 
 **目的**: Dockerイメージをビルドし、オプションでレジストリにプッシュする
 
@@ -278,35 +278,35 @@ fleetflow deploy prod --yes --no-pull
 **使用例**:
 ```bash
 # ローカル開発用ビルド（ネイティブ）
-fleetflow build local
+flow build local
 
 # dev環境用: ghcr.ioにpush（linux/amd64）
-fleetflow build dev --registry ghcr.io/myorg --push
+flow build dev --registry ghcr.io/myorg --push
 
 # prod環境用: 特定サービスのみビルド＆push
-fleetflow build prod --registry ghcr.io/myorg --push --service api
+flow build prod --registry ghcr.io/myorg --push --service api
 
 # キャッシュなしでリビルド
-fleetflow build prod --registry ghcr.io/myorg --push --no-cache
+flow build prod --registry ghcr.io/myorg --push --no-cache
 ```
 
 ### インターフェース仕様
 
 ```bash
 # 基本的な使用方法
-fleetflow up --stage=local
-fleetflow down --stage=local
-fleetflow logs --stage=local
-fleetflow ps --stage=local
+flow up --stage=local
+flow down --stage=local
+flow logs --stage=local
+flow ps --stage=local
 
 # 環境変数を使用
 export FLEETFLOW_STAGE=local
-fleetflow up
-fleetflow logs --follow
-fleetflow down --remove
+flow up
+flow logs --follow
+flow down --remove
 
 # サービス指定
-fleetflow logs --service=postgres --lines=1000
+flow logs --service=postgres --lines=1000
 ```
 
 ### 非機能仕様
@@ -359,7 +359,7 @@ Flowは「本当に必要な機能」だけを提供することで、学習コ�
 #### 初めて使う人
 
 ```bash
-$ fleetflow up
+$ flow up
 ✗ ステージ名を指定してください: --stage=local または FLEETFLOW_STAGE=local
 ```
 
@@ -369,10 +369,10 @@ $ fleetflow up
 
 ```bash
 $ export FLEETFLOW_STAGE=local
-$ fleetflow up
-$ fleetflow logs -f
+$ flow up
+$ flow logs -f
 # 開発作業
-$ fleetflow down
+$ flow down
 ```
 
 わずか4つのコマンドで開発サイクルが回る。
@@ -380,11 +380,11 @@ $ fleetflow down
 #### トラブルシューティング
 
 ```bash
-$ fleetflow up
+$ flow up
 ✗ ポートが既に使用されています
 
 解決方法:
-  • 既存のコンテナを停止: fleetflow down --stage=local
+  • 既存のコンテナを停止: flow down --stage=local
 ```
 
 次に何をすればいいかが明確。

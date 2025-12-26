@@ -23,11 +23,11 @@ crates/fleetflow/
 ## 3. テスト実行フロー
 
 1.  **Setup**: `tempfile` で一時ディレクトリを作成。`workloads/` や `flow.kdl` を配置。
-2.  **Execution**: `assert_cmd` で `fleetflow up <stage>` を実行。
+2.  **Execution**: `assert_cmd` で `flow up <stage>` を実行。
 3.  **Verification**: 
     - 終了コードが 0 であること。
     - `bollard` でコンテナが指定の名前・ラベルで存在することを確認。
-4.  **Teardown**: `fleetflow down --remove` を実行（または Docker API で直接削除）。一時ディレクトリの削除。
+4.  **Teardown**: `flow down --remove` を実行（または Docker API で直接削除）。一時ディレクトリの削除。
 
 ## 4. 実装チェックリスト
 

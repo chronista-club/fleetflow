@@ -7,7 +7,7 @@ FleetFlow は MCP (Model Context Protocol) をサポートしており、Gemini 
 FleetFlow がインストールされており、パスが通っていることを確認してください。
 
 ```bash
-fleetflow --version
+flow --version
 ```
 
 ## 2. Gemini CLI での設定
@@ -32,7 +32,7 @@ Gemini CLI を使用している場合は、プロジェクトディレクトリ
 Claude Code (anthropic/claude-code) を使用している場合は、以下のコマンドで MCP サーバーとして登録できます。
 
 ```bash
-claude mcp add fleetflow -- fleetflow mcp
+claude mcp add fleetflow -- flow mcp
 ```
 
 または、グローバル設定ファイル（通常は `~/.claude/config.json` または `~/.config/claude/config.json`）に直接記述することも可能です。

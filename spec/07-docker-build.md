@@ -233,7 +233,7 @@ service "api" {
 #### 5.2 キャッシュ無効化
 
 ```bash
-fleetflow up --build --no-cache local
+flow up --build --no-cache local
 ```
 
 または
@@ -303,7 +303,7 @@ service "db" {
 
 ```bash
 # CLI引数が最優先
-fleetflow build api prod --registry ghcr.io/override
+flow build api prod --registry ghcr.io/override
 ```
 
 ### 7. ビルドターゲット（マルチステージビルド対応）
@@ -335,14 +335,14 @@ CMD ["npm", "start"]
 
 ## コマンド仕様
 
-### 1. `fleetflow up`
+### 1. `flow up`
 
 既存の`up`コマンドに`--build`フラグを追加。
 
 #### 1.1 基本動作（既存）
 
 ```bash
-fleetflow up local
+flow up local
 ```
 
 - Dockerfileが存在する場合、**初回のみ**自動ビルド
@@ -352,7 +352,7 @@ fleetflow up local
 #### 1.2 強制リビルド
 
 ```bash
-fleetflow up --build local
+flow up --build local
 ```
 
 - 既存イメージの有無にかかわらず、必ずビルドを実行
@@ -361,33 +361,33 @@ fleetflow up --build local
 #### 1.3 キャッシュなしビルド
 
 ```bash
-fleetflow up --build --no-cache local
+flow up --build --no-cache local
 ```
 
 - キャッシュを使わずにフルビルド
 - 依存関係の更新時などに使用
 
-### 2. `fleetflow rebuild`（新規コマンド）
+### 2. `flow rebuild`（新規コマンド）
 
 特定のサービスを再ビルドする専用コマンド。
 
 #### 2.1 基本構文
 
 ```bash
-fleetflow rebuild <service> [stage]
+flow rebuild <service> [stage]
 ```
 
 #### 2.2 使用例
 
 ```bash
 # apiサービスをリビルド
-fleetflow rebuild api
+flow rebuild api
 
 # localステージのapiサービスをリビルド
-fleetflow rebuild api local
+flow rebuild api local
 
 # キャッシュなしでリビルド
-fleetflow rebuild api --no-cache
+flow rebuild api --no-cache
 ```
 
 #### 2.3 動作
@@ -396,19 +396,19 @@ fleetflow rebuild api --no-cache
 2. イメージをリビルド
 3. コンテナを再作成・起動
 
-### 3. `fleetflow build`（新規コマンド）
+### 3. `flow build`（新規コマンド）
 
 ビルドのみを行い、コンテナは起動しない。
 
 ```bash
 # 全サービスをビルド
-fleetflow build local
+flow build local
 
 # 特定のサービスのみビルド
-fleetflow build api local
+flow build api local
 
 # キャッシュなしでビルド
-fleetflow build --no-cache local
+flow build --no-cache local
 ```
 
 ## flow.kdl記法

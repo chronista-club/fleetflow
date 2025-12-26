@@ -27,7 +27,7 @@
 
 ### 追加
 
-- `fleetflow up --pull`: 起動前に最新イメージを強制プルするオプション
+- `flow up --pull`: 起動前に最新イメージを強制プルするオプション
   - リモートレジストリから最新イメージを取得してから起動
   - `build`設定があるサービスには適用されない（ローカルビルド優先）
 
@@ -53,9 +53,9 @@
 - `fleetflow-cloud-cloudflare`: Cloudflareプロバイダー（スケルトン）
 
 #### CLIコマンド拡張
-- `fleetflow start` - 停止中のサービスを起動
-- `fleetflow stop` - サービスを停止（コンテナは保持）
-- `fleetflow restart` - サービスを再起動
+- `flow start` - 停止中のサービスを起動
+- `flow stop` - サービスを停止（コンテナは保持）
+- `flow restart` - サービスを再起動
 
 ### 変更
 
@@ -86,10 +86,10 @@
 - FleetFlowの初回リリース
 - KDLベースの設定構文
 - 基本的なCLIコマンド:
-  - `fleetflow up` - ステージ内のサービスを起動
-  - `fleetflow down` - ステージ内のサービスを停止
-  - `fleetflow ps` - 実行中のサービスを一覧表示
-  - `fleetflow logs` - サービスのログを表示
+  - `flow up` - ステージ内のサービスを起動
+  - `flow down` - ステージ内のサービスを停止
+  - `flow ps` - 実行中のサービスを一覧表示
+  - `flow logs` - サービスのログを表示
 - ステージベースの環境管理（local, dev, stg, prd）
 - 自動イメージ推測機能付きサービス定義
 - ポートマッピング設定

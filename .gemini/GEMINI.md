@@ -1,6 +1,6 @@
 # FleetFlow プロジェクトガイド (Gemini Edition)
 
-最終更新日: 2025-12-21
+最終更新日: 2025-12-27
 
 ## プロジェクト概要
 
@@ -166,21 +166,33 @@ Geminiは`.claude/skills/`以下のドキュメントを参照し、必要に応
 
 2.  **名称・環境変数の規約 (確定)**:
     - **正式名称**: `FleetFlow` (表記ゆれを防ぐため、FとFを大文字にする)
-    - **プロジェクト名（コード内）**: `fleetflow` (旧 `fleetflow-cli`)
-    - **環境変数プレフィックス**: `FLEETFLOW_` (旧 `FLOW_`)
+    - **CLIコマンド名**: `flow` (シンプルで入力しやすい)
+    - **プロジェクト名（コード内）**: `fleetflow` (crate名、ディレクトリ名)
+    - **環境変数プレフィックス**: `FLEETFLOW_`
     - 例: `FLEETFLOW_STAGE`, `FLEETFLOW_PROJECT_ROOT`, `FLEETFLOW_CONFIG_PATH`
 
-3.  **コンテキスト把握**:
+3.  **CLIコマンド例**:
+    ```bash
+    flow up <stage>       # ステージを起動
+    flow down <stage>     # ステージを停止
+    flow setup <stage>    # インフラを構築（冪等）
+    flow build <stage>    # Dockerイメージをビルド
+    flow deploy <stage>   # デプロイ
+    flow ps               # コンテナ一覧
+    flow logs             # ログ表示
+    ```
+
+4.  **コンテキスト把握**:
     - `GEMINI.md` (本ファイル) および `.claude/CLAUDE.md` を確認。
     - `spec/`, `design/` で仕様・設計を確認。
 
-2.  **新機能・修正**:
+5.  **新機能・修正**:
     - ユーザーとの対話で要件を明確化 (Code Flow Phase 1-2)。
     - 必要に応じて `spec/`, `design/` を更新 (Code Flow Phase 3)。
     - 実装とテスト (Code Flow Phase 4)。
     - **Living Documentation**: コード変更に合わせてドキュメントも更新。
 
-3.  **コミットメッセージ**:
+6.  **コミットメッセージ**:
     - Conventional Commits (`feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `spec:`) を使用。
 
 ## 開発環境セットアップ

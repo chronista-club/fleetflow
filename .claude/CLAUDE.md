@@ -1,6 +1,6 @@
 # FleetFlow プロジェクトガイド
 
-最終更新日: 2025-12-22
+最終更新日: 2025-12-27
 
 ## 言語規定
 
@@ -158,10 +158,31 @@ guides/            # Usage（使い方・ベストプラクティス）
 
 ### 正式名称
 - **プロジェクト名**: `FleetFlow` (FとFを大文字、表記ゆれ防止)
-- **コード内識別子**: `fleetflow` (旧 `fleetflow-cli`)
+- **CLIコマンド名**: `flow` (シンプルで入力しやすい)
+- **コード内識別子**: `fleetflow` (crate名、ディレクトリ名)
+
+### CLIコマンド
+
+```bash
+# 基本操作
+flow up <stage>       # ステージを起動
+flow down <stage>     # ステージを停止
+flow restart <stage>  # ステージを再起動
+flow ps               # コンテナ一覧
+flow logs             # ログ表示
+
+# セットアップ・ビルド・デプロイ
+flow setup <stage>    # ステージのインフラを構築（冪等）
+flow build <stage>    # Dockerイメージをビルド
+flow deploy <stage>   # デプロイ（CI/CD向け）
+
+# その他
+flow validate         # 設定ファイルを検証
+flow mcp              # MCPサーバーを起動
+```
 
 ### 環境変数プレフィックス
-- **プレフィックス**: `FLEETFLOW_` (旧 `FLOW_`)
+- **プレフィックス**: `FLEETFLOW_`
 - **例**:
   - `FLEETFLOW_STAGE`: ステージ名 (local/dev/stg/prod)
   - `FLEETFLOW_PROJECT_ROOT`: プロジェクトルート
@@ -327,7 +348,7 @@ service "web" {
 - [x] プロジェクト初期化
 - [x] 基本的なクレート構造
 - [x] KDLパーサーの実装
-- [x] 基本的なCLIコマンド（up/down/ps/logs/validate）
+- [x] 基本的なCLIコマンド（`flow up/down/ps/logs/validate`）
 - [x] OrbStack連携機能
 - [x] プロジェクト名とステージ名を含む命名規則
 - [x] Docker API統合（bollard）
@@ -444,8 +465,11 @@ cargo build
 # テスト実行
 cargo test
 
-# 開発用実行
+# 開発用実行（cargo経由）
 cargo run -- --help
+
+# インストール後
+flow --help
 ```
 
 ## トラブルシューティング

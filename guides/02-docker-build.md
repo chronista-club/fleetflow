@@ -17,7 +17,7 @@ FleetFlowでカスタムDockerイメージをビルドする方法を、実践�
 ## 前提知識
 
 - Dockerfileの基本的な書き方
-- FleetFlowの基本的な使い方（`fleetflow up`, `fleetflow down`）
+- FleetFlowの基本的な使い方（`flow up`, `flow down`）
 - flow.kdlの基本構文
 
 ## 基本的な使い方
@@ -66,7 +66,7 @@ CMD ["npm", "start"]
 
 **起動**:
 ```bash
-fleetflow up local
+flow up local
 ```
 
 → 自動的に`services/api/Dockerfile`が検出され、ビルド後にコンテナが起動します。
@@ -167,11 +167,11 @@ service "api" {
 **使用例**:
 ```bash
 # 開発環境でビルド・起動
-fleetflow up local
+flow up local
 # → APP_ENV=development, DEBUG=true
 
 # 本番環境でビルド・起動
-fleetflow up prod
+flow up prod
 # → APP_ENV=production, DEBUG=false
 ```
 
@@ -263,10 +263,10 @@ service "api-prod" {
 
 ```bash
 # apiサービスをリビルド
-fleetflow rebuild api
+flow rebuild api
 
 # キャッシュなしでリビルド
-fleetflow rebuild api --no-cache
+flow rebuild api --no-cache
 ```
 
 ### 2. upコマンドでのリビルド
@@ -275,10 +275,10 @@ fleetflow rebuild api --no-cache
 
 ```bash
 # 全サービスをリビルド
-fleetflow up --build local
+flow up --build local
 
 # キャッシュなしでリビルド
-fleetflow up --build --no-cache local
+flow up --build --no-cache local
 ```
 
 ## 実践的なパターン
@@ -402,16 +402,16 @@ CMD ["./server"]
 **開発フロー**:
 ```bash
 # 初回起動
-fleetflow up local
+flow up local
 
 # フロントエンド変更後
 # （ホットリロードが効いているので不要）
 
 # バックエンド変更後
-fleetflow rebuild backend
+flow rebuild backend
 
 # 全体リビルド
-fleetflow up --build local
+flow up --build local
 ```
 
 ### パターン2: マイクロサービス
@@ -827,10 +827,10 @@ service "backend" {
 
 ```bash
 # ghcr.io にプッシュ
-fleetflow build api prod --push --registry ghcr.io/myorg --tag v1.0.0
+flow build api prod --push --registry ghcr.io/myorg --tag v1.0.0
 
 # プラットフォームも指定（ARM Mac から x86 イメージを作成）
-fleetflow build api prod --push --registry ghcr.io/myorg --platform linux/amd64
+flow build api prod --push --registry ghcr.io/myorg --platform linux/amd64
 ```
 
 ### 2. KDL でレジストリを設定
@@ -949,7 +949,7 @@ GitHub Actions での例:
 
 - name: Build and push
   run: |
-    fleetflow build api prod --push --tag ${{ github.sha }}
+    flow build api prod --push --tag ${{ github.sha }}
 ```
 
 ## 次のステップ
