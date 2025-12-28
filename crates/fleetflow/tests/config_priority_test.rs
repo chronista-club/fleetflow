@@ -1,4 +1,4 @@
-use assert_cmd::cargo::cargo_bin_cmd;
+use assert_cmd::Command;
 mod common;
 use common::TestProject;
 use std::fs;
@@ -77,10 +77,11 @@ service "db" {
     );
 
     // 6. 起動 (prodステージ)
-    let mut cmd = cargo_bin_cmd!("fleetflow");
+    let mut cmd = Command::cargo_bin("flow").unwrap();
     let output = cmd
         .current_dir(project.path())
         .arg("up")
+        .arg("--stage")
         .arg("prod")
         .output()
         .unwrap();
@@ -88,7 +89,7 @@ service "db" {
     if !output.status.success() {
         println!("\nSTDOUT: {}", String::from_utf8_lossy(&output.stdout));
         println!("STDERR: {}", String::from_utf8_lossy(&output.stderr));
-        panic!("fleetflow up failed");
+        panic!("flow up failed");
     }
 
     // 6. 検証
@@ -137,9 +138,10 @@ service "db" {
     );
 
     // 7. クリーンアップ
-    let mut cmd = cargo_bin_cmd!("fleetflow");
+    let mut cmd = Command::cargo_bin("flow").unwrap();
     cmd.current_dir(project.path())
         .arg("down")
+        .arg("-s")
         .arg("prod")
         .arg("--remove")
         .assert()

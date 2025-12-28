@@ -1,4 +1,4 @@
-use assert_cmd::cargo::cargo_bin_cmd;
+use assert_cmd::Command;
 mod common;
 use common::TestProject;
 
@@ -24,9 +24,10 @@ service "web" {
 "#,
     );
 
-    let mut cmd = cargo_bin_cmd!("fleetflow");
+    let mut cmd = Command::cargo_bin("flow").unwrap();
     cmd.current_dir(project.path())
         .arg("up")
+        .arg("--stage")
         .arg("local")
         .assert()
         .success();
@@ -55,9 +56,10 @@ service "web" {
 "#,
     );
 
-    let mut cmd = cargo_bin_cmd!("fleetflow");
+    let mut cmd = Command::cargo_bin("flow").unwrap();
     cmd.current_dir(project.path())
         .arg("up")
+        .arg("-s")
         .arg("local")
         .assert()
         .success();
@@ -66,9 +68,10 @@ service "web" {
     assert!(project.docker_container_exists(container_name).await);
 
     // 3. 削除 (Down --remove)
-    let mut cmd = cargo_bin_cmd!("fleetflow");
+    let mut cmd = Command::cargo_bin("flow").unwrap();
     cmd.current_dir(project.path())
         .arg("down")
+        .arg("--stage")
         .arg("local")
         .arg("--remove")
         .assert()

@@ -1,4 +1,4 @@
-use assert_cmd::cargo::cargo_bin_cmd;
+use assert_cmd::Command;
 mod common;
 use common::TestProject;
 
@@ -32,9 +32,10 @@ stage "local" {
     );
 
     // 3. 起動
-    let mut cmd = cargo_bin_cmd!("fleetflow");
+    let mut cmd = Command::cargo_bin("flow").unwrap();
     cmd.current_dir(project.path())
         .arg("up")
+        .arg("-s")
         .arg("local")
         .assert()
         .success();
@@ -44,9 +45,10 @@ stage "local" {
     assert!(project.docker_container_exists(container_name).await);
 
     // 4. 削除
-    let mut cmd = cargo_bin_cmd!("fleetflow");
+    let mut cmd = Command::cargo_bin("flow").unwrap();
     cmd.current_dir(project.path())
         .arg("down")
+        .arg("-s")
         .arg("local")
         .arg("--remove")
         .assert()

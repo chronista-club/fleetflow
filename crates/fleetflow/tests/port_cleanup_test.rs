@@ -1,4 +1,4 @@
-use assert_cmd::cargo::cargo_bin_cmd;
+use assert_cmd::Command;
 mod common;
 use common::TestProject;
 use std::net::TcpListener;
@@ -35,9 +35,10 @@ service "web" {{
     // 3. 起動 (up)
     // ポートが占有されているが、FleetFlow が lsof で PID を見つけ、
     // SIGTERM -> (wait) -> 解放検知 を行うことを期待。
-    let mut cmd = cargo_bin_cmd!("fleetflow");
+    let mut cmd = Command::cargo_bin("flow").unwrap();
     cmd.current_dir(project.path())
         .arg("up")
+        .arg("-s")
         .arg("local")
         .assert()
         .success();
@@ -47,9 +48,10 @@ service "web" {{
     assert!(project.docker_container_exists(container_name).await);
 
     // 5. 削除
-    let mut cmd = cargo_bin_cmd!("fleetflow");
+    let mut cmd = Command::cargo_bin("flow").unwrap();
     cmd.current_dir(project.path())
         .arg("down")
+        .arg("-s")
         .arg("local")
         .arg("--remove")
         .assert()
