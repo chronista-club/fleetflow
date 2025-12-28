@@ -1,3 +1,5 @@
+#![allow(deprecated)] // TODO: cargo_bin → cargo_bin_cmd! へ移行
+
 use assert_cmd::Command;
 mod common;
 use common::TestProject;

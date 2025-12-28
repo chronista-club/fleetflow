@@ -4124,7 +4124,7 @@ async fn handle_setup_command(
                             if container
                                 .state
                                 .as_ref()
-                                .map_or(false, |s| s.running.unwrap_or(false))
+                                .is_some_and(|s| s.running.unwrap_or(false))
                             {
                                 logger.log_detail(&format!("{}: 起動中", service_name));
                             } else {

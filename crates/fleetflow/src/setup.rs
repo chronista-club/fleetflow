@@ -58,6 +58,7 @@ impl SetupStep {
     }
 
     /// localステージで必要なステップか
+    #[allow(dead_code)]
     pub fn required_for_local(&self) -> bool {
         matches!(
             self,
@@ -91,6 +92,7 @@ impl SetupStep {
 
 /// ステップの実行結果
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub enum StepResult {
     /// 成功
     Success {
@@ -203,6 +205,7 @@ impl SetupLogger {
     }
 
     /// ステップ失敗をログ出力
+    #[allow(dead_code)]
     pub fn step_failed(&mut self, error: &str) {
         if let Some((step, start)) = self.current_step.take() {
             let duration = start.elapsed();
@@ -227,6 +230,7 @@ impl SetupLogger {
     }
 
     /// リトライ中のログ出力
+    #[allow(dead_code)]
     pub fn log_retry(&self, attempt: u32, max_attempts: u32, error: &str) {
         let timestamp = Local::now().format("%H:%M:%S").to_string();
         println!(
@@ -240,6 +244,7 @@ impl SetupLogger {
     }
 
     /// リトライ後の成功をログ出力
+    #[allow(dead_code)]
     pub fn step_success_with_retry(&mut self, retries: u32, message: Option<&str>) {
         if let Some((step, start)) = self.current_step.take() {
             let duration = start.elapsed();

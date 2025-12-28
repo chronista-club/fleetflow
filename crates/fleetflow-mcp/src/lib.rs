@@ -129,7 +129,6 @@ impl McpServer {
         match name {
             "fleetflow_inspect_project" => {
                 let project_root = fleetflow_core::find_project_root()?;
-                let discovered = fleetflow_core::discover_files(&project_root)?;
                 let config = fleetflow_core::load_project_from_root(&project_root)?;
 
                 let mut info = format!("Project: {}\n\n", config.name);
