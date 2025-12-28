@@ -3951,21 +3951,15 @@ async fn handle_setup_command(
     yes: bool,
     skip_arg: Option<String>,
 ) -> anyhow::Result<()> {
-    use crate::setup::{parse_skip_steps, SetupLogger, SetupStep};
+    use crate::setup::{SetupLogger, SetupStep, parse_skip_steps};
     use std::io::{self, Write};
 
-    println!(
-        "{}",
-        "╔══════════════════════════════════════════╗".cyan()
-    );
+    println!("{}", "╔══════════════════════════════════════════╗".cyan());
     println!(
         "{}",
         "║        FleetFlow Setup                   ║".cyan().bold()
     );
-    println!(
-        "{}",
-        "╚══════════════════════════════════════════╝".cyan()
-    );
+    println!("{}", "╚══════════════════════════════════════════╝".cyan());
     println!();
 
     // ステージ名を決定
@@ -4043,7 +4037,8 @@ async fn handle_setup_command(
                     if config.servers.is_empty() {
                         logger.step_skipped("サーバー定義なし");
                     } else {
-                        logger.log_detail(&format!("{}個のサーバー定義を検出", config.servers.len()));
+                        logger
+                            .log_detail(&format!("{}個のサーバー定義を検出", config.servers.len()));
                         logger.step_success(Some("サーバー設定を読み込み完了"));
                     }
                 }
@@ -4118,26 +4113,44 @@ async fn handle_setup_command(
 
                         // コンテナが既に存在するかチェック
                         let existing = docker
-                            .inspect_container(&container_name, None::<bollard::query_parameters::InspectContainerOptions>)
+                            .inspect_container(
+                                &container_name,
+                                None::<bollard::query_parameters::InspectContainerOptions>,
+                            )
                             .await
                             .ok();
 
                         if let Some(container) = existing {
-                            if container.state.as_ref().map_or(false, |s| s.running.unwrap_or(false)) {
+                            if container
+                                .state
+                                .as_ref()
+                                .map_or(false, |s| s.running.unwrap_or(false))
+                            {
                                 logger.log_detail(&format!("{}: 起動中", service_name));
                             } else {
                                 // 停止中なら起動
-                                docker.start_container(&container_name, None::<bollard::query_parameters::StartContainerOptions>).await?;
+                                docker
+                                    .start_container(
+                                        &container_name,
+                                        None::<bollard::query_parameters::StartContainerOptions>,
+                                    )
+                                    .await?;
                                 logger.log_detail(&format!("{}: 起動完了", service_name));
                             }
                         } else {
                             // コンテナが存在しない場合
-                            logger.log_detail(&format!("{}: 未作成（flow up を実行してください）", service_name));
+                            logger.log_detail(&format!(
+                                "{}: 未作成（flow up を実行してください）",
+                                service_name
+                            ));
                         }
                     }
                 }
 
-                logger.step_success(Some(&format!("{}個のサービスを確認", stage_config.services.len())));
+                logger.step_success(Some(&format!(
+                    "{}個のサービスを確認",
+                    stage_config.services.len()
+                )));
             }
 
             SetupStep::InitDatabase => {
@@ -4152,10 +4165,7 @@ async fn handle_setup_command(
     logger.print_summary(&stage_name);
 
     if logger.all_success() {
-        println!(
-            "\n{} セットアップが完了しました！",
-            "✓".green().bold()
-        );
+        println!("\n{} セットアップが完了しました！", "✓".green().bold());
     } else {
         println!(
             "\n{} セットアップ中にエラーが発生しました",

@@ -2,9 +2,7 @@
 //!
 //! ファイル発見、テンプレート展開、パースを統合
 
-use crate::discovery::{
-    DiscoveredFiles, discover_files_with_stage, find_project_root,
-};
+use crate::discovery::{DiscoveredFiles, discover_files_with_stage, find_project_root};
 use crate::error::{FlowError, Result};
 use crate::model::Flow;
 use crate::parser::parse_kdl_string_with_stage;

@@ -93,7 +93,10 @@ impl SetupStep {
 #[derive(Debug, Clone)]
 pub enum StepResult {
     /// 成功
-    Success { duration: Duration, message: Option<String> },
+    Success {
+        duration: Duration,
+        message: Option<String>,
+    },
     /// スキップ（既に完了済み等）
     Skipped { reason: String },
     /// 失敗
@@ -104,7 +107,10 @@ pub enum StepResult {
 
 impl StepResult {
     pub fn is_success(&self) -> bool {
-        matches!(self, Self::Success { .. } | Self::SuccessWithRetry { .. } | Self::Skipped { .. })
+        matches!(
+            self,
+            Self::Success { .. } | Self::SuccessWithRetry { .. } | Self::Skipped { .. }
+        )
     }
 
     pub fn duration(&self) -> Option<Duration> {
@@ -165,10 +171,13 @@ impl SetupLogger {
                 );
             }
 
-            self.step_results.push((step, StepResult::Success {
-                duration,
-                message: message.map(String::from)
-            }));
+            self.step_results.push((
+                step,
+                StepResult::Success {
+                    duration,
+                    message: message.map(String::from),
+                },
+            ));
         }
     }
 
@@ -184,9 +193,12 @@ impl SetupLogger {
                 reason.dimmed()
             );
 
-            self.step_results.push((step, StepResult::Skipped {
-                reason: reason.to_string()
-            }));
+            self.step_results.push((
+                step,
+                StepResult::Skipped {
+                    reason: reason.to_string(),
+                },
+            ));
         }
     }
 
@@ -204,10 +216,13 @@ impl SetupLogger {
                 error.red()
             );
 
-            self.step_results.push((step, StepResult::Failed {
-                error: error.to_string(),
-                duration,
-            }));
+            self.step_results.push((
+                step,
+                StepResult::Failed {
+                    error: error.to_string(),
+                    duration,
+                },
+            ));
         }
     }
 
@@ -241,10 +256,8 @@ impl SetupLogger {
                 retries
             );
 
-            self.step_results.push((step, StepResult::SuccessWithRetry {
-                duration,
-                retries,
-            }));
+            self.step_results
+                .push((step, StepResult::SuccessWithRetry { duration, retries }));
         }
     }
 
@@ -257,7 +270,9 @@ impl SetupLogger {
     /// サマリーを出力
     pub fn print_summary(&self, stage_name: &str) {
         let total_duration = self.start_time.elapsed();
-        let total_retries: u32 = self.step_results.iter()
+        let total_retries: u32 = self
+            .step_results
+            .iter()
             .filter_map(|(_, result)| {
                 if let StepResult::SuccessWithRetry { retries, .. } = result {
                     Some(*retries)
@@ -267,11 +282,15 @@ impl SetupLogger {
             })
             .sum();
 
-        let error_count = self.step_results.iter()
+        let error_count = self
+            .step_results
+            .iter()
             .filter(|(_, result)| matches!(result, StepResult::Failed { .. }))
             .count();
 
-        let slowest_step = self.step_results.iter()
+        let slowest_step = self
+            .step_results
+            .iter()
             .filter_map(|(step, result)| result.duration().map(|d| (step, d)))
             .max_by_key(|(_, d)| *d);
 
@@ -282,7 +301,11 @@ impl SetupLogger {
         println!("Total time:    {}", format_duration(total_duration).green());
 
         if let Some((step, duration)) = slowest_step {
-            println!("Slowest step:  {} ({})", step.name(), format_duration(duration));
+            println!(
+                "Slowest step:  {} ({})",
+                step.name(),
+                format_duration(duration)
+            );
         }
 
         if total_retries > 0 {
@@ -301,7 +324,9 @@ impl SetupLogger {
 
     /// 全ステップが成功したか
     pub fn all_success(&self) -> bool {
-        self.step_results.iter().all(|(_, result)| result.is_success())
+        self.step_results
+            .iter()
+            .all(|(_, result)| result.is_success())
     }
 }
 

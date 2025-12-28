@@ -67,9 +67,7 @@ fn test_down_help() {
 #[test]
 fn test_invalid_command() {
     let mut cmd = Command::cargo_bin("flow").unwrap();
-    cmd.arg("invalid-command")
-        .assert()
-        .failure();
+    cmd.arg("invalid-command").assert().failure();
 }
 
 /// ステージ未指定でvalidateを実行するとエラーになることを確認
