@@ -2,16 +2,16 @@
 
 FleetFlowを最大限に活用し、クリーンで保守性の高いインフラ定義を実現するための推奨構成ガイドです。
 
-## 1. ワークロードへの分割 (Workload-based Architecture)
+## 1. サービスのファイル分割 (Service-based Architecture)
 
-全ての定義を `flow.kdl` に詰め込むのではなく、論理的な役割（Workload）ごとにファイルを分割します。
+全ての定義を `flow.kdl` に詰め込むのではなく、論理的な役割ごとにファイルを分割します。
 
 ### 推奨ディレクトリ構造
 ```
 .fleetflow/
-├── flow.kdl           # メイン（WorkloadとStageの宣言）
+├── flow.kdl           # メイン（Stageの宣言）
 ├── flow.prod.kdl      # 本番用オーバーライド（任意）
-└── workloads/         # 自動読み込みディレクトリ
+└── services/          # 自動読み込みディレクトリ
     ├── storage.kdl    # データベース関連
     ├── apps.kdl       # アプリケーション関連
     └── monitoring.kdl # 監視関連

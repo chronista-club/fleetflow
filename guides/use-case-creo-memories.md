@@ -4,28 +4,27 @@
 
 Creo Memoriesは、AIエージェント向けのメモリシステムです。SurrealDB（構造化データ）、Qdrant（ベクトル検索）、SeaweedFS（分散ストレージ）を組み合わせたハイブリッドアーキテクチャを採用しています。
 
-本ドキュメントでは、FleetFlowの最新機能を最大限に活用した、**ワークロードベース & サーバー定義ベース**の「おすすめ構成」を紹介します。
+本ドキュメントでは、FleetFlowの最新機能を最大限に活用した、**サービス分割 & サーバー定義ベース**の「おすすめ構成」を紹介します。
 
 ## プロジェクト構造
 
 ```
 creo-memories/
 ├── .fleetflow/
-│   ├── flow.kdl         # メイン設定（ワークロードとステージの宣言）
+│   ├── flow.kdl         # メイン設定（ステージの宣言）
 │   ├── flow.prod.kdl    # 本番用オーバーライド
-│   └── ...
-├── workloads/           # 論理的な役割ごとのサービス定義
-│   ├── storage.kdl      # DB群
-│   ├── apps.kdl         # アプリ群
-│   └── monitoring.kdl
+│   └── services/        # 論理的な役割ごとのサービス定義
+│       ├── storage.kdl  # DB群
+│       ├── apps.kdl     # アプリ群
+│       └── monitoring.kdl
 ├── apps/                # アプリケーションソース
 └── ...
 ```
 
 ## おすすめ構成の 3 つの柱
 
-### 1. ワークロードへの分離 (Workload-based)
-サービス定義を `workloads/*.kdl` に分割します。これにより、`flow.kdl` が読みやすくなり、複数の環境で同じ構成を再利用しやすくなります。
+### 1. サービスのファイル分割 (Service-based)
+サービス定義を `services/*.kdl` に分割します。これにより、`flow.kdl` が読みやすくなり、複数の環境で同じ構成を再利用しやすくなります。
 
 ### 2. 自分のマシンを「サーバー」として定義 (Local Machine as Server)
 macOS上の OrbStack を `provider "orbstack"` として定義し、自分のマシンを `server "mito-mac.local"` のように具現化します。これにより、ローカル開発も「サーバーへのデプロイ」と同じメンタルモデルで扱えます。
@@ -39,11 +38,6 @@ macOS上の OrbStack を `provider "orbstack"` として定義し、自分のマ
 
 ```kdl
 project "creo-memories"
-
-// ワークロードの読み込み
-workload "storage"
-workload "monitoring"
-workload "apps"
 
 // プロバイダーの定義
 providers {
@@ -84,7 +78,7 @@ stage "prod" {
 
 1. **環境構築 IaC**: 新しい開発マシンに移行しても、`flow up dev` 一発でミドルウェアが揃います。
 2. **高い視認性**: OrbStack 上で `{project}-{stage}-{service}` の形式でグループ化され、管理が容易になります。
-3. **本番との対称性**: 開発と本番で同じワークロード定義を共有するため、環境差異によるバグを防げます。
+3. **本番との対称性**: 開発と本番で同じサービス定義を共有するため、環境差異によるバグを防げます。
 
 ## 関連リンク
 

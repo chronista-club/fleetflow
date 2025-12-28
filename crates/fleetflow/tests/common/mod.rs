@@ -17,13 +17,6 @@ impl TestProject {
         fs::write(path, content).unwrap();
     }
 
-    #[allow(dead_code)]
-    pub fn write_workload(&self, name: &str, content: &str) {
-        let dir = self.root.path().join("workloads");
-        fs::create_dir_all(&dir).unwrap();
-        fs::write(dir.join(format!("{}.kdl", name)), content).unwrap();
-    }
-
     pub fn path(&self) -> PathBuf {
         self.root.path().to_path_buf()
     }

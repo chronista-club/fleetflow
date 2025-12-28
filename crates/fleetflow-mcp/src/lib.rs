@@ -134,14 +134,6 @@ impl McpServer {
 
                 let mut info = format!("Project: {}\n\n", config.name);
 
-                if !discovered.workloads.is_empty() {
-                    info.push_str("Detected Workloads:\n");
-                    for w in &discovered.workloads {
-                        info.push_str(&format!("  - {}\n", w.display()));
-                    }
-                    info.push('\n');
-                }
-
                 info.push_str("Stages:\n");
                 for (stage_name, stage) in &config.stages {
                     info.push_str(&format!(

@@ -3,11 +3,11 @@
 //! ファイル発見、テンプレート展開、パースを統合
 
 use crate::discovery::{
-    DiscoveredFiles, discover_files, discover_files_with_stage, find_project_root,
+    DiscoveredFiles, discover_files_with_stage, find_project_root,
 };
 use crate::error::{FlowError, Result};
 use crate::model::Flow;
-use crate::parser::{parse_kdl_string, parse_kdl_string_with_stage};
+use crate::parser::parse_kdl_string_with_stage;
 use crate::template::{TemplateProcessor, Variables, extract_variables};
 use std::path::Path;
 use tracing::{debug, info, instrument};
@@ -132,7 +132,6 @@ fn expand_all_files(
 ) -> Result<String> {
     // ファイル数から概算容量を計算
     let file_count = discovered.services.len()
-        + discovered.workloads.len()
         + discovered.stages.len()
         + if discovered.root.is_some() { 1 } else { 0 }
         + if discovered.cloud.is_some() { 1 } else { 0 }
@@ -150,15 +149,7 @@ fn expand_all_files(
 
     let mut expanded = String::with_capacity(estimated_capacity);
 
-    // 0. workloads/*.kdl
-    for workload_file in &discovered.workloads {
-        debug!(file = %workload_file.display(), "Rendering workload file");
-        let rendered = processor.render_file(workload_file)?;
-        expanded.push_str(&rendered);
-        expanded.push_str("\n\n");
-    }
-
-    // 0.5. cloud.kdl（クラウドインフラ定義 - プロバイダー、サーバー）
+    // 0. cloud.kdl（クラウドインフラ定義 - プロバイダー、サーバー）
     if let Some(cloud_file) = &discovered.cloud {
         debug!(file = %cloud_file.display(), "Rendering cloud config file");
         let rendered = processor.render_file(cloud_file)?;
@@ -240,14 +231,6 @@ pub fn load_project_with_debug(project_root: &Path) -> Result<Flow> {
 
     println!("\n🔍 ディレクトリスキャン");
     println!(
-        "  workloads/: {}",
-        if discovered.workloads.is_empty() {
-            "未検出"
-        } else {
-            "✓ 検出"
-        }
-    );
-    println!(
         "  services/: {}",
         if discovered.services.is_empty() {
             "未検出"
@@ -263,13 +246,6 @@ pub fn load_project_with_debug(project_root: &Path) -> Result<Flow> {
             "✓ 検出"
         }
     );
-
-    if !discovered.workloads.is_empty() {
-        println!("\n📦 ワークロード発見 (workloads/)");
-        for workload in &discovered.workloads {
-            println!("  ✓ {}", workload.display());
-        }
-    }
 
     if !discovered.services.is_empty() {
         println!("\n📂 ファイル発見 (services/)");
@@ -610,77 +586,6 @@ service "api" {
         let config = load_project_from_root(project_root)?;
         let api = &config.services["api"];
         assert_eq!(api.image.as_ref().unwrap(), "ghcr.io/myorg/api:v1.2.3");
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_load_project_with_workload() -> Result<()> {
-        let temp_dir = tempfile::tempdir().unwrap();
-        let project_root = temp_dir.path();
-
-        // 1. ワークロード定義を作成
-        fs::create_dir_all(project_root.join("workloads"))?;
-        fs::write(
-            project_root.join("workloads/web-app.kdl"),
-            r#"
-service "api" {
-    image "base-api:latest"
-    port 8080
-}
-service "db" {
-    image "postgres:16"
-}
-"#,
-        )?;
-
-        // 2. メインの flow.kdl でワークロードを宣言し、一部を上書き
-        fs::write(
-            project_root.join("flow.kdl"),
-            r#"
-workload "web-app"
-
-service "api" {
-    // ワークロードのイメージを上書き
-    image "my-custom-api:v1"
-}
-
-stage "local" {
-    service "api"
-    service "db"
-}
-"#,
-        )?;
-
-        let config = load_project_from_root_with_stage(project_root, Some("local"))?;
-
-        // デバッグ出力
-        println!(
-            "Services found: {:?}",
-            config.services.keys().collect::<Vec<_>>()
-        );
-        if let Some(api) = config.services.get("api") {
-            println!("API Image: {:?}", api.image);
-            println!("API Ports: {:?}", api.ports);
-        }
-
-        // 両方のサービスが存在することを確認
-        assert!(config.services.contains_key("api"));
-        assert!(config.services.contains_key("db"));
-
-        // オーバーライドが機能していることを確認
-        let api = &config.services["api"];
-        assert_eq!(api.image.as_ref().unwrap(), "my-custom-api:v1"); // 上書きされた値
-
-        // ポートが空でないことを確認してからアクセス
-        assert!(
-            !api.ports.is_empty(),
-            "API ports should not be empty (inherited from workload)"
-        );
-        assert_eq!(api.ports[0].container, 8080); // ワークロード側の設定が維持されている
-
-        let db = &config.services["db"];
-        assert_eq!(db.image.as_ref().unwrap(), "postgres:16");
 
         Ok(())
     }
