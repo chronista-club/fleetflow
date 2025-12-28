@@ -262,7 +262,7 @@ async fn init_docker_with_error_handling() -> anyhow::Result<bollard::Docker> {
 
 #[derive(Parser)]
 #[command(name = "flow")]
-#[command(about = "Docker Composeよりシンプル。KDLで書く、次世代の環境構築ツール。", long_about = None)]
+#[command(about = "伝える。動く。環境構築は、対話になった。", long_about = None)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,

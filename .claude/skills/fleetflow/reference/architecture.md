@@ -8,18 +8,19 @@ FleetFlowの内部構造とコンポーネントの説明です。
 fleetflow/
 ├── crates/
 │   ├── fleetflow/              # CLIエントリーポイント
-│   ├── fleetflow-core/             # KDLパーサー・データモデル
-│   │   ├── src/model/              # データ構造
-│   │   └── src/parser/             # パーサー
-│   ├── fleetflow-config/           # 設定管理
-│   ├── fleetflow-container/        # コンテナ操作
-│   ├── fleetflow-build/            # Dockerビルド機能
-│   ├── fleetflow-cloud/            # クラウドインフラ抽象化
-│   ├── fleetflow-cloud-sakura/     # さくらクラウド連携
+│   ├── fleetflow-core/         # KDLパーサー・データモデル
+│   │   ├── src/model/          # データ構造
+│   │   └── src/parser/         # パーサー
+│   ├── fleetflow-config/       # 設定管理
+│   ├── fleetflow-container/    # コンテナ操作
+│   ├── fleetflow-build/        # Dockerビルド機能
+│   ├── fleetflow-mcp/          # MCPサーバー機能
+│   ├── fleetflow-cloud/        # クラウドインフラ抽象化
+│   ├── fleetflow-cloud-sakura/ # さくらクラウド連携
 │   └── fleetflow-cloud-cloudflare/ # Cloudflare連携
-├── spec/                           # 仕様書
-├── design/                         # 設計書
-└── guides/                         # 利用ガイド
+├── spec/                       # 仕様書
+├── design/                     # 設計書
+└── guides/                     # 利用ガイド
 ```
 
 ## クレート概要
@@ -33,11 +34,14 @@ CLIのエントリーポイント。`clap`を使用したコマンド定義と�
 - 出力フォーマット
 
 **主要コマンド**:
-- `up`, `down` - ステージのライフサイクル管理
+- `up`, `down`, `deploy` - ステージのライフサイクル管理
 - `start`, `stop`, `restart` - サービス単位の操作
-- `build`, `rebuild` - Dockerイメージビルド
+- `build` - Dockerイメージビルド
 - `cloud up/down` - クラウドインフラ管理
 - `ps`, `logs`, `validate` - 状態確認
+- `setup` - 環境セットアップ（冪等）
+- `play` - Playbook実行
+- `mcp` - MCPサーバー起動
 
 ### fleetflow-core
 
@@ -69,6 +73,7 @@ Docker操作を担当。`bollard`クレートでDocker APIと通信。
 - コンテナのライフサイクル管理
 - イメージのpull
 - ポート/ボリュームマッピング
+- 依存サービス待機（Exponential Backoff）
 
 ### fleetflow-build
 
@@ -78,11 +83,21 @@ Dockerイメージのビルド機能。
 - **context**: ビルドコンテキスト作成
 - **builder**: Bollard APIでのビルド実行
 - **progress**: 進捗表示
+- **push**: レジストリへのイメージプッシュ
 
 **規約ベース検出**:
 1. `./services/{service-name}/Dockerfile`
 2. `./{service-name}/Dockerfile`
 3. `./Dockerfile.{service-name}`
+
+### fleetflow-mcp
+
+Model Context Protocol (MCP) サーバー機能。
+
+AI/LLMアシスタントとの連携を可能にするMCPサーバーを提供。
+- JSON-RPCベースの通信
+- コンテナ操作のツール提供
+- 設定情報の公開
 
 ### fleetflow-cloud
 
@@ -96,16 +111,18 @@ Dockerイメージのビルド機能。
 
 さくらクラウドプロバイダー（usacloud CLI ラッパー）。
 
-- サーバー作成・削除
+- サーバー作成・削除・起動・停止
 - ディスク管理
 - SSH鍵設定
+- スタートアップスクリプト
 
 ### fleetflow-cloud-cloudflare
 
 Cloudflareプロバイダー。
 
-- DNS管理（Aレコード、CNAMEレコード）
-- R2バケット管理（予定）
+- DNS管理（Aレコード CRUD）
+- サーバー作成/削除時の自動DNS登録
+- R2バケット管理（実装中）
 - Workers管理（予定）
 
 ## 技術スタック
@@ -166,6 +183,7 @@ FleetFlowは主にmacOSのローカル開発環境での利用を想定してお
 **必要な環境変数**:
 - `CLOUDFLARE_API_TOKEN`
 - `CLOUDFLARE_ZONE_ID`
+- `CLOUDFLARE_DOMAIN`
 
 ## ドキュメント構造
 
@@ -197,28 +215,37 @@ FleetFlowは主にmacOSのローカル開発環境での利用を想定してお
 
 - `01-orbstack-integration.md` - OrbStack連携ガイド
 - `02-docker-build.md` - Dockerビルドガイド
+- `03-cloud-platforms.md` - 外部プラットフォーム対応状況
 
 ## 開発フェーズ
 
-### Phase 1: MVP
+### Phase 1: MVP ✅
 - KDLパーサー
 - 基本CLI（up/down/ps/logs）
 - Docker API統合
 - OrbStack連携
 
-### Phase 2: ビルド機能
+### Phase 2: ビルド機能 ✅
 - Dockerビルド
 - 個別サービス操作
 - 複数設定ファイル対応
 - マルチステージビルド対応
+- イメージプッシュ
 
-### Phase 3: クラウドインフラ
+### Phase 3: クラウドインフラ ✅
 - クラウドプロバイダー抽象化
-- さくらクラウド/Cloudflare連携
-- DNS自動管理
-- CLI統合（進行中）
+- さくらクラウド連携
+- Cloudflare DNS連携
+- CLI統合
 
-### Phase 4: 拡張機能
+### Phase 4: 高度な機能 ✅
+- MCP（Model Context Protocol）サーバー
+- Playbook機能
+- CI/CDデプロイコマンド
+- セルフアップデート
+
+### Phase 5: 拡張機能（予定）
 - 環境変数参照
 - 変数展開
-- ヘルスチェック
+- ヘルスチェック強化
+- Cloudflare R2/Workers連携

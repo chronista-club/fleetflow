@@ -8,16 +8,30 @@ FleetFlowのCLIコマンド一覧と詳細な使い方です。
 |---------|------|
 | `up` | ステージを起動 |
 | `down` | ステージを停止・削除 |
+| `deploy` | CI/CD向けデプロイ |
 | `ps` | コンテナ一覧 |
 | `logs` | ログ表示 |
 | `start` | 停止中のサービスを起動 |
 | `stop` | サービスを停止 |
 | `restart` | サービスを再起動 |
 | `build` | イメージをビルド |
-| `rebuild` | イメージを再ビルドして再起動 |
 | `validate` | 設定を検証 |
+| `setup` | ステージの環境をセットアップ |
+| `play` | Playbookを実行 |
 | `cloud` | クラウドインフラ管理 |
+| `mcp` | MCPサーバーを起動 |
+| `self-update` | FleetFlow自体を更新 |
 | `version` | バージョン表示 |
+
+## 環境変数
+
+| 変数 | 説明 |
+|------|------|
+| `FLEET_STAGE` | ステージ名を指定（local, dev, stg, prod） |
+| `FLEETFLOW_CONFIG_PATH` | 設定ファイルの直接パス指定 |
+| `CLOUDFLARE_API_TOKEN` | Cloudflare APIトークン（DNS自動管理用） |
+| `CLOUDFLARE_ZONE_ID` | Cloudflare Zone ID（DNS自動管理用） |
+| `CLOUDFLARE_DOMAIN` | 管理対象ドメイン |
 
 ## 詳細
 
@@ -26,25 +40,28 @@ FleetFlowのCLIコマンド一覧と詳細な使い方です。
 指定したステージのコンテナを起動します。
 
 ```bash
-flow up <stage>
-flow up local
-flow up --build local      # ビルドしてから起動
-flow up --build --no-cache local  # キャッシュなしでビルド
+flow up -s <stage>
+flow up -s local
+flow up -s local --pull        # イメージを事前にpull
+flow up -s local --build       # ビルドしてから起動
+flow up -s local --build --no-cache  # キャッシュなしでビルド
 ```
 
 **オプション**:
 
-| オプション | 説明 |
-|-----------|------|
-| `--build` | 起動前にイメージをビルド |
-| `--no-cache` | キャッシュを使わずにビルド（`--build`と併用） |
+| オプション | 短縮 | 説明 |
+|-----------|------|------|
+| `--stage` | `-s` | ステージ名（必須、または`FLEET_STAGE`で指定） |
+| `--pull` | | 起動前にイメージをpull |
+| `--build` | | 起動前にイメージをビルド |
+| `--no-cache` | | キャッシュを使わずにビルド（`--build`と併用） |
 
 **動作**:
 1. 設定ファイルを読み込み
 2. `--build`指定時はイメージをビルド
 3. イメージが無ければ自動pull
-4. コンテナが存在しなければ作成
-5. コンテナを起動
+4. 依存関係順にコンテナを作成・起動
+5. `wait_for`設定がある場合は依存サービスの準備を待機
 6. サービスごとに進捗を表示
 
 ### `flow down`
@@ -52,23 +69,63 @@ flow up --build --no-cache local  # キャッシュなしでビルド
 指定したステージのコンテナを停止・削除します。
 
 ```bash
-flow down <stage>
-flow down local
+flow down -s <stage>
+flow down -s local
+flow down -s local --remove    # ボリュームも削除
 ```
+
+**オプション**:
+
+| オプション | 短縮 | 説明 |
+|-----------|------|------|
+| `--stage` | `-s` | ステージ名（必須、または`FLEET_STAGE`で指定） |
+| `--remove` | `-r` | ボリュームも削除 |
 
 **動作**:
 1. コンテナを停止
 2. コンテナを削除
-3. ボリュームは削除しない（データ保持）
+3. `--remove`指定時のみボリュームを削除
+
+### `flow deploy`
+
+CI/CDパイプラインからの自動デプロイに最適化されたコマンドです。
+
+```bash
+flow deploy -s <stage> --yes
+flow deploy -s prod --yes           # 確認なしでデプロイ
+flow deploy -s prod --no-pull --yes # pullをスキップ
+```
+
+**オプション**:
+
+| オプション | 短縮 | 説明 |
+|-----------|------|------|
+| `--stage` | `-s` | ステージ名（必須） |
+| `--yes` | `-y` | 確認なしで実行（CI向け） |
+| `--no-pull` | | イメージのpullをスキップ（デフォルトはpull） |
+
+**動作**:
+1. 既存コンテナを強制停止・削除
+2. 最新イメージをpull（`--no-pull`でスキップ可能）
+3. コンテナを依存関係順に作成・起動
+4. `wait_for`による依存サービス待機
 
 ### `flow ps`
 
 コンテナの状態を表示します。
 
 ```bash
-flow ps            # 実行中のコンテナのみ
-flow ps --all      # 停止中も含む
+flow ps                 # 実行中のコンテナのみ
+flow ps -s local        # 特定ステージのみ
+flow ps --all           # 停止中も含む
 ```
+
+**オプション**:
+
+| オプション | 短縮 | 説明 |
+|-----------|------|------|
+| `--stage` | `-s` | 特定ステージのみ表示 |
+| `--all` | `-a` | 停止中のコンテナも表示 |
 
 **表示内容**:
 - コンテナ名
@@ -80,29 +137,38 @@ flow ps --all      # 停止中も含む
 コンテナのログを表示します。
 
 ```bash
-flow logs                    # 全サービス
-flow logs [service]          # 特定サービス
-flow logs --follow           # リアルタイム表示
-flow logs --lines 100        # 行数指定
-flow logs -f -n 50 web       # 組み合わせ
+flow logs -s <stage>             # 全サービス
+flow logs -s local -n <service>  # 特定サービス
+flow logs -s local -f            # リアルタイム表示
+flow logs -s local --lines 100   # 行数指定
+flow logs -s local -f -n web     # 組み合わせ
 ```
 
 **オプション**:
 
 | オプション | 短縮 | 説明 |
 |-----------|------|------|
+| `--stage` | `-s` | ステージ名 |
+| `--name` | `-n` | サービス名 |
 | `--follow` | `-f` | リアルタイムで追従 |
-| `--lines` | `-n` | 表示する行数（デフォルト: 100） |
+| `--lines` | | 表示する行数（デフォルト: 100） |
 
 ### `flow start`
 
 停止中のサービスを起動します（コンテナは既に存在している場合）。
 
 ```bash
-flow start <stage>           # ステージ内の全サービス
-flow start <stage> [service] # 特定サービスのみ
-flow start local db
+flow start -s <stage>              # ステージ内の全サービス
+flow start -s <stage> -n <service> # 特定サービスのみ
+flow start -s local -n db
 ```
+
+**オプション**:
+
+| オプション | 短縮 | 説明 |
+|-----------|------|------|
+| `--stage` | `-s` | ステージ名（必須） |
+| `--name` | `-n` | サービス名 |
 
 **動作**:
 - `docker start` 相当
@@ -113,10 +179,17 @@ flow start local db
 サービスを停止します（コンテナは保持）。
 
 ```bash
-flow stop <stage>            # ステージ内の全サービス
-flow stop <stage> [service]  # 特定サービスのみ
-flow stop local db
+flow stop -s <stage>              # ステージ内の全サービス
+flow stop -s <stage> -n <service> # 特定サービスのみ
+flow stop -s local -n db
 ```
+
+**オプション**:
+
+| オプション | 短縮 | 説明 |
+|-----------|------|------|
+| `--stage` | `-s` | ステージ名（必須） |
+| `--name` | `-n` | サービス名 |
 
 **動作**:
 - `docker stop` 相当
@@ -128,10 +201,17 @@ flow stop local db
 サービスを再起動します。
 
 ```bash
-flow restart <stage>           # ステージ内の全サービス
-flow restart <stage> [service] # 特定サービスのみ
-flow restart local web
+flow restart -s <stage>              # ステージ内の全サービス
+flow restart -s <stage> -n <service> # 特定サービスのみ
+flow restart -s local -n web
 ```
+
+**オプション**:
+
+| オプション | 短縮 | 説明 |
+|-----------|------|------|
+| `--stage` | `-s` | ステージ名（必須） |
+| `--name` | `-n` | サービス名 |
 
 **動作**:
 - `docker restart` 相当
@@ -142,23 +222,29 @@ flow restart local web
 イメージをビルドします（コンテナは起動しない）。
 
 ```bash
-flow build <stage>                 # ステージ内の全サービス
-flow build <stage> -n <service>    # 特定サービスのみ
-flow build local -n api
-flow build local --no-cache        # キャッシュなしでビルド
+flow build -s <stage>                   # ステージ内の全サービス
+flow build -s <stage> -n <service>      # 特定サービスのみ
+flow build -s local -n api
+flow build -s local --no-cache          # キャッシュなしでビルド
 
 # レジストリにプッシュ
-flow build local -n api --push
-flow build local -n api --push --tag v1.0.0
+flow build -s local -n api --push
+flow build -s local -n api --push --tag v1.0.0
+
+# クロスビルド
+flow build -s local -n api --push --platform linux/amd64
 ```
 
 **オプション**:
 
-| オプション | 説明 |
-|-----------|------|
-| `--no-cache` | キャッシュを使わずにビルド |
-| `--push` | ビルド後にレジストリへプッシュ |
-| `--tag <tag>` | イメージタグを指定（`--push`と併用） |
+| オプション | 短縮 | 説明 |
+|-----------|------|------|
+| `--stage` | `-s` | ステージ名（必須） |
+| `--name` | `-n` | サービス名 |
+| `--no-cache` | | キャッシュを使わずにビルド |
+| `--push` | | ビルド後にレジストリへプッシュ |
+| `--tag` | | イメージタグを指定（`--push`と併用） |
+| `--platform` | | ターゲットプラットフォーム（クロスビルド用） |
 
 **プッシュ時の認証**:
 
@@ -172,34 +258,54 @@ Docker標準の認証方式を使用：
 2. KDL設定の `image` フィールドのタグ
 3. デフォルト: `latest`
 
-### `flow rebuild`
-
-イメージを再ビルドしてコンテナを再起動します。
-
-```bash
-flow rebuild <service>           # サービスをリビルド
-flow rebuild <service> [stage]   # ステージを指定
-flow rebuild api local
-flow rebuild api --no-cache      # キャッシュなしでリビルド
-```
-
-**動作**:
-1. 既存のコンテナを停止（実行中の場合）
-2. イメージをリビルド
-3. コンテナを再作成・起動
-
 ### `flow validate`
 
 設定ファイルの構文チェックを行います。
 
 ```bash
 flow validate
+flow validate -s local    # 特定ステージを検証
 ```
+
+**オプション**:
+
+| オプション | 短縮 | 説明 |
+|-----------|------|------|
+| `--stage` | `-s` | 特定ステージを検証 |
 
 **チェック内容**:
 - KDL構文エラー
-- 必須フィールドの欠落
+- 必須フィールドの欠落（image等）
 - 論理的な矛盾
+
+### `flow setup`
+
+ステージの環境をセットアップします（冪等）。
+
+```bash
+flow setup -s <stage>
+flow setup -s dev
+```
+
+**オプション**:
+
+| オプション | 短縮 | 説明 |
+|-----------|------|------|
+| `--stage` | `-s` | ステージ名（必須） |
+
+**動作**:
+- 必要なディレクトリやボリュームの作成
+- 設定ファイルの配置
+- 冪等性を保証（何度実行しても同じ結果）
+
+### `flow play`
+
+Playbookを実行します。リモートサーバーでのサービス起動などに使用します。
+
+```bash
+flow play <playbook>
+flow play deploy-prod.kdl
+```
 
 ### `flow cloud`
 
@@ -207,20 +313,22 @@ flow validate
 
 ```bash
 # クラウド環境を構築
-flow cloud up --stage <stage>
-flow cloud up --stage dev --yes  # 確認をスキップ
+flow cloud up -s <stage>
+flow cloud up -s dev --yes  # 確認をスキップ
 
 # クラウド環境を削除
-flow cloud down --stage <stage>
-flow cloud down --stage dev --yes
+flow cloud down -s <stage>
+flow cloud down -s dev --yes
 
-# 差分を確認（dry-run）
-flow cloud plan --stage <stage>
+# サーバー操作
+flow cloud server list
+flow cloud server create --name my-server
+flow cloud server delete --name my-server --yes
+flow cloud server start --name my-server
+flow cloud server stop --name my-server
 
-# DNS管理（オプション）
-flow cloud dns list
-flow cloud dns add --subdomain api-prod --ip 203.0.113.1
-flow cloud dns remove --subdomain api-prod
+# 認証確認
+flow cloud auth
 ```
 
 **サブコマンド**:
@@ -229,17 +337,20 @@ flow cloud dns remove --subdomain api-prod
 |-------------|------|
 | `up` | クラウド環境を構築（サーバー作成 + DNS設定） |
 | `down` | クラウド環境を削除（サーバー削除 + DNS削除） |
-| `plan` | 差分を確認（dry-run） |
-| `dns list` | DNSレコード一覧 |
-| `dns add` | DNSレコード追加 |
-| `dns remove` | DNSレコード削除 |
+| `server list` | サーバー一覧 |
+| `server create` | サーバー作成 |
+| `server delete` | サーバー削除 |
+| `server start` | サーバー起動 |
+| `server stop` | サーバー停止 |
+| `auth` | 認証状態を確認 |
 
 **オプション**:
 
 | オプション | 説明 |
 |-----------|------|
-| `--stage` | 対象のステージ名（必須） |
+| `--stage` | 対象のステージ名 |
 | `--yes` | 確認をスキップ |
+| `--name` | サーバー名 |
 
 **DNS自動管理**:
 
@@ -249,6 +360,25 @@ flow cloud dns remove --subdomain api-prod
 |---------|------|
 | `CLOUDFLARE_API_TOKEN` | Cloudflare APIトークン |
 | `CLOUDFLARE_ZONE_ID` | ドメインのZone ID |
+| `CLOUDFLARE_DOMAIN` | 管理対象ドメイン |
+
+### `flow mcp`
+
+Model Context Protocol (MCP) サーバーを起動します。
+
+```bash
+flow mcp
+```
+
+AI/LLMアシスタントとの連携に使用します。
+
+### `flow self-update`
+
+FleetFlow自体を最新バージョンに更新します。
+
+```bash
+flow self-update
+```
 
 ### `flow version`
 
@@ -256,16 +386,8 @@ flow cloud dns remove --subdomain api-prod
 
 ```bash
 flow version
-# 出力: flow 0.4.2
+# 出力: fleetflow 0.4.2
 ```
-
-## 環境変数
-
-| 変数 | 説明 |
-|------|------|
-| `FLEETFLOW_CONFIG_PATH` | 設定ファイルの直接パス指定 |
-| `CLOUDFLARE_API_TOKEN` | Cloudflare APIトークン（DNS自動管理用） |
-| `CLOUDFLARE_ZONE_ID` | Cloudflare Zone ID（DNS自動管理用） |
 
 ## 終了コード
 
@@ -313,7 +435,7 @@ flow version
 ### コンテナが起動しない
 
 **解決方法**:
-1. ログを確認: `flow logs` または `docker logs {container}`
+1. ログを確認: `flow logs -s <stage>` または `docker logs {container}`
 2. 環境変数が正しいか確認
 3. ボリュームマウントのパスを確認
 4. コマンドが正しいか確認

@@ -1,7 +1,7 @@
 ---
 name: fleetflow
 description: FleetFlow（KDLベースのコンテナオーケストレーションツール）を効果的に使用するためのガイド
-version: 0.2.12
+version: 0.4.2
 ---
 
 # FleetFlow スキル
@@ -14,9 +14,9 @@ FleetFlowをプロジェクトで効果的に活用するための包括的な�
 
 ## 概要
 
-FleetFlowは、KDL（KDL Document Language）をベースにした超シンプルなコンテナオーケストレーションツールです。
+FleetFlowは、KDL（KDL Document Language）をベースにしたコンテナオーケストレーションツールです。
 
-**コンセプト**: 「宣言だけで、開発も本番も」
+**コンセプト**: 環境構築は、対話になった。伝えれば、動く。
 
 ### 主要な特徴
 
@@ -24,10 +24,11 @@ FleetFlowは、KDL（KDL Document Language）をベースにした超シンプ�
 |------|------|
 | 超シンプル | Docker Composeと同等以下の記述量 |
 | 可読性 | YAMLより読みやすいKDL構文 |
-| ステージ管理 | local/dev/staging/prod を統一管理 |
+| ステージ管理 | local/dev/stg/prod を統一管理 |
 | OrbStack連携 | macOSローカル開発に最適化 |
 | Dockerビルド | Dockerfileからのビルドをサポート |
 | イメージプッシュ | ビルド後のレジストリプッシュを自動化 |
+| クロスビルド | `--platform` でマルチアーキテクチャ対応 |
 | サービスマージ | 複数ファイルでの設定オーバーライド |
 | 再起動ポリシー | ホスト再起動時のコンテナ自動復旧 |
 | 依存サービス待機 | Exponential Backoffで堅牢な起動順序制御 |
@@ -35,6 +36,8 @@ FleetFlowは、KDL（KDL Document Language）をベースにした超シンプ�
 | DNS自動管理 | Cloudflare DNSとの自動連携 |
 | CI/CDデプロイ | deployコマンドによる自動デプロイ |
 | セルフアップデート | 最新バージョンへの自動更新 |
+| MCP対応 | Model Context Protocol サーバー機能 |
+| Playbook | リモートサーバーでのサービス起動 |
 
 ## クイックスタート
 
@@ -68,29 +71,44 @@ service "db" {
 ### 基本操作
 
 ```bash
-flow up local      # 起動
-flow ps            # 状態確認
-flow logs          # ログ表示
-flow down local    # 停止・削除
+flow up -s local       # 起動
+flow ps                # 状態確認
+flow logs              # ログ表示
+flow down -s local     # 停止・削除
 ```
+
+## 環境変数
+
+| 変数 | 説明 |
+|------|------|
+| `FLEET_STAGE` | ステージ名を指定（local, dev, stg, prod） |
+| `FLEETFLOW_CONFIG_PATH` | 設定ファイルの直接パス指定 |
+| `CLOUDFLARE_API_TOKEN` | Cloudflare APIトークン（DNS自動管理用） |
+| `CLOUDFLARE_ZONE_ID` | Cloudflare Zone ID（DNS自動管理用） |
 
 ## CLIコマンド一覧
 
+すべてのコマンドは `-s`/`--stage` オプションでステージを指定します。
+環境変数 `FLEET_STAGE` でも指定可能です。
+
 | コマンド | 説明 |
 |---------|------|
-| `up <stage>` | ステージを起動 |
-| `down <stage>` | ステージを停止・削除 |
-| `deploy <stage> --pull --yes` | CI/CD向けデプロイ（強制再作成） |
-| `ps [--all]` | コンテナ一覧 |
-| `logs [--follow] [service]` | ログ表示 |
-| `start <stage> [service]` | 停止中のサービスを起動 |
-| `stop <stage> [service]` | サービスを停止（コンテナ保持） |
-| `restart <stage> [service]` | サービスを再起動 |
-| `build <stage> [-n service]` | イメージをビルド |
-| `build <stage> --push [--tag <tag>]` | ビルド＆レジストリへプッシュ |
+| `up -s <stage>` | ステージを起動 |
+| `down -s <stage>` | ステージを停止・削除 |
+| `deploy -s <stage> --yes` | CI/CD向けデプロイ（デフォルトでpull） |
+| `ps [-s <stage>] [--all]` | コンテナ一覧 |
+| `logs [-s <stage>] [-f] [-n service]` | ログ表示 |
+| `start -s <stage> [-n service]` | 停止中のサービスを起動 |
+| `stop -s <stage> [-n service]` | サービスを停止（コンテナ保持） |
+| `restart -s <stage> [-n service]` | サービスを再起動 |
+| `build -s <stage> [-n service]` | イメージをビルド |
+| `build -s <stage> --push [--tag <tag>]` | ビルド＆レジストリへプッシュ |
 | `validate` | 設定を検証 |
-| `cloud up --stage <stage>` | クラウド環境を構築 |
-| `cloud down --stage <stage>` | クラウド環境を削除 |
+| `setup -s <stage>` | ステージの環境をセットアップ（冪等） |
+| `play <playbook>` | Playbookを実行 |
+| `cloud up -s <stage>` | クラウド環境を構築 |
+| `cloud down -s <stage>` | クラウド環境を削除 |
+| `mcp` | MCPサーバーを起動 |
 | `self-update` | FleetFlow自体を最新版に更新 |
 | `version` | バージョン表示 |
 
@@ -136,7 +154,7 @@ server "app-server" {       // クラウドサーバー定義
 
 ### imageフィールドは必須
 
-v0.2.4以降、`image`フィールドは**必須**です。省略するとエラーになります：
+`image`フィールドは**必須**です。省略するとエラーになります：
 
 ```kdl
 // 正しい定義
@@ -210,13 +228,16 @@ service "worker" {
 
 ```bash
 # ビルドのみ
-flow build local -n api
+flow build -s local -n api
 
 # ビルド＆プッシュ
-flow build local -n api --push
+flow build -s local -n api --push
 
 # タグを指定してビルド＆プッシュ
-flow build local -n api --push --tag v1.0.0
+flow build -s local -n api --push --tag v1.0.0
+
+# クロスビルド（linux/amd64向け）
+flow build -s local -n api --push --platform linux/amd64
 ```
 
 **認証方式**:
@@ -328,36 +349,34 @@ service "api" {
 CI/CDパイプラインからの自動デプロイに最適化されたコマンド：
 
 ```bash
-# 基本的な使い方
-flow deploy prod --pull --yes
+# 基本的な使い方（デフォルトでpull）
+flow deploy -s prod --yes
+
+# pullをスキップ
+flow deploy -s prod --no-pull --yes
 
 # GitHub Actionsから
-ssh user@vps "cd /app && flow deploy prod --pull --yes"
+ssh user@vps "cd /app && flow deploy -s prod --yes"
 ```
 
 **オプション:**
 | オプション | 説明 |
 |-----------|------|
-| `--pull` | 最新イメージを強制的にダウンロード |
-| `--yes` | 確認なしで実行（CI向け） |
-| `--stage` | ステージ名を指定 |
+| `--no-pull` | イメージのpullをスキップ（デフォルトはpull） |
+| `--yes` / `-y` | 確認なしで実行（CI向け） |
+| `-s` / `--stage` | ステージ名を指定 |
 
 **デプロイフロー:**
 1. 既存コンテナを強制停止・削除
-2. 最新イメージをpull（--pullオプション時）
+2. 最新イメージをpull（--no-pullでスキップ可能）
 3. コンテナを依存関係順に作成・起動
 4. wait_forによる依存サービス待機
 
 ### セルフアップデート
 
-`flow up`実行時に自動的にバージョンチェックを行い、新しいバージョンがあれば通知します：
-
 ```bash
 # 手動でアップデート
 flow self-update
-
-# upコマンド時に自動チェック
-flow up local  # 新バージョンがあれば通知
 ```
 
 ## コンテナ命名規則
@@ -377,16 +396,18 @@ OrbStackでは `{project}-{stage}` でグループ化されます。
 ```
 fleetflow/
 ├── crates/
-│   ├── fleetflow/           # CLI
-│   ├── fleetflow-core/          # KDLパーサー
-│   ├── fleetflow-container/     # コンテナ操作
-│   ├── fleetflow-build/         # Dockerビルド
-│   ├── fleetflow-cloud/         # クラウド抽象化
-│   ├── fleetflow-cloud-sakura/  # さくらクラウド
+│   ├── fleetflow/              # CLI
+│   ├── fleetflow-core/         # KDLパーサー
+│   ├── fleetflow-config/       # 設定管理
+│   ├── fleetflow-container/    # コンテナ操作
+│   ├── fleetflow-build/        # Dockerビルド
+│   ├── fleetflow-mcp/          # MCPサーバー
+│   ├── fleetflow-cloud/        # クラウド抽象化
+│   ├── fleetflow-cloud-sakura/ # さくらクラウド
 │   └── fleetflow-cloud-cloudflare/ # Cloudflare
-├── spec/                        # 仕様書
-├── design/                      # 設計書
-└── guides/                      # 利用ガイド
+├── spec/                       # 仕様書
+├── design/                     # 設計書
+└── guides/                     # 利用ガイド
 ```
 
 詳細: [reference/architecture.md](reference/architecture.md)

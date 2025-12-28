@@ -18,27 +18,26 @@ stage "local" {
 
 // フロントエンド（React/Vue/Next.js等）
 service "frontend" {
-    image "node"
-    version "20-alpine"
+    image "node:20-alpine"
     ports {
-        port host=3000 container=3000
+        port 3000 3000
     }
     env {
         NODE_ENV "development"
         NEXT_PUBLIC_API_URL "http://localhost:8080"
     }
     volumes {
-        volume host="./frontend" container="/app"
+        volume "./frontend" "/app"
     }
     command "npm run dev"
+    depends_on "backend"
 }
 
 // バックエンドAPI
 service "backend" {
-    image "node"
-    version "20-alpine"
+    image "node:20-alpine"
     ports {
-        port host=8080 container=8080
+        port 8080 8080
     }
     env {
         NODE_ENV "development"
@@ -46,17 +45,22 @@ service "backend" {
         REDIS_URL "redis://redis:6379"
     }
     volumes {
-        volume host="./backend" container="/app"
+        volume "./backend" "/app"
     }
     command "npm run dev"
+    depends_on "db" "redis"
+    wait_for {
+        max_retries 10
+        initial_delay 1000
+    }
 }
 
 // PostgreSQL
 service "db" {
-    image "postgres"
-    version "16-alpine"
+    image "postgres:16-alpine"
+    restart "unless-stopped"
     ports {
-        port host=5432 container=5432
+        port 5432 5432
     }
     env {
         POSTGRES_DB "app"
@@ -64,16 +68,25 @@ service "db" {
         POSTGRES_PASSWORD "pass"
     }
     volumes {
-        volume host="./data/postgres" container="/var/lib/postgresql/data"
+        volume "./data/postgres" "/var/lib/postgresql/data"
+    }
+    healthcheck {
+        test "pg_isready -U user"
+        interval 10
+        timeout 5
+        retries 5
     }
 }
 
 // Redis
 service "redis" {
-    image "redis"
-    version "7-alpine"
+    image "redis:7-alpine"
+    restart "unless-stopped"
     ports {
-        port host=6379 container=6379
+        port 6379 6379
+    }
+    healthcheck {
+        test "redis-cli ping"
     }
 }
 ```
@@ -95,49 +108,49 @@ stage "local" {
 
 // API Gateway
 service "gateway" {
-    image "nginx"
-    version "alpine"
+    image "nginx:alpine"
     ports {
-        port host=80 container=80
+        port 80 80
     }
     volumes {
-        volume host="./gateway/nginx.conf" container="/etc/nginx/nginx.conf" read_only=true
+        volume "./gateway/nginx.conf" "/etc/nginx/nginx.conf" read_only=true
     }
+    depends_on "user-service" "order-service"
 }
 
 // ユーザーサービス
 service "user-service" {
-    build {
-        dockerfile "services/user/Dockerfile"
-    }
+    image "myapp/user-service:latest"
+    dockerfile "services/user/Dockerfile"
     ports {
-        port host=8001 container=8000
+        port 8001 8000
     }
     env {
         DATABASE_URL "postgres://user:pass@db-users:5432/users"
     }
+    depends_on "db-users"
 }
 
 // 注文サービス
 service "order-service" {
-    build {
-        dockerfile "services/order/Dockerfile"
-    }
+    image "myapp/order-service:latest"
+    dockerfile "services/order/Dockerfile"
     ports {
-        port host=8002 container=8000
+        port 8002 8000
     }
     env {
         DATABASE_URL "postgres://user:pass@db-orders:5432/orders"
         USER_SERVICE_URL "http://user-service:8000"
     }
+    depends_on "db-orders" "user-service"
 }
 
 // ユーザーDB
 service "db-users" {
-    image "postgres"
-    version "16-alpine"
+    image "postgres:16-alpine"
+    restart "unless-stopped"
     ports {
-        port host=5433 container=5432
+        port 5433 5432
     }
     env {
         POSTGRES_DB "users"
@@ -148,10 +161,10 @@ service "db-users" {
 
 // 注文DB
 service "db-orders" {
-    image "postgres"
-    version "16-alpine"
+    image "postgres:16-alpine"
+    restart "unless-stopped"
     ports {
-        port host=5434 container=5432
+        port 5434 5432
     }
     env {
         POSTGRES_DB "orders"
@@ -175,12 +188,11 @@ stage "local" {
 
 // Rust APIサーバー
 service "api" {
-    build {
-        dockerfile "Dockerfile"
-        target "development"
-    }
+    image "myapp/api:latest"
+    dockerfile "Dockerfile"
+    target "development"
     ports {
-        port host=3000 container=3000
+        port 3000 3000
     }
     env {
         RUST_LOG "debug"
@@ -189,21 +201,26 @@ service "api" {
         DATABASE_DB "main"
     }
     volumes {
-        volume host="./src" container="/app/src"
-        volume host="./Cargo.toml" container="/app/Cargo.toml" read_only=true
+        volume "./src" "/app/src"
+        volume "./Cargo.toml" "/app/Cargo.toml" read_only=true
+    }
+    depends_on "surrealdb"
+    wait_for {
+        max_retries 15
+        initial_delay 2000
     }
 }
 
 // SurrealDB
 service "surrealdb" {
-    image "surrealdb/surrealdb"
-    version "latest"
+    image "surrealdb/surrealdb:latest"
+    restart "unless-stopped"
     ports {
-        port host=8000 container=8000
+        port 8000 8000
     }
     command "start --user root --pass root file:/data/database.db"
     volumes {
-        volume host="./data/surreal" container="/data"
+        volume "./data/surreal" "/data"
     }
 }
 ```
@@ -220,16 +237,16 @@ stage "local" {
 }
 
 service "nginx" {
-    image "nginx"
-    version "alpine"
+    image "nginx:alpine"
+    restart "unless-stopped"
     ports {
-        port host=80 container=80
-        port host=443 container=443
+        port 80 80
+        port 443 443
     }
     volumes {
-        volume host="./public" container="/usr/share/nginx/html" read_only=true
-        volume host="./nginx.conf" container="/etc/nginx/nginx.conf" read_only=true
-        volume host="./certs" container="/etc/nginx/certs" read_only=true
+        volume "./public" "/usr/share/nginx/html" read_only=true
+        volume "./nginx.conf" "/etc/nginx/nginx.conf" read_only=true
+        volume "./certs" "/etc/nginx/certs" read_only=true
     }
 }
 ```
@@ -243,8 +260,9 @@ Dockerfileからビルドするパターンです。
 ```kdl
 // services/api/Dockerfile が自動検出される
 service "api" {
+    image "myapp/api:latest"  // imageは必須
     ports {
-        port host=3000 container=3000
+        port 3000 3000
     }
 }
 ```
@@ -253,18 +271,16 @@ service "api" {
 
 ```kdl
 service "api" {
-    build {
-        dockerfile "docker/api.Dockerfile"
-        context "."
-        args {
-            RUST_VERSION "1.75"
-            BUILD_MODE "release"
-        }
-        target "production"
-        image_tag "myapp/api:latest"
+    image "myapp/api:v1.0.0"
+    dockerfile "docker/api.Dockerfile"
+    context "."
+    target "production"
+    build_args {
+        RUST_VERSION "1.75"
+        BUILD_MODE "release"
     }
     ports {
-        port host=3000 container=3000
+        port 3000 3000
     }
 }
 ```
@@ -297,37 +313,86 @@ stage "prod" {
 }
 
 service "web" {
-    image "node"
-    version "20-alpine"
+    image "node:20-alpine"
+    restart "unless-stopped"
     ports {
-        port host=3000 container=3000
+        port 3000 3000
     }
+    depends_on "db"
 }
 
 service "db" {
-    image "postgres"
-    version "16-alpine"
+    image "postgres:16-alpine"
+    restart "unless-stopped"
     ports {
-        port host=5432 container=5432
+        port 5432 5432
+    }
+    healthcheck {
+        test "pg_isready -U postgres"
+        interval 10
+        timeout 5
+        retries 5
     }
 }
 
 // ローカル開発用メールサーバー
 service "mailhog" {
-    image "mailhog/mailhog"
+    image "mailhog/mailhog:latest"
     ports {
-        port host=1025 container=1025  // SMTP
-        port host=8025 container=8025  // Web UI
+        port 1025 1025  // SMTP
+        port 8025 8025  // Web UI
     }
 }
 
 // 本番用CDN/リバースプロキシ
 service "cdn" {
-    image "nginx"
-    version "alpine"
+    image "nginx:alpine"
+    restart "unless-stopped"
     ports {
-        port host=80 container=80
-        port host=443 container=443
+        port 80 80
+        port 443 443
+    }
+    depends_on "web"
+}
+```
+
+## クラウドインフラ構成
+
+さくらのクラウドでサーバーを作成し、Cloudflare DNSで管理するパターンです。
+
+```kdl
+project "myapp"
+
+providers {
+    sakura-cloud { zone "tk1a" }
+    cloudflare { account-id env="CF_ACCOUNT_ID" }
+}
+
+stage "dev" {
+    server "app-server" {
+        provider "sakura-cloud"
+        plan core=2 memory=4
+        disk size=40 os="ubuntu-24.04"
+        ssh-key "~/.ssh/id_ed25519.pub"
+        dns_aliases "app" "api"
+    }
+
+    service "api"
+    service "db"
+}
+
+service "api" {
+    image "myapp/api:latest"
+    ports {
+        port 3000 3000
+    }
+}
+
+service "db" {
+    image "postgres:16-alpine"
+    restart "unless-stopped"
+    ports {
+        port 5432 5432
     }
 }
 ```
@@ -356,17 +421,17 @@ service "cdn" {
 ```kdl
 // 開発用: ソースコードをマウント
 volumes {
-    volume host="./src" container="/app/src"
+    volume "./src" "/app/src"
 }
 
 // データ永続化
 volumes {
-    volume host="./data/postgres" container="/var/lib/postgresql/data"
+    volume "./data/postgres" "/var/lib/postgresql/data"
 }
 
 // 設定ファイル（読み取り専用）
 volumes {
-    volume host="./config.yml" container="/etc/app/config.yml" read_only=true
+    volume "./config.yml" "/etc/app/config.yml" read_only=true
 }
 ```
 
@@ -385,3 +450,60 @@ env {
     API_URL "http://api:3000"
 }
 ```
+
+### 依存関係と待機
+
+```kdl
+// 起動順序の制御
+service "web" {
+    depends_on "db" "redis"
+
+    // Exponential Backoffで依存サービスの準備を待機
+    wait_for {
+        max_retries 23        // 最大リトライ回数
+        initial_delay 1000    // 初回待機時間（ミリ秒）
+        max_delay 30000       // 最大待機時間（ミリ秒）
+        multiplier 2.0        // 待機時間の増加倍率
+    }
+}
+```
+
+### ヘルスチェック
+
+```kdl
+// データベースのヘルスチェック
+service "db" {
+    image "postgres:16-alpine"
+    healthcheck {
+        test "pg_isready -U postgres"
+        interval 10      // チェック間隔（秒）
+        timeout 5        // タイムアウト（秒）
+        retries 5        // リトライ回数
+        start_period 10  // 起動待機時間（秒）
+    }
+}
+
+// Redisのヘルスチェック
+service "redis" {
+    image "redis:7-alpine"
+    healthcheck {
+        test "redis-cli ping"
+    }
+}
+```
+
+### 再起動ポリシー
+
+```kdl
+service "db" {
+    image "postgres:16-alpine"
+    restart "unless-stopped"  // ホスト再起動後も自動復旧
+}
+```
+
+| 値 | 説明 |
+|----|------|
+| `no` | 再起動しない（デフォルト） |
+| `always` | 常に再起動 |
+| `on-failure` | 異常終了時のみ再起動 |
+| `unless-stopped` | 明示的に停止されない限り再起動（推奨） |

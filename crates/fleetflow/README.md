@@ -4,9 +4,9 @@
 [![Documentation](https://docs.rs/fleetflow/badge.svg)](https://docs.rs/fleetflow)
 [![License](https://img.shields.io/crates/l/fleetflow.svg)](https://github.com/chronista-club/fleetflow#license)
 
-> Docker Composeよりシンプル。KDLで書く、次世代の環境構築ツール。
+> **環境構築は、対話になった。伝えれば、動く。**
 
-FleetFlowは、KDL（KDL Document Language）をベースにした、革新的で超シンプルなコンテナオーケストレーションツールです。Docker Composeの手軽さはそのままに、より少ない記述で、より強力な設定管理を実現します。
+FleetFlowは、KDL（KDL Document Language）をベースにしたコンテナオーケストレーションツールです。シンプルな宣言で、ローカル開発から本番デプロイまでをシームレスにつなぎます。
 
 ## ✨ 特徴
 

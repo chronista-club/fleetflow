@@ -80,31 +80,14 @@ service "db" {
 // Error: サービス 'db' に image が指定されていません
 ```
 
-### versionフィールド（オプション）
-
-`version`は別途指定可能ですが、通常は`image`にタグを含めます：
-
-```kdl
-service "db" {
-    image "postgres"
-    version "16"
-    // → 内部的に postgres:16 として扱われる
-}
-
-// より一般的な書き方
-service "db" {
-    image "postgres:16"
-}
-```
-
 ### ポート設定
 
 ```kdl
 ports {
-    port 8080 3000
-    port 5432 5432 protocol="tcp"
-    port 53 53 protocol="udp"
-    port 8443 443 host_ip="127.0.0.1"
+    port 8080 3000                    // host:8080 → container:3000
+    port 5432 5432                    // host:5432 → container:5432
+    port 53 53 protocol="udp"         // UDPプロトコル
+    port 8443 443 host_ip="127.0.0.1" // ローカルホストのみ
 }
 ```
 
@@ -227,7 +210,7 @@ service "db" {
 | `no` | 再起動しない（デフォルト） |
 | `always` | 常に再起動 |
 | `on-failure` | 異常終了時のみ再起動 |
-| `unless-stopped` | 明示的に停止されない限り再起動 |
+| `unless-stopped` | 明示的に停止されない限り再起動（推奨） |
 
 **用途**: ホスト再起動後にコンテナを自動復旧させる場合に使用
 
@@ -304,20 +287,19 @@ providers {
 }
 ```
 
-### サーバー定義（さくらのクラウド）
+### サーバー定義（ステージ内）
 
 ```kdl
-server "app-server" {
-    provider "sakura-cloud"
-    plan core=4 memory=4
-    disk size=100 os="ubuntu-24.04"
-    ssh-key "~/.ssh/id_ed25519.pub"
+stage "dev" {
+    server "app-server" {
+        provider "sakura-cloud"
+        plan core=4 memory=4
+        disk size=100 os="ubuntu-24.04"
+        ssh-key "~/.ssh/id_ed25519.pub"
 
-    // DNSエイリアス（オプション）
-    dns_aliases "app" "api" "www"
-
-    // デプロイするサービスグループ
-    deploy-services "app-stack"
+        // DNSエイリアス（オプション）
+        dns_aliases "app" "api" "www"
+    }
 }
 ```
 
@@ -328,41 +310,6 @@ server "app-server" {
 | `disk` | ディスクサイズとOS |
 | `ssh-key` | SSH公開鍵のパス |
 | `dns_aliases` | DNSエイリアス（CNAMEレコード） |
-| `deploy-services` | デプロイするサービスグループ名 |
-
-### R2バケット（Cloudflare）
-
-```kdl
-r2-bucket "attachments" {
-    provider "cloudflare"
-    location "APAC"
-
-    cors {
-        allowed-origins "https://api.example.com"
-        allowed-methods "GET" "PUT" "POST" "DELETE"
-    }
-
-    custom-domain "cdn.example.com"
-}
-```
-
-### DNS設定（Cloudflare）
-
-```kdl
-dns "example.com" {
-    provider "cloudflare"
-
-    record "api" type="A" {
-        value "xxx.xxx.xxx.xxx"
-        proxied true
-    }
-
-    record "cdn" type="CNAME" {
-        value "bucket.r2.cloudflarestorage.com"
-        proxied true
-    }
-}
-```
 
 ## サービスマージ機能
 
@@ -391,7 +338,7 @@ service "api" {
 
 | フィールドタイプ | ルール | 例 |
 |----------------|--------|-----|
-| `Option<T>` | 後の定義が`Some`なら上書き | image, version, command, build, healthcheck |
+| `Option<T>` | 後の定義が`Some`なら上書き | image, command, build, healthcheck |
 | `Vec<T>` | 後の定義が空でなければ上書き | ports, volumes, depends_on |
 | `HashMap<K, V>` | 両方をマージ（後の定義が優先） | env (environment) |
 
@@ -514,31 +461,21 @@ stage "dev" {
         provider "sakura-cloud"
         plan core=4 memory=4
         disk size=100 os="ubuntu-24.04"
+        ssh-key "~/.ssh/id_ed25519.pub"
         dns_aliases "app" "api"
-        deploy-services "app-stack"
     }
 
-    // Cloudflare R2バケット
-    r2-bucket "attachments" {
-        provider "cloudflare"
-        custom-domain "cdn.example.com"
-    }
-
-    // DNS設定
-    dns "example.com" {
-        provider "cloudflare"
-        record "api" type="A" value=server.app-server.ip proxied=true
-    }
+    service "api"
+    service "db"
 }
 
-service-group "app-stack" {
-    service "api" {
-        image "myapp/api:latest"
-        port 3000
-    }
-    service "db" {
-        image "postgres:16"
-        port 5432
-    }
+service "api" {
+    image "myapp/api:latest"
+    ports { port 3000 3000 }
+}
+
+service "db" {
+    image "postgres:16"
+    ports { port 5432 5432 }
 }
 ```

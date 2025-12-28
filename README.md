@@ -1,7 +1,6 @@
 # FleetFlow
 
-> **「宣言だけで、開発も本番も」**
-> Docker Compose よりシンプル。AI と協調する、次世代のコンテナオーケストレーションツール。
+> **環境構築は、対話になった。伝えれば、動く。**
 
 [![CI](https://github.com/chronista-club/fleetflow/actions/workflows/ci.yml/badge.svg)](https://github.com/chronista-club/fleetflow/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](LICENSE-MIT)

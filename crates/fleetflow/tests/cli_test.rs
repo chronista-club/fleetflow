@@ -10,7 +10,7 @@ fn test_cli_help() {
     cmd.arg("--help")
         .assert()
         .success()
-        .stdout(predicate::str::contains("Docker Composeよりシンプル"))
+        .stdout(predicate::str::contains("環境構築は、対話になった"))
         .stdout(predicate::str::contains("up"))
         .stdout(predicate::str::contains("down"))
         .stdout(predicate::str::contains("ps"))
