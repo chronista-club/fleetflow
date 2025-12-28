@@ -37,6 +37,9 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
+      - name: Rustツールのインストール
+        run: mise run setup
+
       - name: フォーマットチェック
         run: mise run fmt-check
 
