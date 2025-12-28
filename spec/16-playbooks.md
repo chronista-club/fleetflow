@@ -219,5 +219,4 @@ flow play prod/update-apps
 
 ## 7. 関連仕様
 
-- [12-workloads.md](12-workloads.md) - サービスのグルーピング
 - [03-cli-commands.md](03-cli-commands.md) - CLIコマンド一覧
