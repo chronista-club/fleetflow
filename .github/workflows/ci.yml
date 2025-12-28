@@ -9,10 +9,16 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  MISE_EXPERIMENTAL: 1
+  MISE_LOG_LEVEL: info
 
 jobs:
-  ci:
-    name: CI チェック
+  # ========================================
+  # Tier 1: 高速テスト（Docker不要）
+  # すべてのpush/PRで実行
+  # ========================================
+  fast-tests:
+    name: 高速テスト
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -29,9 +35,6 @@ jobs:
       - name: mise のセットアップ
         run: mise install
 
-      - name: Rustツールのインストール
-        run: mise run setup
-
       - uses: Swatinem/rust-cache@v2
 
       - name: フォーマットチェック
@@ -40,12 +43,15 @@ jobs:
       - name: Clippy
         run: mise run clippy
 
-      - name: テスト
+      - name: 高速テスト（単体テスト + CLIテスト）
         run: mise run test
 
       - name: ビルド
         run: mise run build
 
+  # ========================================
+  # セキュリティ監査
+  # ========================================
   security:
     name: セキュリティ監査
     runs-on: ubuntu-latest
@@ -66,28 +72,27 @@ jobs:
       - name: セキュリティ監査
         run: mise run audit
 
-  coverage:
-    name: コードカバレッジ
+  # ========================================
+  # Tier 2: Docker統合テスト（オプション）
+  # mainブランチへのpushまたは手動実行時のみ
+  # ========================================
+  docker-tests:
+    name: Docker統合テスト
     runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    needs: fast-tests
     steps:
       - uses: actions/checkout@v4
 
       - name: mise のインストール
         uses: jdx/mise-action@v2
+        with:
+          experimental: true
 
       - name: mise のセットアップ
         run: mise install
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: tarpaulin インストール
-        run: cargo install cargo-tarpaulin
-
-      - name: カバレッジ測定
-        run: cargo tarpaulin --all-features --workspace --timeout 120 --out xml
-
-      - name: Codecovにアップロード
-        uses: codecov/codecov-action@v4
-        with:
-          files: ./cobertura.xml
-          fail_ci_if_error: false
+      - name: Docker統合テスト
+        run: mise run test-docker

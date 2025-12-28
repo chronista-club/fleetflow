@@ -5,7 +5,12 @@ mod common;
 use common::TestProject;
 use std::net::TcpListener;
 
+/// ポート競合時の自動クリーンアップテスト
+///
+/// Docker依存: コンテナ起動・ポートバインディングが必要
+/// 実行方法: `cargo test --test port_cleanup_test -- --ignored`
 #[tokio::test]
+#[ignore = "Docker依存テスト - CI Tier2で実行"]
 async fn test_port_cleanup_on_up() {
     let project = TestProject::new();
     let port = 18083;

@@ -51,13 +51,23 @@ run = "cargo clippy --all-targets --all-features -- -D warnings"
 
 [tasks.test]
 alias = "t"
-description = "テストを実行"
-run = "cargo test --all-features"
+description = "高速テストを実行（Docker不要）"
+run = "cargo test --workspace --lib --all-features && cargo test --test cli_test"
+
+[tasks.test-all]
+alias = "ta"
+description = "全テストを実行（Docker依存含む）"
+run = "cargo test --all-features -- --include-ignored"
+
+[tasks.test-docker]
+alias = "td"
+description = "Docker依存テストのみ実行"
+run = "cargo test --all-features -- --ignored"
 
 [tasks.test-watch]
 alias = "tw"
 description = "watchモードでテスト"
-run = "cargo watch -x test"
+run = "cargo watch -x 'test --workspace --lib'"
 
 # ========================================
 # ビルド

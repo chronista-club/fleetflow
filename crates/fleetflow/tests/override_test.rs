@@ -5,7 +5,12 @@ mod common;
 use common::TestProject;
 use std::fs;
 
+/// 設定オーバーライドのテスト
+///
+/// Docker依存: コンテナ起動・環境変数検証が必要
+/// 実行方法: `cargo test --test override_test -- --ignored`
 #[tokio::test]
+#[ignore = "Docker依存テスト - CI Tier2で実行"]
 async fn test_config_override() {
     let project = TestProject::new();
 

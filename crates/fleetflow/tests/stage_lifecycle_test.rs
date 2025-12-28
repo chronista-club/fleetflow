@@ -4,7 +4,12 @@ use assert_cmd::Command;
 mod common;
 use common::TestProject;
 
+/// ステージライフサイクル（up/update/down）のテスト
+///
+/// Docker依存: コンテナ起動・停止・削除が必要
+/// 実行方法: `cargo test --test stage_lifecycle_test -- --ignored`
 #[tokio::test]
+#[ignore = "Docker依存テスト - CI Tier2で実行"]
 async fn test_stage_lifecycle() {
     let project = TestProject::new();
 

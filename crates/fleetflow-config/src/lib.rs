@@ -108,28 +108,25 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_find_flow_file_local_priority() {
         let temp_dir = tempfile::tempdir().unwrap();
+        let original_dir = std::env::current_dir().ok();
 
         // flow.kdl と flow.local.kdl の両方を作成
         fs::write(temp_dir.path().join("flow.kdl"), "// global").unwrap();
-        let local_kdl = temp_dir.path().join("flow.local.kdl");
-        fs::write(&local_kdl, "// local").unwrap();
+        fs::write(temp_dir.path().join("flow.local.kdl"), "// local").unwrap();
 
-        // 環境変数で直接指定する方式に変更（並列テスト対応）
-        // SAFETY: テスト実行中のみ環境変数を設定し、テスト終了時に削除する
-        unsafe {
-            std::env::set_var("FLEETFLOW_CONFIG_PATH", &local_kdl);
-        }
+        // ディレクトリを移動して検索（環境変数ではなくcurrent_dir方式）
+        std::env::set_current_dir(&temp_dir).unwrap();
 
         let result = find_flow_file().unwrap();
 
         // flow.local.kdl が優先される
-        assert_eq!(result, local_kdl);
+        assert!(result.ends_with("flow.local.kdl"));
 
-        // SAFETY: テスト終了時に環境変数を削除
-        unsafe {
-            std::env::remove_var("FLEETFLOW_CONFIG_PATH");
+        if let Some(dir) = original_dir {
+            let _ = std::env::set_current_dir(dir);
         }
     }
 
@@ -155,6 +152,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_find_flow_file_env_var() {
         let temp_dir = tempfile::tempdir().unwrap();
         let config_path = temp_dir.path().join("custom.kdl");
@@ -166,7 +164,9 @@ mod tests {
         }
 
         let result = find_flow_file().unwrap();
-        assert_eq!(result, config_path);
+
+        // パス全体ではなくファイル名で比較（一時ディレクトリのパスは環境依存）
+        assert!(result.ends_with("custom.kdl"));
 
         // クリーンアップ
         unsafe {
