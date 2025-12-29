@@ -2,7 +2,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::io::{self, BufRead, Write};
-use tracing::{error, info};
+use tracing::error;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct JsonRpcRequest {
