@@ -134,13 +134,11 @@ impl TemplateProcessor {
 
     /// 文字列をテンプレートとして展開
     pub fn render_str(&mut self, template: &str) -> Result<String> {
-        self.tera
-            .render_str(template, &self.context)
-            .map_err(|e| {
-                // Teraのエラーから詳細情報を抽出
-                let error_detail = extract_tera_error_detail(&e);
-                FlowError::TemplateRenderError(error_detail)
-            })
+        self.tera.render_str(template, &self.context).map_err(|e| {
+            // Teraのエラーから詳細情報を抽出
+            let error_detail = extract_tera_error_detail(&e);
+            FlowError::TemplateRenderError(error_detail)
+        })
     }
 
     /// ファイルを読み込んでテンプレート展開
@@ -262,24 +260,24 @@ fn extract_tera_error_detail(e: &tera::Error) -> String {
     // Teraの典型的なエラーパターンを解析
     if full_error.contains("not found in context") {
         // 変数名を抽出: "Variable `xxx` not found in context"
-        if let Some(start) = full_error.find("Variable `") {
-            if let Some(end) = full_error[start..].find("` not found") {
-                let var_name = &full_error[start + 10..start + end];
-                return format!(
-                    "未定義の変数: `{}`\nヒント: variables ブロックで定義するか、.env ファイルに追加してください",
-                    var_name
-                );
-            }
+        if let Some(start) = full_error.find("Variable `")
+            && let Some(end) = full_error[start..].find("` not found")
+        {
+            let var_name = &full_error[start + 10..start + end];
+            return format!(
+                "未定義の変数: `{}`\nヒント: variables ブロックで定義するか、.env ファイルに追加してください",
+                var_name
+            );
         }
     }
 
     // フィルターエラーの検出
     if full_error.contains("Filter") && full_error.contains("not found") {
-        return format!("未定義のフィルター\n詳細: {}", full_error);
+        return format!("未定義のフィルター\n詳細: {full_error}");
     }
 
     // その他のエラーはそのまま返す
-    format!("{}", full_error)
+    full_error
 }
 
 /// KDL値をJSON値に変換
