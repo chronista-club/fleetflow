@@ -31,7 +31,7 @@ service "web" {
 "#,
     );
 
-    let mut cmd = Command::cargo_bin("flow").unwrap();
+    let mut cmd = Command::cargo_bin("fleet").unwrap();
     cmd.current_dir(project.path())
         .arg("up")
         .arg("--stage")
@@ -63,7 +63,7 @@ service "web" {
 "#,
     );
 
-    let mut cmd = Command::cargo_bin("flow").unwrap();
+    let mut cmd = Command::cargo_bin("fleet").unwrap();
     cmd.current_dir(project.path())
         .arg("up")
         .arg("-s")
@@ -75,7 +75,7 @@ service "web" {
     assert!(project.docker_container_exists(container_name).await);
 
     // 3. 削除 (Down --remove)
-    let mut cmd = Command::cargo_bin("flow").unwrap();
+    let mut cmd = Command::cargo_bin("fleet").unwrap();
     cmd.current_dir(project.path())
         .arg("down")
         .arg("--stage")

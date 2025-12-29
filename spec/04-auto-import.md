@@ -506,7 +506,7 @@ stage "local" {
 **コマンド**:
 
 ```bash
-flow validate --debug
+fleet validate --debug
 ```
 
 **出力例**:
@@ -604,7 +604,7 @@ include "stages/local.kdl"
 
 3. 動作確認:
    ```bash
-   flow validate
+   fleet validate
    ```
 
 ## 実装計画

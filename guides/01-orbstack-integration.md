@@ -75,7 +75,7 @@ service "redis" {
 ### ステップ4: コンテナの起動
 
 ```bash
-flow up -s local
+fleet up -s local
 ```
 
 ### ステップ5: OrbStackで確認
@@ -97,11 +97,11 @@ flow up -s local
 ```bash
 # プロジェクトA
 cd ~/projects/project-a
-flow up -s local
+fleet up -s local
 
 # プロジェクトB
 cd ~/projects/project-b
-flow up -s local
+fleet up -s local
 
 # OrbStackでの表示
 # 📁 project-a-local
@@ -117,11 +117,11 @@ flow up -s local
 ```bash
 # プロジェクトディレクトリに移動して起動
 cd ~/projects/main-app
-flow up -s local
+fleet up -s local
 
 # 依存する別のプロジェクトも起動
 cd ~/projects/backend-service
-flow up -s local
+fleet up -s local
 ```
 
 ### 終業時のクリーンアップ
@@ -133,7 +133,7 @@ OrbStackアプリから：
 または：
 
 ```bash
-flow down -s local
+fleet down -s local
 ```
 
 ## トラブルシューティング
@@ -159,8 +159,8 @@ cd ~/path/to/fleetflow
 cargo build --release
 
 # プロジェクトディレクトリで
-flow down -s local
-flow up -s local
+fleet down -s local
+fleet up -s local
 ```
 
 ### 問題2: コンテナ名が競合する
@@ -184,8 +184,8 @@ docker rm my-project-local-postgres
 または：
 
 ```bash
-flow down -s local --remove
-flow up -s local
+fleet down -s local --remove
+fleet up -s local
 ```
 
 ### 問題3: ポートが競合する
@@ -212,8 +212,8 @@ service "postgres" {
 
 3. コンテナを再作成
 ```bash
-flow down -s local
-flow up -s local
+fleet down -s local
+fleet up -s local
 ```
 
 ## ベストプラクティス

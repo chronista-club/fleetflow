@@ -14,7 +14,7 @@ FleetFlowを使った2種類のHello Worldサンプルです。
 cd examples/hello-world
 
 # hello-oneshotサービスを実行
-flow up oneshot
+fleet up oneshot
 
 # 期待される動作:
 # 1. alpineコンテナが起動
@@ -30,13 +30,13 @@ Webサーバーとして起動し続けるコンテナをテストします。
 cd examples/hello-world
 
 # hello-nginxサービスを起動
-flow up nginx
+fleet up nginx
 
 # ブラウザでアクセス
 open http://localhost:8080
 
 # サービスを停止
-flow down nginx
+fleet down nginx
 ```
 
 ### 3. 両方同時に実行
@@ -45,7 +45,7 @@ flow down nginx
 cd examples/hello-world
 
 # 両方のサービスを起動（デフォルトステージ）
-flow up
+fleet up
 
 # 期待される動作:
 # - hello-oneshot: メッセージ表示後に終了
@@ -115,8 +115,8 @@ stage "default" {
 vim index.html
 
 # 再起動
-flow down nginx
-flow up nginx
+fleet down nginx
+fleet up nginx
 ```
 
 ## ファイル構成

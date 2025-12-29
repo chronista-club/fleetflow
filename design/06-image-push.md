@@ -131,7 +131,7 @@ impl RegistryAuth {
 ### データフロー
 
 ```
-1. flow build --push --tag v1.0 api live
+1. fleet build --push --tag v1.0 api live
    │
 2. CLI: BuildArgs をパース
    │

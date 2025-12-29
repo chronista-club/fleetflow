@@ -233,7 +233,7 @@ service "api" {
 #### 5.2 キャッシュ無効化
 
 ```bash
-flow up --build --no-cache local
+fleet up --build --no-cache local
 ```
 
 または
@@ -303,7 +303,7 @@ service "db" {
 
 ```bash
 # CLI引数が最優先
-flow build api live --registry ghcr.io/override
+fleet build api live --registry ghcr.io/override
 ```
 
 ### 7. ビルドターゲット（マルチステージビルド対応）
@@ -335,14 +335,14 @@ CMD ["npm", "start"]
 
 ## コマンド仕様
 
-### 1. `flow up`
+### 1. `fleet up`
 
 既存の`up`コマンドに`--build`フラグを追加。
 
 #### 1.1 基本動作（既存）
 
 ```bash
-flow up local
+fleet up local
 ```
 
 - Dockerfileが存在する場合、**初回のみ**自動ビルド
@@ -352,7 +352,7 @@ flow up local
 #### 1.2 強制リビルド
 
 ```bash
-flow up --build local
+fleet up --build local
 ```
 
 - 既存イメージの有無にかかわらず、必ずビルドを実行
@@ -361,7 +361,7 @@ flow up --build local
 #### 1.3 キャッシュなしビルド
 
 ```bash
-flow up --build --no-cache local
+fleet up --build --no-cache local
 ```
 
 - キャッシュを使わずにフルビルド
@@ -396,19 +396,19 @@ flow rebuild api --no-cache
 2. イメージをリビルド
 3. コンテナを再作成・起動
 
-### 3. `flow build`（新規コマンド）
+### 3. `fleet build`（新規コマンド）
 
 ビルドのみを行い、コンテナは起動しない。
 
 ```bash
 # 全サービスをビルド
-flow build local
+fleet build local
 
 # 特定のサービスのみビルド
-flow build api local
+fleet build api local
 
 # キャッシュなしでビルド
-flow build --no-cache local
+fleet build --no-cache local
 ```
 
 ## flow.kdl記法

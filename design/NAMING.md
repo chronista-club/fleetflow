@@ -41,7 +41,7 @@ fleetflow.toml
 
 ### CLIコマンド例
 ```bash
-flow deploy
+fleet deploy
 flow status
 flow cluster list
 flow flow run

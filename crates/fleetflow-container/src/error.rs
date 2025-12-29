@@ -22,7 +22,7 @@ pub enum ContainerError {
     ImageNotFound { image: String },
 
     #[error(
-        "ポート {port} は既に使用されています\n\nヒント:\n  • 別のポート番号を使用してください\n  • 既存のコンテナを停止してください: fleetflow down --stage={stage}"
+        "ポート {port} は既に使用されています\n\nヒント:\n  • 別のポート番号を使用してください\n  • 既存のコンテナを停止してください: fleet down --stage={stage}"
     )]
     PortAlreadyInUse { port: u16, stage: String },
 

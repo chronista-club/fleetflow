@@ -261,7 +261,7 @@ async fn init_docker_with_error_handling() -> anyhow::Result<bollard::Docker> {
 }
 
 #[derive(Parser)]
-#[command(name = "flow")]
+#[command(name = "fleet")]
 #[command(about = "伝える。動く。環境構築は、対話になった。", long_about = None)]
 struct Cli {
     #[command(subcommand)]
@@ -997,7 +997,7 @@ async fn main() -> anyhow::Result<()> {
                             eprintln!();
                             eprintln!("{}", "解決方法:".yellow());
                             eprintln!(
-                                "  • 既存のコンテナを停止: fleetflow down --stage={}",
+                                "  • 既存のコンテナを停止: fleet down --stage={}",
                                 stage_name
                             );
                             eprintln!("  • 別のポート番号を使用してください");
@@ -3364,7 +3364,7 @@ async fn self_update() -> anyhow::Result<()> {
 
     // 現在のバイナリパスを取得
     let current_exe = std::env::current_exe()?;
-    let new_binary = temp_dir.join("flow"); // バイナリ名は "flow"
+    let new_binary = temp_dir.join("fleet"); // バイナリ名は "fleet"
 
     // バイナリを置換
     println!("インストール中...");
@@ -3463,7 +3463,7 @@ async fn check_and_update_if_needed() -> anyhow::Result<()> {
             latest_version.green(),
             current_version.yellow()
         );
-        println!("{}", "   更新するには: fleetflow self-update".dimmed());
+        println!("{}", "   更新するには: fleet self-update".dimmed());
         println!();
 
         // 自動更新の確認
@@ -4095,7 +4095,7 @@ async fn handle_setup_command(
                 // Docker初期化
                 let docker = init_docker_with_error_handling().await?;
 
-                // コンテナ起動（flow up相当）
+                // コンテナ起動（fleet up相当）
                 let stage_config = match config.stages.get(&stage_name) {
                     Some(s) => s,
                     None => {
@@ -4140,7 +4140,7 @@ async fn handle_setup_command(
                         } else {
                             // コンテナが存在しない場合
                             logger.log_detail(&format!(
-                                "{}: 未作成（flow up を実行してください）",
+                                "{}: 未作成（fleet up を実行してください）",
                                 service_name
                             ));
                         }

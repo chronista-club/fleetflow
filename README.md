@@ -35,17 +35,17 @@ curl -sSf https://raw.githubusercontent.com/chronista-club/fleetflow/main/instal
 
 ```bash
 mkdir my-project && cd my-project
-flow init
+fleet init
 ```
 
 ### 3. 環境のセットアップと起動
 
 ```bash
 # 環境をセットアップ（初回）
-flow setup local
+fleet setup local
 
 # 起動
-flow up local
+fleet up local
 ```
 
 ---
@@ -54,26 +54,26 @@ flow up local
 
 ```bash
 # セットアップ（冪等）
-flow setup <stage>    # ステージのインフラを構築
+fleet setup <stage>    # ステージのインフラを構築
 
 # ライフサイクル
-flow up <stage>       # ステージを起動
-flow down <stage>     # ステージを停止
-flow restart <stage>  # ステージを再起動
-flow deploy <stage>   # デプロイ（CI/CD向け）
+fleet up <stage>       # ステージを起動
+fleet down <stage>     # ステージを停止
+fleet restart <stage>  # ステージを再起動
+fleet deploy <stage>   # デプロイ（CI/CD向け）
 
 # 状態確認
-flow ps               # コンテナ一覧
-flow logs             # ログ表示
+fleet ps               # コンテナ一覧
+fleet logs             # ログ表示
 
 # ビルド
-flow build <stage>    # Dockerイメージをビルド
+fleet build <stage>    # Dockerイメージをビルド
 
 # AI連携
-flow mcp              # MCPサーバーを起動
+fleet mcp              # MCPサーバーを起動
 
 # 検証
-flow validate         # 設定ファイルを検証
+fleet validate         # 設定ファイルを検証
 ```
 
 ---
@@ -136,7 +136,7 @@ service "db" {
 ```
 fleetflow/
 ├── crates/
-│   ├── fleetflow/              # CLI エントリーポイント (bin: flow)
+│   ├── fleetflow/              # CLI エントリーポイント (bin: fleet)
 │   ├── fleetflow-core/         # KDL パーサー・データモデル
 │   ├── fleetflow-container/    # コンテナ操作
 │   ├── fleetflow-build/        # Docker ビルド

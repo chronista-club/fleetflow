@@ -17,7 +17,7 @@ FleetFlowでカスタムDockerイメージをビルドする方法を、実践�
 ## 前提知識
 
 - Dockerfileの基本的な書き方
-- FleetFlowの基本的な使い方（`flow up`, `flow down`）
+- FleetFlowの基本的な使い方（`fleet up`, `fleet down`）
 - flow.kdlの基本構文
 
 ## 基本的な使い方
@@ -66,7 +66,7 @@ CMD ["npm", "start"]
 
 **起動**:
 ```bash
-flow up local
+fleet up local
 ```
 
 → 自動的に`services/api/Dockerfile`が検出され、ビルド後にコンテナが起動します。
@@ -167,11 +167,11 @@ service "api" {
 **使用例**:
 ```bash
 # 開発環境でビルド・起動
-flow up local
+fleet up local
 # → APP_ENV=development, DEBUG=true
 
 # ライブ環境でビルド・起動
-flow up live
+fleet up live
 # → APP_ENV=production, DEBUG=false
 ```
 
@@ -275,10 +275,10 @@ flow rebuild api --no-cache
 
 ```bash
 # 全サービスをリビルド
-flow up --build local
+fleet up --build local
 
 # キャッシュなしでリビルド
-flow up --build --no-cache local
+fleet up --build --no-cache local
 ```
 
 ## 実践的なパターン
@@ -402,7 +402,7 @@ CMD ["./server"]
 **開発フロー**:
 ```bash
 # 初回起動
-flow up local
+fleet up local
 
 # フロントエンド変更後
 # （ホットリロードが効いているので不要）
@@ -411,7 +411,7 @@ flow up local
 flow rebuild backend
 
 # 全体リビルド
-flow up --build local
+fleet up --build local
 ```
 
 ### パターン2: マイクロサービス
@@ -827,10 +827,10 @@ service "backend" {
 
 ```bash
 # ghcr.io にプッシュ
-flow build api live --push --registry ghcr.io/myorg --tag v1.0.0
+fleet build api live --push --registry ghcr.io/myorg --tag v1.0.0
 
 # プラットフォームも指定（ARM Mac から x86 イメージを作成）
-flow build api live --push --registry ghcr.io/myorg --platform linux/amd64
+fleet build api live --push --registry ghcr.io/myorg --platform linux/amd64
 ```
 
 ### 2. KDL でレジストリを設定
@@ -949,7 +949,7 @@ GitHub Actions での例:
 
 - name: Build and push
   run: |
-    flow build api live --push --tag ${{ github.sha }}
+    fleet build api live --push --tag ${{ github.sha }}
 ```
 
 ## 次のステップ

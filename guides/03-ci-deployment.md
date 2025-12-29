@@ -49,7 +49,7 @@ jobs:
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
       - name: Build and Push
-        run: flow build live --push --tag ${{ github.sha }}
+        run: fleet build live --push --tag ${{ github.sha }}
 
       - name: Deploy to Live
         run: flow cloud up --stage live --yes
@@ -90,7 +90,7 @@ jobs:
         run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
       - name: Build and Push
-        run: flow build live --push --tag ${{ steps.version.outputs.VERSION }}
+        run: fleet build live --push --tag ${{ steps.version.outputs.VERSION }}
 ```
 
 ### プレ → ライブのフロー
@@ -113,7 +113,7 @@ jobs:
       - name: Login to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
       - name: Build and Push
-        run: flow build pre --push --tag pre-${{ github.sha }}
+        run: fleet build pre --push --tag pre-${{ github.sha }}
       - name: Deploy
         run: flow cloud up --stage pre --yes
 ```
@@ -230,7 +230,7 @@ service "worker" {
 docker login ghcr.io
 
 # 2. ビルド & プッシュ
-flow build live --push --tag v1.2.0
+fleet build live --push --tag v1.2.0
 
 # 3. ライブにデプロイ
 flow cloud up --stage live
@@ -240,7 +240,7 @@ flow cloud up --stage live
 
 ```bash
 # APIサービスのみビルド & プッシュ
-flow build live -n api --push --tag v1.2.1
+fleet build live -n api --push --tag v1.2.1
 
 # ライブサーバーでAPIのみ再起動
 flow cloud restart api --stage live
@@ -316,7 +316,7 @@ service "api" {
 ### デプロイ後にサービスが起動しない
 
 **確認手順**:
-1. `flow logs --stage live` でログを確認
+1. `fleet logs --stage live` でログを確認
 2. イメージタグが正しいか確認
 3. 環境変数が設定されているか確認
 

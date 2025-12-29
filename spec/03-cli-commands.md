@@ -25,13 +25,13 @@ Docker Composeの冗長さを排除し、本当に必要なコマンドだけを
 
 ```bash
 # 削除したい → --remove
-flow down --remove
+fleet down --remove
 
 # ログを追いたい → --follow
-flow logs --follow
+fleet logs --follow
 
 # 全部見たい → --all
-flow ps --all
+fleet ps --all
 ```
 
 #### 3. **環境変数との統合**
@@ -41,9 +41,9 @@ flow ps --all
 ```bash
 # 毎回 --stage=local を打つ必要がない
 export FLEET_STAGE=local
-flow up
-flow logs
-flow down
+fleet up
+fleet logs
+fleet down
 ```
 
 #### 4. **エラーメッセージの親切さ**
@@ -57,7 +57,7 @@ flow down
   port 5432 is already allocated
 
 解決方法:
-  • 既存のコンテナを停止: flow down --stage=local
+  • 既存のコンテナを停止: fleet down --stage=local
   • 別のポート番号を使用してください
 ```
 
@@ -84,7 +84,7 @@ flow down
 
 ### 機能仕様
 
-#### FS-001: flow up - コンテナ起動
+#### FS-001: fleet up - コンテナ起動
 
 **目的**: 指定したステージのサービスを起動する
 
@@ -111,7 +111,7 @@ flow down
 - Docker が起動している必要がある
 - イメージが存在する必要がある
 
-#### FS-002: flow down - コンテナ停止
+#### FS-002: fleet down - コンテナ停止
 
 **目的**: 指定したステージのサービスを停止する
 
@@ -137,7 +137,7 @@ flow down
 - ステージ名は必須
 - Docker が起動している必要がある
 
-#### FS-003: flow logs - ログ表示
+#### FS-003: fleet logs - ログ表示
 
 **目的**: コンテナのログを表示する
 
@@ -167,7 +167,7 @@ flow down
 - Docker が起動している必要がある
 - コンテナが存在する必要がある
 
-#### FS-004: flow ps - コンテナ一覧表示
+#### FS-004: fleet ps - コンテナ一覧表示
 
 **目的**: 管理中のコンテナの状態を確認する
 
@@ -192,7 +192,7 @@ flow down
 **制約**:
 - Docker が起動している必要がある
 
-#### FS-005: flow deploy - ステージデプロイ（CI/CD向け）
+#### FS-005: fleet deploy - ステージデプロイ（CI/CD向け）
 
 **目的**: 既存コンテナを強制停止・削除し、最新イメージで再起動する
 
@@ -228,16 +228,16 @@ flow down
 **使用例**:
 ```bash
 # 全サービスをデプロイ（最新イメージを自動pull）
-flow deploy live --yes
+fleet deploy live --yes
 
 # 特定サービスのみデプロイ
-flow deploy live --service db --yes
+fleet deploy live --service db --yes
 
 # ローカルイメージを使用（pullスキップ）
-flow deploy live --yes --no-pull
+fleet deploy live --yes --no-pull
 ```
 
-#### FS-006: flow build - イメージビルド
+#### FS-006: fleet build - イメージビルド
 
 **目的**: Dockerイメージをビルドし、オプションでレジストリにプッシュする
 
@@ -278,35 +278,35 @@ flow deploy live --yes --no-pull
 **使用例**:
 ```bash
 # ローカル開発用ビルド（ネイティブ）
-flow build local
+fleet build local
 
 # dev環境用: ghcr.ioにpush（linux/amd64）
-flow build dev --registry ghcr.io/myorg --push
+fleet build dev --registry ghcr.io/myorg --push
 
 # live環境用: 特定サービスのみビルド＆push
-flow build live --registry ghcr.io/myorg --push --service api
+fleet build live --registry ghcr.io/myorg --push --service api
 
 # キャッシュなしでリビルド
-flow build live --registry ghcr.io/myorg --push --no-cache
+fleet build live --registry ghcr.io/myorg --push --no-cache
 ```
 
 ### インターフェース仕様
 
 ```bash
 # 基本的な使用方法
-flow up --stage=local
-flow down --stage=local
-flow logs --stage=local
-flow ps --stage=local
+fleet up --stage=local
+fleet down --stage=local
+fleet logs --stage=local
+fleet ps --stage=local
 
 # 環境変数を使用
 export FLEET_STAGE=local
-flow up
-flow logs --follow
-flow down --remove
+fleet up
+fleet logs --follow
+fleet down --remove
 
 # サービス指定
-flow logs --service=postgres --lines=1000
+fleet logs --service=postgres --lines=1000
 ```
 
 ### 非機能仕様
@@ -359,7 +359,7 @@ Flowは「本当に必要な機能」だけを提供することで、学習コ�
 #### 初めて使う人
 
 ```bash
-$ flow up
+$ fleet up
 ✗ ステージ名を指定してください: --stage=local または FLEET_STAGE=local
 ```
 
@@ -369,10 +369,10 @@ $ flow up
 
 ```bash
 $ export FLEET_STAGE=local
-$ flow up
-$ flow logs -f
+$ fleet up
+$ fleet logs -f
 # 開発作業
-$ flow down
+$ fleet down
 ```
 
 わずか4つのコマンドで開発サイクルが回る。
@@ -380,11 +380,11 @@ $ flow down
 #### トラブルシューティング
 
 ```bash
-$ flow up
+$ fleet up
 ✗ ポートが既に使用されています
 
 解決方法:
-  • 既存のコンテナを停止: flow down --stage=local
+  • 既存のコンテナを停止: fleet down --stage=local
 ```
 
 次に何をすればいいかが明確。

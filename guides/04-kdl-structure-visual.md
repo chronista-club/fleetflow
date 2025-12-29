@@ -171,7 +171,7 @@ sequenceDiagram
     participant DB as db コンテナ
     participant REDIS as redis コンテナ
 
-    Note over CLI: flow up local
+    Note over CLI: fleet up local
 
     CLI->>DB: 1. db を起動
     CLI->>REDIS: 2. redis を起動 (並列)

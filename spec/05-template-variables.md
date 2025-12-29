@@ -605,7 +605,7 @@ service "api" {
 **コマンド**:
 
 ```bash
-flow validate --debug-template
+fleet validate --debug-template
 ```
 
 **出力**:

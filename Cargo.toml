@@ -43,6 +43,7 @@ base64 = "0.22"
 
 # KDL parser
 kdl = "6"
+unison-kdl = { path = "../unison-kdl/unison-kdl" }
 
 # Template engine
 tera = "1"

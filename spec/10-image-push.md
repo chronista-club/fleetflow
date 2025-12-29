@@ -7,12 +7,12 @@
 
 ### 概要
 
-`flow build` コマンドに `--push` オプションを追加し、ビルドしたイメージをコンテナレジストリにプッシュできるようにする。
+`fleet build` コマンドに `--push` オプションを追加し、ビルドしたイメージをコンテナレジストリにプッシュできるようにする。
 
 ### 背景
 
 現在のFleetFlowは以下の機能を持っている：
-- ローカルでのDockerイメージビルド（`flow build`）
+- ローカルでのDockerイメージビルド（`fleet build`）
 - クラウドサーバーへのデプロイ（`flow cloud up`）
 
 しかし、CI/CDパイプラインや本番更新では以下のフローが必要：
@@ -42,7 +42,7 @@ jobs:
       - name: Login to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
       - name: Build and Push
-        run: flow build --push --tag ${{ github.sha }} live
+        run: fleet build --push --tag ${{ github.sha }} live
       - name: Deploy
         run: flow cloud up --stage live
 ```
@@ -52,7 +52,7 @@ jobs:
 ```bash
 # ローカルからリリース
 docker login ghcr.io
-flow build --push --tag v1.2.0 live
+fleet build --push --tag v1.2.0 live
 flow cloud up --stage live
 ```
 
@@ -60,7 +60,7 @@ flow cloud up --stage live
 
 ```bash
 # 開発ブランチのイメージをdevサーバーにデプロイ
-flow build --push --tag feature-xxx dev
+fleet build --push --tag feature-xxx dev
 flow cloud up --stage dev
 ```
 
@@ -69,7 +69,7 @@ flow cloud up --stage dev
 ### 1. コマンド構文
 
 ```bash
-flow build [OPTIONS] [SERVICE] <STAGE>
+fleet build [OPTIONS] [SERVICE] <STAGE>
 ```
 
 #### 新規オプション
@@ -83,17 +83,17 @@ flow build [OPTIONS] [SERVICE] <STAGE>
 
 ```bash
 # ステージ内の全サービスをビルド＆プッシュ
-flow build --push live
+fleet build --push live
 
 # 特定サービスのみ
-flow build --push api live
+fleet build --push api live
 
 # タグを指定
-flow build --push --tag v1.2.0 live
-flow build --push --tag abc123def live
+fleet build --push --tag v1.2.0 live
+fleet build --push --tag abc123def live
 
 # キャッシュなしでビルド＆プッシュ
-flow build --push --no-cache live
+fleet build --push --no-cache live
 ```
 
 ### 2. タグ解決ルール
@@ -115,9 +115,9 @@ service "api" {
 
 | コマンド | プッシュされるイメージ |
 |---------|---------------------|
-| `flow build --push live` | `ghcr.io/org/myapp:main` |
-| `flow build --push --tag v1.0 live` | `ghcr.io/org/myapp:v1.0` |
-| `flow build --push --tag abc123 live` | `ghcr.io/org/myapp:abc123` |
+| `fleet build --push live` | `ghcr.io/org/myapp:main` |
+| `fleet build --push --tag v1.0 live` | `ghcr.io/org/myapp:v1.0` |
+| `fleet build --push --tag abc123 live` | `ghcr.io/org/myapp:abc123` |
 
 ### 3. レジストリ認証
 
@@ -241,7 +241,7 @@ Pushing worker...
 ### 3. 互換性
 
 - Docker CLI と同じ認証フローを使用
-- 既存の `flow build` コマンドとの後方互換性
+- 既存の `fleet build` コマンドとの後方互換性
 
 ## 制約
 

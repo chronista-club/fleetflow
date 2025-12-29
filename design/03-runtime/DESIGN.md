@@ -12,7 +12,7 @@ FleetFlowは**コンテナランタイム + Image**を基本とした抽象化�
 
 ```bash
 # ローカル開発
-flow up --stage=local
+fleet up --stage=local
 ```
 
 - **ランタイム**: Docker (OrbStack)
@@ -27,8 +27,8 @@ flow up --stage=local
 
 ```bash
 # Kubernetes環境
-flow up --stage=dev    # 開発クラスタ
-flow up --stage=pre    # プレ本番クラスタ
+fleet up --stage=dev    # 開発クラスタ
+fleet up --stage=pre    # プレ本番クラスタ
 ```
 
 - **ランタイム**: containerd/CRI-O
@@ -43,7 +43,7 @@ flow up --stage=pre    # プレ本番クラスタ
 
 ```bash
 # Cloud Run環境
-flow up --stage=live   # ライブ環境
+fleet up --stage=live   # ライブ環境
 ```
 
 - **ランタイム**: gVisor (軽量コンテナサンドボックス)
@@ -222,10 +222,10 @@ stage "prd" {
 docker build -t gcr.io/project/myapp:1.0.0 .
 
 # ローカルでテスト
-flow up --stage=local
+fleet up --stage=local
 
 # 本番デプロイ（同じイメージ）
-flow up --stage=prd
+fleet up --stage=prd
 ```
 
 ## 参考資料

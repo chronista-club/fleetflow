@@ -173,13 +173,13 @@ Geminiは`.claude/skills/`以下のドキュメントを参照し、必要に応
 
 3.  **CLIコマンド例**:
     ```bash
-    flow up <stage>       # ステージを起動
-    flow down <stage>     # ステージを停止
-    flow setup <stage>    # インフラを構築（冪等）
-    flow build <stage>    # Dockerイメージをビルド
-    flow deploy <stage>   # デプロイ
-    flow ps               # コンテナ一覧
-    flow logs             # ログ表示
+    fleet up <stage>       # ステージを起動
+    fleet down <stage>     # ステージを停止
+    fleet setup <stage>    # インフラを構築（冪等）
+    fleet build <stage>    # Dockerイメージをビルド
+    fleet deploy <stage>   # デプロイ
+    fleet ps               # コンテナ一覧
+    fleet logs             # ログ表示
     ```
 
 4.  **コンテキスト把握**:

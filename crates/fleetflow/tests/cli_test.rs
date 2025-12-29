@@ -6,7 +6,7 @@ use predicates::prelude::*;
 /// CLIヘルプが正しく表示されることを確認
 #[test]
 fn test_cli_help() {
-    let mut cmd = Command::cargo_bin("flow").unwrap();
+    let mut cmd = Command::cargo_bin("fleet").unwrap();
     cmd.arg("--help")
         .assert()
         .success()
@@ -20,7 +20,7 @@ fn test_cli_help() {
 /// バージョン表示が正しく動作することを確認
 #[test]
 fn test_cli_version() {
-    let mut cmd = Command::cargo_bin("flow").unwrap();
+    let mut cmd = Command::cargo_bin("fleet").unwrap();
     cmd.arg("version")
         .assert()
         .success()
@@ -30,7 +30,7 @@ fn test_cli_version() {
 /// validateコマンドのヘルプが正しく表示されることを確認
 #[test]
 fn test_validate_help() {
-    let mut cmd = Command::cargo_bin("flow").unwrap();
+    let mut cmd = Command::cargo_bin("fleet").unwrap();
     cmd.arg("validate")
         .arg("--help")
         .assert()
@@ -42,7 +42,7 @@ fn test_validate_help() {
 /// upコマンドのヘルプが正しく表示されることを確認
 #[test]
 fn test_up_help() {
-    let mut cmd = Command::cargo_bin("flow").unwrap();
+    let mut cmd = Command::cargo_bin("fleet").unwrap();
     cmd.arg("up")
         .arg("--help")
         .assert()
@@ -56,7 +56,7 @@ fn test_up_help() {
 /// downコマンドのヘルプが正しく表示されることを確認
 #[test]
 fn test_down_help() {
-    let mut cmd = Command::cargo_bin("flow").unwrap();
+    let mut cmd = Command::cargo_bin("fleet").unwrap();
     cmd.arg("down")
         .arg("--help")
         .assert()
@@ -68,7 +68,7 @@ fn test_down_help() {
 /// 不正なコマンドでエラーになることを確認
 #[test]
 fn test_invalid_command() {
-    let mut cmd = Command::cargo_bin("flow").unwrap();
+    let mut cmd = Command::cargo_bin("fleet").unwrap();
     cmd.arg("invalid-command").assert().failure();
 }
 
@@ -76,7 +76,7 @@ fn test_invalid_command() {
 /// （プロジェクトディレクトリ外で実行）
 #[test]
 fn test_validate_without_project() {
-    let mut cmd = Command::cargo_bin("flow").unwrap();
+    let mut cmd = Command::cargo_bin("fleet").unwrap();
     cmd.current_dir(std::env::temp_dir())
         .arg("validate")
         .assert()

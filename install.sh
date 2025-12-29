@@ -112,7 +112,7 @@ fi
 # Claude Code 案内
 if command -v claude &> /dev/null; then
     info "  → Claude Code を検出しました。以下のコマンドで連携できます："
-    printf "    ${CYAN}claude mcp add fleetflow -- fleetflow mcp${NC}\n"
+    printf "    ${CYAN}claude mcp add fleetflow -- fleetfleet mcp${NC}\n"
 fi
 
 # 5. 完了
@@ -120,7 +120,7 @@ printf "\n"
 success "[3/3] セットアップが完了しました！"
 printf "${BLUE}-------------------------------------------${NC}\n"
 printf "今すぐ始めるには：\n"
-printf "  ${CYAN}fleetflow version${NC}\n"
+printf "  ${CYAN}fleetfleet version${NC}\n"
 printf "\n"
 printf "AI にプロジェクトを解析させるには：\n"
 printf "  ${CYAN}# Gemini CLI や Claude Code 内で${NC}\n"

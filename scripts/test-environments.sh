@@ -15,8 +15,8 @@ echo ""
 cleanup() {
     echo ""
     echo "🧹 クリーンアップ中..."
-    fleetflow down dev --remove 2>/dev/null || true
-    fleetflow down prod --remove 2>/dev/null || true
+    fleet down dev --remove 2>/dev/null || true
+    fleet down prod --remove 2>/dev/null || true
 }
 
 # スクリプト終了時にクリーンアップ
@@ -25,7 +25,7 @@ trap cleanup EXIT
 # 1. Dev環境テスト
 echo "📦 [1/4] Dev環境を起動中..."
 cd "$PROJECT_ROOT"
-fleetflow up dev
+fleet up dev
 
 echo ""
 echo "🔍 [2/4] Dev環境に接続確認中（ポート: 40001）..."
@@ -41,12 +41,12 @@ fi
 
 echo ""
 echo "🛑 Dev環境を停止中..."
-fleetflow down dev
+fleet down dev
 
 # 2. Prod環境テスト
 echo ""
 echo "📦 [3/4] Prod環境を起動中..."
-fleetflow up prod
+fleet up prod
 
 echo ""
 echo "🔍 [4/4] Prod環境に接続確認中（ポート: 40002）..."
@@ -62,7 +62,7 @@ fi
 
 echo ""
 echo "🛑 Prod環境を停止中..."
-fleetflow down prod --remove
+fleet down prod --remove
 
 echo ""
 echo "✅ すべての環境テストが完了しました！"

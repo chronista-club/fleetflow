@@ -46,7 +46,7 @@ service "web" {
     .unwrap();
 
     // 3. 起動
-    let mut cmd = Command::cargo_bin("flow").unwrap();
+    let mut cmd = Command::cargo_bin("fleet").unwrap();
     cmd.current_dir(project.path())
         .arg("up")
         .arg("-s")
@@ -71,7 +71,7 @@ service "web" {
     assert!(!env.contains(&"APP_NAME=original".to_string()));
 
     // 5. 削除
-    let mut cmd = Command::cargo_bin("flow").unwrap();
+    let mut cmd = Command::cargo_bin("fleet").unwrap();
     cmd.current_dir(project.path())
         .arg("down")
         .arg("-s")

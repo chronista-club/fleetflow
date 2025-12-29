@@ -631,7 +631,7 @@ impl McpServer {
                 },
                 {
                     "name": "fleetflow_ps",
-                    "description": "コンテナの一覧を表示します。プロジェクトに関連するコンテナの稼働状況を確認できます。CLIの 'fleetflow ps' と同等。",
+                    "description": "コンテナの一覧を表示します。プロジェクトに関連するコンテナの稼働状況を確認できます。CLIの 'fleet ps' と同等。",
                     "inputSchema": {
                         "type": "object",
                         "properties": {

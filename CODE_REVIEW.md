@@ -95,7 +95,7 @@ impl TemplateProcessor {
 **脆弱性シナリオ**:
 ```bash
 export FLEETFLOW_PROJECT_ROOT="../../../etc"
-flow validate  # システムディレクトリにアクセス可能
+fleet validate  # システムディレクトリにアクセス可能
 ```
 
 **修正案**:
@@ -226,7 +226,7 @@ pub fn discover_files(project_root: &Path) -> Result<DiscoveredFiles> {
 ```bash
 mkdir -p services/a
 ln -s ../a services/a/b  # ループ
-flow validate  # スタックオーバーフロー
+fleet validate  # スタックオーバーフロー
 ```
 
 **修正案**:

@@ -4,7 +4,7 @@
 
 FleetFlow 本体のバイナリに MCP サーバー機能を統合します。
 
-- **実行コマンド**: `flow mcp`
+- **実行コマンド**: `fleet mcp`
 - **通信プロトコル**: JSON-RPC over Standard I/O (MCP 標準)
 - **ライブラリ**: `serde_json`, `tokio` (既存の依存関係を活用)
 

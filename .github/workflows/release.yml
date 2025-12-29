@@ -13,7 +13,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  BINARY_NAME: flow
+  BINARY_NAME: fleet
 
 jobs:
   # CI チェック（リリース前に必須）

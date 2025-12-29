@@ -83,7 +83,7 @@ service "db" {
     );
 
     // 6. 起動 (prodステージ)
-    let mut cmd = Command::cargo_bin("flow").unwrap();
+    let mut cmd = Command::cargo_bin("fleet").unwrap();
     let output = cmd
         .current_dir(project.path())
         .arg("up")
@@ -95,7 +95,7 @@ service "db" {
     if !output.status.success() {
         println!("\nSTDOUT: {}", String::from_utf8_lossy(&output.stdout));
         println!("STDERR: {}", String::from_utf8_lossy(&output.stderr));
-        panic!("flow up failed");
+        panic!("fleet up failed");
     }
 
     // 6. 検証
@@ -144,7 +144,7 @@ service "db" {
     );
 
     // 7. クリーンアップ
-    let mut cmd = Command::cargo_bin("flow").unwrap();
+    let mut cmd = Command::cargo_bin("fleet").unwrap();
     cmd.current_dir(project.path())
         .arg("down")
         .arg("-s")

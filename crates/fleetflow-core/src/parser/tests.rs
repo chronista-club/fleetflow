@@ -1,5 +1,6 @@
 use super::*;
-use crate::model::Protocol;
+use crate::model::{Port, Protocol, Volume};
+use unison_kdl::{KdlDeserialize, KdlNodeExt, KdlSerialize};
 
 #[test]
 fn test_parse_simple_service() {
@@ -719,4 +720,120 @@ fn test_service_merge_multiple_overrides() {
     assert_eq!(service.environment["LOG_LEVEL"], "debug"); // 2回目で上書き
     assert_eq!(service.environment["DEBUG"], "true"); // 2回目で追加
     assert_eq!(service.environment["API_KEY"], "secret"); // 3回目で追加
+}
+
+// ============================================================================
+// unison-kdl 直接パーステスト
+// ============================================================================
+
+#[test]
+fn test_port_unison_kdl_deserialize() {
+    let kdl = r#"port host=8080 container=3000"#;
+    let doc: kdl::KdlDocument = kdl.parse().unwrap();
+    let node = doc.nodes().first().unwrap();
+
+    let port = Port::from_kdl_node(node).unwrap();
+    assert_eq!(port.host, 8080);
+    assert_eq!(port.container, 3000);
+    assert_eq!(port.protocol, Protocol::Tcp); // default
+    assert_eq!(port.host_ip, None);
+}
+
+#[test]
+fn test_port_unison_kdl_serialize() {
+    let port = Port {
+        host: 8080,
+        container: 3000,
+        protocol: Protocol::Tcp,
+        host_ip: None,
+    };
+
+    let node = port.to_kdl_node().unwrap();
+    assert_eq!(node.name().value(), "port");
+
+    // プロパティの確認
+    assert_eq!(node.prop("host").and_then(|v| v.as_integer()), Some(8080));
+    assert_eq!(
+        node.prop("container").and_then(|v| v.as_integer()),
+        Some(3000)
+    );
+}
+
+#[test]
+fn test_port_unison_kdl_roundtrip() {
+    let original = Port {
+        host: 9090,
+        container: 80,
+        protocol: Protocol::Udp,
+        host_ip: Some("127.0.0.1".to_string()),
+    };
+
+    // Serialize -> Deserialize
+    let node = original.to_kdl_node().unwrap();
+    let deserialized = Port::from_kdl_node(&node).unwrap();
+
+    assert_eq!(deserialized.host, original.host);
+    assert_eq!(deserialized.container, original.container);
+    assert_eq!(deserialized.protocol, original.protocol);
+    assert_eq!(deserialized.host_ip, original.host_ip);
+}
+
+#[test]
+fn test_volume_unison_kdl_deserialize() {
+    let kdl = r#"volume "./data" "/var/lib/data""#;
+    let doc: kdl::KdlDocument = kdl.parse().unwrap();
+    let node = doc.nodes().first().unwrap();
+
+    let volume = Volume::from_kdl_node(node).unwrap();
+    assert_eq!(volume.host.to_str().unwrap(), "./data");
+    assert_eq!(volume.container.to_str().unwrap(), "/var/lib/data");
+    assert!(!volume.read_only); // default
+}
+
+#[test]
+fn test_volume_unison_kdl_with_readonly() {
+    let kdl = r#"volume "./config" "/etc/config" read_only=#true"#;
+    let doc: kdl::KdlDocument = kdl.parse().unwrap();
+    let node = doc.nodes().first().unwrap();
+
+    let volume = Volume::from_kdl_node(node).unwrap();
+    assert_eq!(volume.host.to_str().unwrap(), "./config");
+    assert_eq!(volume.container.to_str().unwrap(), "/etc/config");
+    assert!(volume.read_only);
+}
+
+#[test]
+fn test_volume_unison_kdl_serialize() {
+    let volume = Volume {
+        host: std::path::PathBuf::from("./data"),
+        container: std::path::PathBuf::from("/var/lib/data"),
+        read_only: false,
+    };
+
+    let node = volume.to_kdl_node().unwrap();
+    assert_eq!(node.name().value(), "volume");
+
+    // 引数の確認（位置引数）
+    assert_eq!(node.arg(0).and_then(|v| v.as_string()), Some("./data"));
+    assert_eq!(
+        node.arg(1).and_then(|v| v.as_string()),
+        Some("/var/lib/data")
+    );
+}
+
+#[test]
+fn test_volume_unison_kdl_roundtrip() {
+    let original = Volume {
+        host: std::path::PathBuf::from("/host/path"),
+        container: std::path::PathBuf::from("/container/path"),
+        read_only: true,
+    };
+
+    // Serialize -> Deserialize
+    let node = original.to_kdl_node().unwrap();
+    let deserialized = Volume::from_kdl_node(&node).unwrap();
+
+    assert_eq!(deserialized.host, original.host);
+    assert_eq!(deserialized.container, original.container);
+    assert_eq!(deserialized.read_only, original.read_only);
 }

@@ -71,10 +71,10 @@ service "db" {
 ### 基本操作
 
 ```bash
-flow up -s local       # 起動
-flow ps                # 状態確認
-flow logs              # ログ表示
-flow down -s local     # 停止・削除
+fleet up -s local       # 起動
+fleet ps                # 状態確認
+fleet logs              # ログ表示
+fleet down -s local     # 停止・削除
 ```
 
 ## 環境変数
@@ -228,16 +228,16 @@ service "worker" {
 
 ```bash
 # ビルドのみ
-flow build -s local -n api
+fleet build -s local -n api
 
 # ビルド＆プッシュ
-flow build -s local -n api --push
+fleet build -s local -n api --push
 
 # タグを指定してビルド＆プッシュ
-flow build -s local -n api --push --tag v1.0.0
+fleet build -s local -n api --push --tag v1.0.0
 
 # クロスビルド（linux/amd64向け）
-flow build -s local -n api --push --platform linux/amd64
+fleet build -s local -n api --push --platform linux/amd64
 ```
 
 **認証方式**:
@@ -350,13 +350,13 @@ CI/CDパイプラインからの自動デプロイに最適化されたコマン
 
 ```bash
 # 基本的な使い方（デフォルトでpull）
-flow deploy -s live --yes
+fleet deploy -s live --yes
 
 # pullをスキップ
-flow deploy -s live --no-pull --yes
+fleet deploy -s live --no-pull --yes
 
 # GitHub Actionsから
-ssh user@vps "cd /app && flow deploy -s live --yes"
+ssh user@vps "cd /app && fleet deploy -s live --yes"
 ```
 
 **オプション:**
@@ -376,7 +376,7 @@ ssh user@vps "cd /app && flow deploy -s live --yes"
 
 ```bash
 # 手動でアップデート
-flow self-update
+fleet self-update
 ```
 
 ## コンテナ命名規則

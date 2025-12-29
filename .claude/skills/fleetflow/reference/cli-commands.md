@@ -35,16 +35,16 @@ FleetFlowのCLIコマンド一覧と詳細な使い方です。
 
 ## 詳細
 
-### `flow up`
+### `fleet up`
 
 指定したステージのコンテナを起動します。
 
 ```bash
-flow up -s <stage>
-flow up -s local
-flow up -s local --pull        # イメージを事前にpull
-flow up -s local --build       # ビルドしてから起動
-flow up -s local --build --no-cache  # キャッシュなしでビルド
+fleet up -s <stage>
+fleet up -s local
+fleet up -s local --pull        # イメージを事前にpull
+fleet up -s local --build       # ビルドしてから起動
+fleet up -s local --build --no-cache  # キャッシュなしでビルド
 ```
 
 **オプション**:
@@ -64,14 +64,14 @@ flow up -s local --build --no-cache  # キャッシュなしでビルド
 5. `wait_for`設定がある場合は依存サービスの準備を待機
 6. サービスごとに進捗を表示
 
-### `flow down`
+### `fleet down`
 
 指定したステージのコンテナを停止・削除します。
 
 ```bash
-flow down -s <stage>
-flow down -s local
-flow down -s local --remove    # ボリュームも削除
+fleet down -s <stage>
+fleet down -s local
+fleet down -s local --remove    # ボリュームも削除
 ```
 
 **オプション**:
@@ -86,14 +86,14 @@ flow down -s local --remove    # ボリュームも削除
 2. コンテナを削除
 3. `--remove`指定時のみボリュームを削除
 
-### `flow deploy`
+### `fleet deploy`
 
 CI/CDパイプラインからの自動デプロイに最適化されたコマンドです。
 
 ```bash
-flow deploy -s <stage> --yes
-flow deploy -s live --yes           # 確認なしでデプロイ
-flow deploy -s live --no-pull --yes # pullをスキップ
+fleet deploy -s <stage> --yes
+fleet deploy -s live --yes           # 確認なしでデプロイ
+fleet deploy -s live --no-pull --yes # pullをスキップ
 ```
 
 **オプション**:
@@ -110,14 +110,14 @@ flow deploy -s live --no-pull --yes # pullをスキップ
 3. コンテナを依存関係順に作成・起動
 4. `wait_for`による依存サービス待機
 
-### `flow ps`
+### `fleet ps`
 
 コンテナの状態を表示します。
 
 ```bash
-flow ps                 # 実行中のコンテナのみ
-flow ps -s local        # 特定ステージのみ
-flow ps --all           # 停止中も含む
+fleet ps                 # 実行中のコンテナのみ
+fleet ps -s local        # 特定ステージのみ
+fleet ps --all           # 停止中も含む
 ```
 
 **オプション**:
@@ -132,16 +132,16 @@ flow ps --all           # 停止中も含む
 - 状態（Running/Stopped）
 - ポートマッピング
 
-### `flow logs`
+### `fleet logs`
 
 コンテナのログを表示します。
 
 ```bash
-flow logs -s <stage>             # 全サービス
-flow logs -s local -n <service>  # 特定サービス
-flow logs -s local -f            # リアルタイム表示
-flow logs -s local --lines 100   # 行数指定
-flow logs -s local -f -n web     # 組み合わせ
+fleet logs -s <stage>             # 全サービス
+fleet logs -s local -n <service>  # 特定サービス
+fleet logs -s local -f            # リアルタイム表示
+fleet logs -s local --lines 100   # 行数指定
+fleet logs -s local -f -n web     # 組み合わせ
 ```
 
 **オプション**:
@@ -196,14 +196,14 @@ flow stop -s local -n db
 - コンテナは削除されない
 - `start` で再起動可能
 
-### `flow restart`
+### `fleet restart`
 
 サービスを再起動します。
 
 ```bash
-flow restart -s <stage>              # ステージ内の全サービス
-flow restart -s <stage> -n <service> # 特定サービスのみ
-flow restart -s local -n web
+fleet restart -s <stage>              # ステージ内の全サービス
+fleet restart -s <stage> -n <service> # 特定サービスのみ
+fleet restart -s local -n web
 ```
 
 **オプション**:
@@ -217,22 +217,22 @@ flow restart -s local -n web
 - `docker restart` 相当
 - 停止 → 起動を実行
 
-### `flow build`
+### `fleet build`
 
 イメージをビルドします（コンテナは起動しない）。
 
 ```bash
-flow build -s <stage>                   # ステージ内の全サービス
-flow build -s <stage> -n <service>      # 特定サービスのみ
-flow build -s local -n api
-flow build -s local --no-cache          # キャッシュなしでビルド
+fleet build -s <stage>                   # ステージ内の全サービス
+fleet build -s <stage> -n <service>      # 特定サービスのみ
+fleet build -s local -n api
+fleet build -s local --no-cache          # キャッシュなしでビルド
 
 # レジストリにプッシュ
-flow build -s local -n api --push
-flow build -s local -n api --push --tag v1.0.0
+fleet build -s local -n api --push
+fleet build -s local -n api --push --tag v1.0.0
 
 # クロスビルド
-flow build -s local -n api --push --platform linux/amd64
+fleet build -s local -n api --push --platform linux/amd64
 ```
 
 **オプション**:
@@ -258,13 +258,13 @@ Docker標準の認証方式を使用：
 2. KDL設定の `image` フィールドのタグ
 3. デフォルト: `latest`
 
-### `flow validate`
+### `fleet validate`
 
 設定ファイルの構文チェックを行います。
 
 ```bash
-flow validate
-flow validate -s local    # 特定ステージを検証
+fleet validate
+fleet validate -s local    # 特定ステージを検証
 ```
 
 **オプション**:
@@ -278,13 +278,13 @@ flow validate -s local    # 特定ステージを検証
 - 必須フィールドの欠落（image等）
 - 論理的な矛盾
 
-### `flow setup`
+### `fleet setup`
 
 ステージの環境をセットアップします（冪等）。
 
 ```bash
-flow setup -s <stage>
-flow setup -s dev
+fleet setup -s <stage>
+fleet setup -s dev
 ```
 
 **オプション**:
@@ -362,30 +362,30 @@ flow cloud auth
 | `CLOUDFLARE_ZONE_ID` | ドメインのZone ID |
 | `CLOUDFLARE_DOMAIN` | 管理対象ドメイン |
 
-### `flow mcp`
+### `fleet mcp`
 
 Model Context Protocol (MCP) サーバーを起動します。
 
 ```bash
-flow mcp
+fleet mcp
 ```
 
 AI/LLMアシスタントとの連携に使用します。
 
-### `flow self-update`
+### `fleet self-update`
 
 FleetFlow自体を最新バージョンに更新します。
 
 ```bash
-flow self-update
+fleet self-update
 ```
 
-### `flow version`
+### `fleet version`
 
 バージョン情報を表示します。
 
 ```bash
-flow version
+fleet version
 # 出力: fleetflow 0.4.2
 ```
 
@@ -408,7 +408,7 @@ flow version
 **解決方法**:
 1. カレントディレクトリに`flow.kdl`があるか確認
 2. 環境変数`FLEETFLOW_CONFIG_PATH`を確認
-3. `flow validate`で検証
+3. `fleet validate`で検証
 
 ### イメージが見つからない
 
@@ -435,7 +435,7 @@ flow version
 ### コンテナが起動しない
 
 **解決方法**:
-1. ログを確認: `flow logs -s <stage>` または `docker logs {container}`
+1. ログを確認: `fleet logs -s <stage>` または `docker logs {container}`
 2. 環境変数が正しいか確認
 3. ボリュームマウントのパスを確認
 4. コマンドが正しいか確認
