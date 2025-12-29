@@ -3364,7 +3364,7 @@ async fn self_update() -> anyhow::Result<()> {
 
     // 現在のバイナリパスを取得
     let current_exe = std::env::current_exe()?;
-    let new_binary = temp_dir.join("fleetflow");
+    let new_binary = temp_dir.join("flow"); // バイナリ名は "flow"
 
     // バイナリを置換
     println!("インストール中...");
