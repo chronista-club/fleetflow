@@ -136,7 +136,11 @@ impl TemplateProcessor {
     pub fn render_str(&mut self, template: &str) -> Result<String> {
         self.tera
             .render_str(template, &self.context)
-            .map_err(|e| FlowError::TemplateRenderError(format!("テンプレート展開エラー: {}", e)))
+            .map_err(|e| {
+                // Teraのエラーから詳細情報を抽出
+                let error_detail = extract_tera_error_detail(&e);
+                FlowError::TemplateRenderError(error_detail)
+            })
     }
 
     /// ファイルを読み込んでテンプレート展開
@@ -233,6 +237,49 @@ fn strip_quotes(s: &str) -> &str {
     } else {
         s
     }
+}
+
+/// Teraエラーから詳細情報を抽出
+///
+/// Teraのエラーメッセージを解析して、未定義変数などの具体的な情報を取得します。
+fn extract_tera_error_detail(e: &tera::Error) -> String {
+    use std::error::Error;
+
+    // エラーチェーンを走査して詳細を収集
+    let mut details = Vec::new();
+    details.push(e.to_string());
+
+    // sourceチェーンをたどる
+    let mut source = e.source();
+    while let Some(err) = source {
+        details.push(err.to_string());
+        source = err.source();
+    }
+
+    // 未定義変数のパターンを検出
+    let full_error = details.join(" | ");
+
+    // Teraの典型的なエラーパターンを解析
+    if full_error.contains("not found in context") {
+        // 変数名を抽出: "Variable `xxx` not found in context"
+        if let Some(start) = full_error.find("Variable `") {
+            if let Some(end) = full_error[start..].find("` not found") {
+                let var_name = &full_error[start + 10..start + end];
+                return format!(
+                    "未定義の変数: `{}`\nヒント: variables ブロックで定義するか、.env ファイルに追加してください",
+                    var_name
+                );
+            }
+        }
+    }
+
+    // フィルターエラーの検出
+    if full_error.contains("Filter") && full_error.contains("not found") {
+        return format!("未定義のフィルター\n詳細: {}", full_error);
+    }
+
+    // その他のエラーはそのまま返す
+    format!("{}", full_error)
 }
 
 /// KDL値をJSON値に変換
@@ -387,10 +434,19 @@ variables {
     fn test_undefined_variable_error() {
         let mut processor = TemplateProcessor::new();
 
-        let template = "Hello {{ undefined }}!";
+        let template = "Hello {{ undefined_var }}!";
         let result = processor.render_str(template);
 
         assert!(result.is_err());
+
+        // エラーメッセージに変数名が含まれていることを確認
+        let err = result.unwrap_err();
+        let err_msg = err.to_string();
+        assert!(
+            err_msg.contains("undefined_var"),
+            "エラーメッセージに変数名が含まれていません: {}",
+            err_msg
+        );
     }
 
     #[test]
