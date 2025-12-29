@@ -52,8 +52,8 @@ project/
 ├── stages/               # ステージ定義ディレクトリ
 │   ├── local.kdl         # 自動インポート
 │   ├── dev.kdl           # 自動インポート
-│   ├── stg.kdl           # 自動インポート
-│   └── prod.kdl          # 自動インポート
+│   ├── pre.kdl           # 自動インポート
+│   └── live.kdl          # 自動インポート
 │
 └── variables/            # 変数定義ディレクトリ（将来実装）
     ├── common.kdl        # 自動インポート
@@ -147,7 +147,7 @@ fn discover_files(project_root: PathBuf) -> Result<DiscoveredFiles> {
 5. services/redis.kdl
 6. stages/dev.kdl
 7. stages/local.kdl
-8. stages/prod.kdl
+8. stages/live.kdl
 ```
 
 ### FR-003: ルートファイル (flow.kdl) の役割
@@ -328,17 +328,17 @@ stage "dev" {
 ```
 
 ```kdl
-// stages/prod.kdl
-stage "prod" {
+// stages/live.kdl
+stage "live" {
     service "api"
     service "worker"
     service "postgres"
     service "redis"
-    
+
     variables {
         DEBUG "false"
         LOG_LEVEL "warn"
-        DATABASE_URL "postgresql://prod-db:5432/myapp"
+        DATABASE_URL "postgresql://live-db:5432/myapp"
     }
 }
 ```

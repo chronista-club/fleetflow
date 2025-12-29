@@ -184,7 +184,7 @@ flow mcp              # MCPサーバーを起動
 ### 環境変数プレフィックス
 - **プレフィックス**: `FLEETFLOW_`
 - **例**:
-  - `FLEET_STAGE`: ステージ名 (local/dev/stg/prod)
+  - `FLEET_STAGE`: ステージ名 (local/dev/pre/live)
   - `FLEETFLOW_PROJECT_ROOT`: プロジェクトルート
   - `FLEETFLOW_CONFIG_PATH`: 設定ファイルパス
 
@@ -298,7 +298,7 @@ service "web" {
 - コンテナ命名規則: `{project}-{stage}-{service}`
 
 #### 2. ステージ（環境）
-- `local`, `dev`, `staging`, `prod`など
+- `local`, `dev`, `pre`, `live`など
 - OrbStackグループ化のキー: `{project}-{stage}`
 
 #### 3. サービス

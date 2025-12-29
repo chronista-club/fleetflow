@@ -228,13 +228,13 @@ flow down
 **使用例**:
 ```bash
 # 全サービスをデプロイ（最新イメージを自動pull）
-flow deploy prod --yes
+flow deploy live --yes
 
 # 特定サービスのみデプロイ
-flow deploy prod --service db --yes
+flow deploy live --service db --yes
 
 # ローカルイメージを使用（pullスキップ）
-flow deploy prod --yes --no-pull
+flow deploy live --yes --no-pull
 ```
 
 #### FS-006: flow build - イメージビルド
@@ -283,11 +283,11 @@ flow build local
 # dev環境用: ghcr.ioにpush（linux/amd64）
 flow build dev --registry ghcr.io/myorg --push
 
-# prod環境用: 特定サービスのみビルド＆push
-flow build prod --registry ghcr.io/myorg --push --service api
+# live環境用: 特定サービスのみビルド＆push
+flow build live --registry ghcr.io/myorg --push --service api
 
 # キャッシュなしでリビルド
-flow build prod --registry ghcr.io/myorg --push --no-cache
+flow build live --registry ghcr.io/myorg --push --no-cache
 ```
 
 ### インターフェース仕様

@@ -299,14 +299,14 @@ stage "local" {
     service "mailhog"  // メールテスト用
 }
 
-// ステージング環境
-stage "staging" {
+// プレ本番環境
+stage "pre" {
     service "web"
     service "db"
 }
 
-// 本番環境
-stage "prod" {
+// ライブ環境
+stage "live" {
     service "web"
     service "db"
     service "cdn"
@@ -402,7 +402,7 @@ service "db" {
 ### 命名規則
 
 - プロジェクト名: 短く、ハイフン区切り（`my-app`）
-- ステージ名: 用途を表す（`local`, `staging`, `prod`）
+- ステージ名: 用途を表す（`local`, `dev`, `pre`, `live`）
 - サービス名: 役割を表す（`db`, `api`, `web`）
 
 ### ポート管理

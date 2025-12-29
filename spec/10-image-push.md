@@ -42,9 +42,9 @@ jobs:
       - name: Login to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
       - name: Build and Push
-        run: flow build --push --tag ${{ github.sha }} prod
+        run: flow build --push --tag ${{ github.sha }} live
       - name: Deploy
-        run: flow cloud up --stage prod
+        run: flow cloud up --stage live
 ```
 
 #### UC-2: 手動でのリリース
@@ -52,8 +52,8 @@ jobs:
 ```bash
 # ローカルからリリース
 docker login ghcr.io
-flow build --push --tag v1.2.0 prod
-flow cloud up --stage prod
+flow build --push --tag v1.2.0 live
+flow cloud up --stage live
 ```
 
 #### UC-3: 開発中のテストデプロイ
@@ -83,17 +83,17 @@ flow build [OPTIONS] [SERVICE] <STAGE>
 
 ```bash
 # ステージ内の全サービスをビルド＆プッシュ
-flow build --push prod
+flow build --push live
 
 # 特定サービスのみ
-flow build --push api prod
+flow build --push api live
 
 # タグを指定
-flow build --push --tag v1.2.0 prod
-flow build --push --tag abc123def prod
+flow build --push --tag v1.2.0 live
+flow build --push --tag abc123def live
 
 # キャッシュなしでビルド＆プッシュ
-flow build --push --no-cache prod
+flow build --push --no-cache live
 ```
 
 ### 2. タグ解決ルール
@@ -115,9 +115,9 @@ service "api" {
 
 | コマンド | プッシュされるイメージ |
 |---------|---------------------|
-| `flow build --push prod` | `ghcr.io/org/myapp:main` |
-| `flow build --push --tag v1.0 prod` | `ghcr.io/org/myapp:v1.0` |
-| `flow build --push --tag abc123 prod` | `ghcr.io/org/myapp:abc123` |
+| `flow build --push live` | `ghcr.io/org/myapp:main` |
+| `flow build --push --tag v1.0 live` | `ghcr.io/org/myapp:v1.0` |
+| `flow build --push --tag abc123 live` | `ghcr.io/org/myapp:abc123` |
 
 ### 3. レジストリ認証
 

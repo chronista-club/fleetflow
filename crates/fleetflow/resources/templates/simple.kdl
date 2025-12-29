@@ -7,7 +7,7 @@ stage "local" {
     }
 }
 
-stage "production" {
+stage "live" {
     service "postgres"
     variables {
         LOG_LEVEL "warn"

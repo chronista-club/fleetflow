@@ -36,15 +36,22 @@ impl McpServer {
     }
 
     pub async fn run(&mut self) -> Result<()> {
-        info!("Starting FleetFlow MCP server...");
+        eprintln!("[MCP DEBUG] Starting FleetFlow MCP server...");
+        eprintln!("[MCP DEBUG] Waiting for stdin...");
         let stdin = io::stdin();
         let mut reader = stdin.lock();
         let mut line = String::new();
 
+        eprintln!("[MCP DEBUG] Entering read loop...");
         while reader.read_line(&mut line)? > 0 {
+            eprintln!("[MCP DEBUG] Received line: {} bytes", line.len());
             let request: Value = match serde_json::from_str(&line) {
-                Ok(req) => req,
+                Ok(req) => {
+                    eprintln!("[MCP DEBUG] Parsed JSON successfully");
+                    req
+                }
                 Err(e) => {
+                    eprintln!("[MCP DEBUG] Failed to parse JSON: {}", e);
                     error!("Failed to parse JSON-RPC request: {}", e);
                     line.clear();
                     continue;
@@ -53,19 +60,26 @@ impl McpServer {
 
             // 通知（idがないリクエスト）はレスポンスを返さない
             if request.get("id").is_none() {
+                eprintln!("[MCP DEBUG] Notification (no id), skipping response");
                 line.clear();
                 continue;
             }
 
+            let method = request.get("method").and_then(|v| v.as_str()).unwrap_or("unknown");
+            eprintln!("[MCP DEBUG] Processing method: {}", method);
+
             let req_obj: JsonRpcRequest = serde_json::from_value(request)?;
             let response = self.handle_request(req_obj).await?;
             let response_json = serde_json::to_string(&response)?;
+            eprintln!("[MCP DEBUG] Sending response: {} bytes", response_json.len());
             println!("{}", response_json);
             io::stdout().flush()?;
+            eprintln!("[MCP DEBUG] Response sent and flushed");
 
             line.clear();
         }
 
+        eprintln!("[MCP DEBUG] Read loop ended (EOF or error)");
         Ok(())
     }
 

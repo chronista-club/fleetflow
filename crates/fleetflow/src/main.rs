@@ -3293,10 +3293,10 @@ async fn self_update() -> anyhow::Result<()> {
     let arch = std::env::consts::ARCH;
 
     let asset_name = match (os, arch) {
-        ("macos", "aarch64") => "fleetflow-darwin-arm64.tar.gz",
-        ("macos", "x86_64") => "fleetflow-darwin-amd64.tar.gz",
-        ("linux", "x86_64") => "fleetflow-linux-amd64.tar.gz",
-        ("linux", "aarch64") => "fleetflow-linux-arm64.tar.gz",
+        ("macos", "aarch64") => "fleetflow-darwin-aarch64.tar.gz",
+        ("macos", "x86_64") => "fleetflow-darwin-x86_64.tar.gz",
+        ("linux", "x86_64") => "fleetflow-linux-x86_64.tar.gz",
+        ("linux", "aarch64") => "fleetflow-linux-aarch64.tar.gz",
         _ => {
             return Err(anyhow::anyhow!(
                 "このプラットフォームはサポートされていません: {}-{}",

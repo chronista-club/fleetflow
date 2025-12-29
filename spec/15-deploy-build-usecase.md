@@ -15,8 +15,8 @@
 |----------|------|------|----------|
 | `local` | Mac | 手元開発 | ローカルビルド（pushしない） |
 | `dev` | クラウド | 常時 | `myapp-dev` |
-| `stg` | クラウド | オンデマンド | `myapp-stg` |
-| `prod` | クラウド | 常時 | `myapp-prod` |
+| `pre` | クラウド | オンデマンド | `myapp-pre` |
+| `live` | クラウド | 常時 | `myapp-live` |
 
 ### local vs dev の区別
 
@@ -33,8 +33,8 @@
 - **タグ**: `latest`（CI移行時に再検討）
 - **push先**: ghcr.io（クラウド向けのみ）
 - **イメージ分離**: リポジトリ名で環境を区別
-  - `ghcr.io/{owner}/{project}-prod`
-  - `ghcr.io/{owner}/{project}-stg`
+  - `ghcr.io/{owner}/{project}-live`
+  - `ghcr.io/{owner}/{project}-pre`
   - `ghcr.io/{owner}/{project}-dev`
 
 ### ビルドコマンドオプション
@@ -53,7 +53,7 @@
 | ステージ | プラットフォーム | buildx | push |
 |----------|-----------------|--------|------|
 | `local` | ネイティブ（arm64） | 使用しない | しない |
-| `dev`, `stg`, `prod` | linux/amd64 | 使用する | `--push`で指定 |
+| `dev`, `pre`, `live` | linux/amd64 | 使用する | `--push`で指定 |
 
 ### ビルド使用例
 
@@ -64,11 +64,11 @@ flow build local
 # dev環境用: ghcr.ioにpush（linux/amd64）
 flow build dev --registry ghcr.io/myorg --push
 
-# prod環境用: 特定サービスのみビルド＆push
-flow build prod --registry ghcr.io/myorg --push --service api
+# live環境用: 特定サービスのみビルド＆push
+flow build live --registry ghcr.io/myorg --push --service api
 
 # プラットフォーム明示（複数アーキテクチャ対応時）
-flow build prod --registry ghcr.io/myorg --platform linux/arm64 --push
+flow build live --registry ghcr.io/myorg --platform linux/arm64 --push
 ```
 
 ## デプロイ要件
@@ -96,13 +96,13 @@ flow build prod --registry ghcr.io/myorg --platform linux/arm64 --push
 
 ```bash
 # 全サービスをデプロイ（最新イメージを自動pull）
-flow deploy prod --yes
+flow deploy live --yes
 
 # 特定サービスのみデプロイ
-flow deploy prod --service db --yes
+flow deploy live --service db --yes
 
 # ローカルイメージを使用（pullスキップ）
-flow deploy prod --yes --no-pull
+flow deploy live --yes --no-pull
 ```
 
 ## 未実装・検討事項

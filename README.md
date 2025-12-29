@@ -126,7 +126,7 @@ service "db" {
 ├── .env           # グローバル（共通）
 ├── .env.local     # local 固有
 ├── .env.dev       # dev 固有
-└── .env.prod      # prod 固有
+└── .env.live      # live 固有
 ```
 
 ---

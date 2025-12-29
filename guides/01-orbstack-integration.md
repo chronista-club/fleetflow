@@ -237,8 +237,8 @@ project "my-awesome-super-long-project-name"
 // 推奨されるステージ名
 stage "local"      // ローカル開発
 stage "dev"        // 開発環境
-stage "staging"    // ステージング
-stage "prod"       // 本番環境
+stage "pre"        // プレ本番（リハーサル）
+stage "live"       // ライブ環境（開演）
 ```
 
 ### 3. ポート範囲の割り当て

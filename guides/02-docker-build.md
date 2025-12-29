@@ -147,7 +147,7 @@ stage "local" {
     service "api"
 }
 
-stage "prod" {
+stage "live" {
     variables {
         APP_ENV "production"
         DEBUG "false"
@@ -170,8 +170,8 @@ service "api" {
 flow up local
 # → APP_ENV=development, DEBUG=true
 
-# 本番環境でビルド・起動
-flow up prod
+# ライブ環境でビルド・起動
+flow up live
 # → APP_ENV=production, DEBUG=false
 ```
 
@@ -207,7 +207,7 @@ stage "local" {
     service "api"
 }
 
-stage "prod" {
+stage "live" {
     service "api"
 }
 
@@ -228,8 +228,8 @@ stage "local" {
     service "api-dev"
 }
 
-stage "prod" {
-    service "api-prod"
+stage "live" {
+    service "api-live"
 }
 
 service "api-dev" {
@@ -245,7 +245,7 @@ service "api-dev" {
     }
 }
 
-service "api-prod" {
+service "api-live" {
     dockerfile "./Dockerfile"
     target "production"
 
@@ -827,10 +827,10 @@ service "backend" {
 
 ```bash
 # ghcr.io にプッシュ
-flow build api prod --push --registry ghcr.io/myorg --tag v1.0.0
+flow build api live --push --registry ghcr.io/myorg --tag v1.0.0
 
 # プラットフォームも指定（ARM Mac から x86 イメージを作成）
-flow build api prod --push --registry ghcr.io/myorg --platform linux/amd64
+flow build api live --push --registry ghcr.io/myorg --platform linux/amd64
 ```
 
 ### 2. KDL でレジストリを設定
@@ -844,7 +844,7 @@ project "myapp"
 // プロジェクト全体のデフォルトレジストリ
 registry "ghcr.io/myorg"
 
-stage "prod" {
+stage "live" {
     service "api"
     service "worker"
 }
@@ -860,9 +860,9 @@ stage "dev" {
     service "api"
 }
 
-stage "prod" {
-    // 本番環境用レジストリ
-    registry "ghcr.io/prod-org"
+stage "live" {
+    // ライブ環境用レジストリ
+    registry "ghcr.io/live-org"
     service "api"
 }
 ```
@@ -874,7 +874,7 @@ project "myapp"
 // プロジェクトデフォルト
 registry "ghcr.io/myorg"
 
-stage "prod" {
+stage "live" {
     service "api"
     service "db"
 }
@@ -898,7 +898,7 @@ project "vantage"
 // 自社サービスのデフォルトレジストリ
 registry "ghcr.io/vantage-hub"
 
-stage "prod" {
+stage "live" {
     service "api"       // ghcr.io/vantage-hub からビルド・プッシュ
     service "surrealdb" // Docker Hub から取得（registryなし）
     service "redis"     // Docker Hub から取得（registryなし）
@@ -949,7 +949,7 @@ GitHub Actions での例:
 
 - name: Build and push
   run: |
-    flow build api prod --push --tag ${{ github.sha }}
+    flow build api live --push --tag ${{ github.sha }}
 ```
 
 ## 次のステップ

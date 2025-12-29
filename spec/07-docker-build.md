@@ -275,8 +275,8 @@ stage "dev" {
     service "api"
 }
 
-stage "prod" {
-    registry "ghcr.io/prod-org"
+stage "live" {
+    registry "ghcr.io/live-org"
     service "api"
 }
 ```
@@ -303,7 +303,7 @@ service "db" {
 
 ```bash
 # CLI引数が最優先
-flow build api prod --registry ghcr.io/override
+flow build api live --registry ghcr.io/override
 ```
 
 ### 7. ビルドターゲット（マルチステージビルド対応）
@@ -435,8 +435,8 @@ stage "local" {
     service "worker"
 }
 
-// 本番環境
-stage "prod" {
+// ライブ環境
+stage "live" {
     variables {
         APP_ENV "production"
         DEBUG "false"

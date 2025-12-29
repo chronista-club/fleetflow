@@ -43,7 +43,7 @@ stage "local" {
     service "web"
 }
 
-stage "prod" {
+stage "live" {
     service "db"
     service "redis"
     service "web"
@@ -369,7 +369,7 @@ stage "local" {
     service "web"
 }
 
-stage "prod" {
+stage "live" {
     service "db"
     service "redis"
     service "web"

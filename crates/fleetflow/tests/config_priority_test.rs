@@ -34,11 +34,11 @@ service "db" {
 "#,
     );
 
-    // 3. flow.prod.kdl (ステージ固有)
+    // 3. flow.live.kdl (ステージ固有)
     fs::write(
-        project.path().join("flow.prod.kdl"),
+        project.path().join("flow.live.kdl"),
         r#"
-stage "prod" {
+stage "live" {
     service "db"
 }
 

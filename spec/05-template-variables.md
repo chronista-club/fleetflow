@@ -201,7 +201,7 @@ variables {
     services ["api", "worker", "scheduler"]
 }
 
-stage "production" {
+stage "live" {
     // for: リストをループ
     {% for service in services %}
     service "{{ service }}"
@@ -212,7 +212,7 @@ stage "production" {
 **展開後**:
 
 ```kdl
-stage "production" {
+stage "live" {
     service "api"
     service "worker"
     service "scheduler"
@@ -229,13 +229,13 @@ variables {
     enable_scheduler false
 }
 
-stage "production" {
+stage "live" {
     service "api"
-    
+
     {% if enable_worker %}
     service "worker"
     {% endif %}
-    
+
     {% if enable_scheduler %}
     service "scheduler"
     {% endif %}
@@ -245,7 +245,7 @@ stage "production" {
 **展開後**:
 
 ```kdl
-stage "production" {
+stage "live" {
     service "api"
     service "worker"
 }
@@ -275,13 +275,13 @@ service "api" {
 
 ```kdl
 variables {
-    environment "staging"
+    environment "pre"
 }
 
 service "api" {
-    {% if environment == "production" %}
+    {% if environment == "live" %}
     replicas 3
-    {% elif environment == "staging" %}
+    {% elif environment == "pre" %}
     replicas 2
     {% else %}
     replicas 1
@@ -436,7 +436,7 @@ project/
 │
 ├── variables/            # 変数定義を分離
 │   ├── common.kdl        # 共通変数
-│   ├── production.kdl    # 本番環境用変数
+│   ├── live.kdl          # ライブ環境用変数
 │   └── development.kdl   # 開発環境用変数
 │
 ├── services/             # サービス定義（テンプレート使用）
@@ -445,7 +445,7 @@ project/
 │
 └── stages/               # ステージ定義（テンプレート使用）
     ├── local.kdl
-    └── prod.kdl
+    └── live.kdl
 ```
 
 ### 例: 環境ごとの変数管理
@@ -465,7 +465,7 @@ variables {
     replicas 1
 }
 
-// variables/production.kdl
+// variables/live.kdl
 variables {
     debug "false"
     log_level "warn"
@@ -661,15 +661,15 @@ variables {
     environment env("ENV", default="local")
     replicas_map {
         local 1
-        staging 2
-        production 5
+        pre 2
+        live 5
     }
 }
 
 service "api" {
     {% if environment == "local" %}
     replicas 1
-    {% elif environment == "staging" %}
+    {% elif environment == "pre" %}
     replicas 2
     {% else %}
     replicas 5

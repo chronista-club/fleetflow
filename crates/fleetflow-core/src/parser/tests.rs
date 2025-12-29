@@ -189,7 +189,7 @@ fn test_parse_stage() {
         service "db" { image "postgres:16" }
         service "redis" { image "redis:7" }
 
-        stage "production" {
+        stage "live" {
             service "api"
             service "db"
             service "redis"
@@ -203,7 +203,7 @@ fn test_parse_stage() {
     let flow = parse_kdl_string(kdl, "test".to_string()).unwrap();
     assert_eq!(flow.stages.len(), 1);
 
-    let stage = &flow.stages["production"];
+    let stage = &flow.stages["live"];
     assert_eq!(stage.services.len(), 3);
     assert!(stage.services.contains(&"api".to_string()));
 
@@ -230,7 +230,7 @@ fn test_parse_multiple_services_and_stages() {
             service "db"
         }
 
-        stage "prod" {
+        stage "live" {
             service "api"
             service "db"
         }
@@ -440,14 +440,14 @@ fn test_parse_stage_with_servers() {
     let kdl = r#"
         service "api" { image "node:20" }
 
-        stage "production" {
+        stage "live" {
             server "vps-01"
             service "api"
         }
     "#;
 
     let flow = parse_kdl_string(kdl, "test".to_string()).unwrap();
-    let stage = &flow.stages["production"];
+    let stage = &flow.stages["live"];
 
     assert_eq!(stage.servers.len(), 1);
     assert!(stage.servers.contains(&"vps-01".to_string()));
@@ -474,7 +474,7 @@ fn test_parse_full_cloud_config() {
             version "latest"
         }
 
-        stage "production" {
+        stage "live" {
             server "creo-vps"
             service "surrealdb"
         }
@@ -488,7 +488,7 @@ fn test_parse_full_cloud_config() {
     assert_eq!(flow.services.len(), 1);
     assert_eq!(flow.stages.len(), 1);
 
-    let stage = &flow.stages["production"];
+    let stage = &flow.stages["live"];
     assert_eq!(stage.servers.len(), 1);
     assert_eq!(stage.services.len(), 1);
 }

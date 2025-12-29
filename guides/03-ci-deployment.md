@@ -49,10 +49,10 @@ jobs:
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
       - name: Build and Push
-        run: flow build prod --push --tag ${{ github.sha }}
+        run: flow build live --push --tag ${{ github.sha }}
 
-      - name: Deploy to Production
-        run: flow cloud up --stage prod --yes
+      - name: Deploy to Live
+        run: flow cloud up --stage live --yes
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
@@ -90,21 +90,21 @@ jobs:
         run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
       - name: Build and Push
-        run: flow build prod --push --tag ${{ steps.version.outputs.VERSION }}
+        run: flow build live --push --tag ${{ steps.version.outputs.VERSION }}
 ```
 
-### ステージング → 本番のフロー
+### プレ → ライブのフロー
 
 ```yaml
-# .github/workflows/staging.yml
-name: Deploy to Staging
+# .github/workflows/pre.yml
+name: Deploy to Pre
 
 on:
   push:
     branches: [develop]
 
 jobs:
-  deploy-staging:
+  deploy-pre:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -113,14 +113,14 @@ jobs:
       - name: Login to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
       - name: Build and Push
-        run: flow build staging --push --tag staging-${{ github.sha }}
+        run: flow build pre --push --tag pre-${{ github.sha }}
       - name: Deploy
-        run: flow cloud up --stage staging --yes
+        run: flow cloud up --stage pre --yes
 ```
 
 ```yaml
-# .github/workflows/production.yml
-name: Deploy to Production
+# .github/workflows/live.yml
+name: Deploy to Live
 
 on:
   workflow_dispatch:
@@ -130,14 +130,14 @@ on:
         required: true
 
 jobs:
-  deploy-production:
+  deploy-live:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Install FleetFlow
         run: cargo install --git https://github.com/chronista-club/fleetflow
       - name: Deploy
-        run: flow cloud up --stage prod --yes
+        run: flow cloud up --stage live --yes
         env:
           IMAGE_TAG: ${{ github.event.inputs.tag }}
 ```
@@ -149,14 +149,14 @@ jobs:
 ```kdl
 project "myapp"
 
-// ステージング環境
-stage "staging" {
+// プレ環境
+stage "pre" {
     service "api"
     service "worker"
 }
 
-// 本番環境
-stage "prod" {
+// ライブ環境
+stage "live" {
     service "api"
     service "worker"
 }
@@ -198,7 +198,7 @@ providers {
     cloudflare { account-id env="CF_ACCOUNT_ID" }
 }
 
-stage "prod" {
+stage "live" {
     server "app-server" {
         provider "sakura-cloud"
         plan core=4 memory=8
@@ -230,20 +230,20 @@ service "worker" {
 docker login ghcr.io
 
 # 2. ビルド & プッシュ
-flow build prod --push --tag v1.2.0
+flow build live --push --tag v1.2.0
 
-# 3. 本番にデプロイ
-flow cloud up --stage prod
+# 3. ライブにデプロイ
+flow cloud up --stage live
 ```
 
 ### 特定サービスのみ更新
 
 ```bash
 # APIサービスのみビルド & プッシュ
-flow build prod -n api --push --tag v1.2.1
+flow build live -n api --push --tag v1.2.1
 
-# 本番サーバーでAPIのみ再起動
-flow cloud restart api --stage prod
+# ライブサーバーでAPIのみ再起動
+flow cloud restart api --stage live
 ```
 
 ## ベストプラクティス
@@ -253,8 +253,8 @@ flow cloud restart api --stage prod
 | 環境 | タグ形式 | 例 |
 |------|---------|-----|
 | 開発 | `dev-{commit}` | `dev-abc123` |
-| ステージング | `staging-{commit}` | `staging-abc123` |
-| 本番 | `v{version}` | `v1.2.0` |
+| プレ | `pre-{commit}` | `pre-abc123` |
+| ライブ | `v{version}` | `v1.2.0` |
 
 ### 2. シークレット管理
 
@@ -316,7 +316,7 @@ service "api" {
 ### デプロイ後にサービスが起動しない
 
 **確認手順**:
-1. `flow logs --stage prod` でログを確認
+1. `flow logs --stage live` でログを確認
 2. イメージタグが正しいか確認
 3. 環境変数が設定されているか確認
 

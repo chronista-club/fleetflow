@@ -120,7 +120,7 @@ stage "local" {
     service "app"
 }
 
-stage "production" {
+stage "live" {
     service "postgres"
     service "redis"
 }

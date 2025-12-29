@@ -137,7 +137,7 @@ flowchart TB
     subgraph "ステージ"
         L[stage "local"]
         D[stage "dev"]
-        PR[stage "prod"]
+        LIVE[stage "live"]
     end
 
     subgraph "サービス定義"
@@ -148,7 +148,7 @@ flowchart TB
 
     P --> L
     P --> D
-    P --> PR
+    P --> LIVE
 
     L --> |"service"| DB
     L --> |"service"| API
@@ -157,9 +157,9 @@ flowchart TB
     D --> |"service"| DB
     D --> |"service"| API
 
-    PR --> |"service"| DB
-    PR --> |"service"| API
-    PR --> |"service"| REDIS
+    LIVE --> |"service"| DB
+    LIVE --> |"service"| API
+    LIVE --> |"service"| REDIS
 ```
 
 ## 依存関係とExponential Backoff
@@ -222,7 +222,7 @@ graph TB
         CF[cloudflare]
     end
 
-    subgraph "stage 'prod'"
+    subgraph "stage 'live'"
         SRV[server "app-server"]
         R2[r2-bucket "assets"]
         DNS[dns "example.com"]

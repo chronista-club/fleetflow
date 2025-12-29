@@ -67,7 +67,7 @@ FleetFlowにOrbStackとの連携機能を実装し、ローカル開発環境に
 **例**:
 - `vantage-local-surrealdb`
 - `vantage-dev-qdrant`
-- `estatebox-prod-api`
+- `estatebox-live-api`
 - `fleetflow-local-postgres`
 
 **利点**:

@@ -60,7 +60,7 @@ fleetflow
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DnsRecord {
     pub id: String,           // Cloudflare record ID
-    pub name: String,         // 完全なサブドメイン (mcp-prod.example.com)
+    pub name: String,         // 完全なサブドメイン (mcp-live.example.com)
     pub content: String,      // IPアドレス or CNAME target
     pub record_type: String,  // "A" or "CNAME"
     pub proxied: bool,        // false (DNS Only)
@@ -136,7 +136,7 @@ Authorization: Bearer {CLOUDFLARE_API_TOKEN}
 POST /zones/{zone_id}/dns_records
 {
   "type": "A",
-  "name": "mcp-prod",
+  "name": "mcp-live",
   "content": "203.0.113.1",
   "ttl": 1,
   "proxied": false
@@ -151,7 +151,7 @@ POST /zones/{zone_id}/dns_records
   "result": {
     "id": "372e67954025e0ba6aaa6d586b9e0b59",
     "type": "A",
-    "name": "mcp-prod.example.com",
+    "name": "mcp-live.example.com",
     "content": "203.0.113.1",
     "proxied": false,
     "ttl": 1
@@ -346,9 +346,9 @@ fn test_generate_subdomain() {
     };
     let manager = CloudDnsManager::new(config);
 
-    assert_eq!(manager.generate_subdomain("creo-mcp-server", "prod"), "mcp-prod");
+    assert_eq!(manager.generate_subdomain("creo-mcp-server", "live"), "mcp-live");
     assert_eq!(manager.generate_subdomain("creo-api-server", "dev"), "api-dev");
-    assert_eq!(manager.generate_subdomain("creo-memory-viewer", "prod"), "memory-prod");
+    assert_eq!(manager.generate_subdomain("creo-memory-viewer", "live"), "memory-live");
 }
 ```
 

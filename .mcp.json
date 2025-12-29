@@ -4,12 +4,6 @@
       "type": "http",
       "url": "https://mcp.creo-memories.in"
     },
-    "fleetflow": {
-      "type": "stdio",
-      "command": "fleetflow",
-      "args": ["mcp"],
-      "cwd": "/Users/makoto/repos/fleetflow"
-    },
     "surrealdbmcp": {
       "command": "docker",
       "args": [
@@ -32,8 +26,16 @@
         "--context",
         "ide-assistant",
         "--project",
-        "$(pwd)"
+        "$(pwd)",
+        "--enable-web-dashboard",
+        "false"
       ],
+      "env": {}
+    },
+    "fleetflow": {
+      "type": "stdio",
+      "command": "/Users/makoto/repos/fleetflow/target/release/flow",
+      "args": ["mcp"],
       "env": {}
     }
   }

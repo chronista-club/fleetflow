@@ -28,13 +28,13 @@ Playbookとして宣言的に定義し、`flow play <env>/<name>` で一括実�
 
 ```
 playbooks/
-├── prod/                     # 本番環境用
+├── live/                     # ライブ環境用
 │   ├── update-apps.kdl       # 慎重にローリング更新
 │   ├── maintenance-in.kdl
 │   ├── maintenance-out.kdl
 │   └── deploy.kdl
-├── stg/                      # ステージング環境用
-│   ├── update-apps.kdl       # prodと同じ手順でテスト
+├── pre/                      # プレ本番環境用
+│   ├── update-apps.kdl       # liveと同じ手順でテスト
 │   └── deploy.kdl
 └── dev/                      # 開発環境用
     ├── reset-all.kdl         # 全部消して作り直し
@@ -43,8 +43,8 @@ playbooks/
 
 ### ルール: ディレクトリ名 = ステージ名
 
-- `playbooks/prod/` 内のplaybookは `stage "prod"` に対して実行される
-- `playbooks/stg/` 内のplaybookは `stage "stg"` に対して実行される
+- `playbooks/live/` 内のplaybookは `stage "live"` に対して実行される
+- `playbooks/pre/` 内のplaybookは `stage "pre"` に対して実行される
 - ディレクトリ名と `flow.kdl` のステージ定義が一致している必要がある
 - 環境をまたぐ共通playbookは設けない（シンプルさ優先）
 
@@ -57,8 +57,8 @@ playbooks/
 flow play <env>/<playbook-name> [OPTIONS]
 
 # 例
-flow play prod/update-apps
-flow play stg/deploy
+flow play live/update-apps
+flow play pre/deploy
 flow play dev/reset-all
 flow play common/healthcheck
 ```
@@ -81,13 +81,13 @@ flow play --list
 ```
 Available playbooks:
 
-prod/
+live/
   update-apps       アプリケーションを順次更新
   maintenance-in    メンテナンスモード開始
   maintenance-out   メンテナンスモード終了
   deploy            全サービスをデプロイ
 
-stg/
+pre/
   update-apps       アプリケーションを順次更新
   deploy            全サービスをデプロイ
 
@@ -100,7 +100,7 @@ dev/
 ### 基本構造
 
 ```kdl
-// playbooks/prod/update-apps.kdl
+// playbooks/live/update-apps.kdl
 playbook "update-apps" {
     description "アプリケーションサービスを順次更新"
 
@@ -142,7 +142,7 @@ strategy "parallel"
 ### 環境別の違いの例
 
 ```kdl
-// playbooks/prod/update-apps.kdl - 本番は慎重に
+// playbooks/live/update-apps.kdl - ライブは慎重に
 playbook "update-apps" {
     services "creo-mcp-server" "creo-app-server"
 
@@ -171,14 +171,14 @@ playbook "update-apps" {
 ## 5. 実行フロー
 
 ```
-flow play prod/update-apps
+flow play live/update-apps
     │
-    ├─ 1. playbooks/prod/update-apps.kdl をロード
+    ├─ 1. playbooks/live/update-apps.kdl をロード
     │
-    ├─ 2. 対象ステージを "prod" に自動設定
+    ├─ 2. 対象ステージを "live" に自動設定
     │
     ├─ 3. 実行計画を表示
-    │      > Environment: prod
+    │      > Environment: live
     │      > Playbook: update-apps
     │      > Services: creo-mcp-server, creo-app-server
     │      > Strategy: rolling (delay: 10s, healthcheck: true)
@@ -195,7 +195,7 @@ flow play prod/update-apps
     │      > [2/2] creo-app-server: healthy ✓
     │
     └─ 5. 完了
-           > Playbook 'prod/update-apps' completed successfully.
+           > Playbook 'live/update-apps' completed successfully.
 ```
 
 ## 6. 実装フェーズ

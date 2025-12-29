@@ -24,7 +24,7 @@ FleetFlowは、KDL（KDL Document Language）をベースにしたコンテナ�
 |------|------|
 | 超シンプル | Docker Composeと同等以下の記述量 |
 | 可読性 | YAMLより読みやすいKDL構文 |
-| ステージ管理 | local/dev/stg/prod を統一管理 |
+| ステージ管理 | local/dev/pre/live を統一管理 |
 | OrbStack連携 | macOSローカル開発に最適化 |
 | Dockerビルド | Dockerfileからのビルドをサポート |
 | イメージプッシュ | ビルド後のレジストリプッシュを自動化 |
@@ -81,7 +81,7 @@ flow down -s local     # 停止・削除
 
 | 変数 | 説明 |
 |------|------|
-| `FLEET_STAGE` | ステージ名を指定（local, dev, stg, prod） |
+| `FLEET_STAGE` | ステージ名を指定（local, dev, pre, live） |
 | `FLEETFLOW_CONFIG_PATH` | 設定ファイルの直接パス指定 |
 | `CLOUDFLARE_API_TOKEN` | Cloudflare APIトークン（DNS自動管理用） |
 | `CLOUDFLARE_ZONE_ID` | Cloudflare Zone ID（DNS自動管理用） |
@@ -350,13 +350,13 @@ CI/CDパイプラインからの自動デプロイに最適化されたコマン
 
 ```bash
 # 基本的な使い方（デフォルトでpull）
-flow deploy -s prod --yes
+flow deploy -s live --yes
 
 # pullをスキップ
-flow deploy -s prod --no-pull --yes
+flow deploy -s live --no-pull --yes
 
 # GitHub Actionsから
-ssh user@vps "cd /app && flow deploy -s prod --yes"
+ssh user@vps "cd /app && flow deploy -s live --yes"
 ```
 
 **オプション:**

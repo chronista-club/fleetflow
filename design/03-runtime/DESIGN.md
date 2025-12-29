@@ -28,7 +28,7 @@ flow up --stage=local
 ```bash
 # Kubernetes環境
 flow up --stage=dev    # 開発クラスタ
-flow up --stage=stg    # ステージングクラスタ
+flow up --stage=pre    # プレ本番クラスタ
 ```
 
 - **ランタイム**: containerd/CRI-O
@@ -43,7 +43,7 @@ flow up --stage=stg    # ステージングクラスタ
 
 ```bash
 # Cloud Run環境
-flow up --stage=prd    # 本番環境
+flow up --stage=live   # ライブ環境
 ```
 
 - **ランタイム**: gVisor (軽量コンテナサンドボックス)
@@ -102,20 +102,20 @@ stage "dev" {
     }
 }
 
-// stg: ステージング (Kubernetes)
-stage "stg" {
+// pre: プレ本番 (Kubernetes)
+stage "pre" {
     service "postgres"
     service "redis"
     service "api"
     variables {
         RUNTIME "kubernetes"
-        NAMESPACE "stg"
+        NAMESPACE "pre"
         DEBUG "false"
     }
 }
 
-// prd: 本番 (Cloud Run)
-stage "prd" {
+// live: ライブ (Cloud Run)
+stage "live" {
     service "api"  // ステートレス
     variables {
         RUNTIME "cloudrun"

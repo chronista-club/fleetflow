@@ -27,7 +27,7 @@ FleetFlowのCLIコマンド一覧と詳細な使い方です。
 
 | 変数 | 説明 |
 |------|------|
-| `FLEET_STAGE` | ステージ名を指定（local, dev, stg, prod） |
+| `FLEET_STAGE` | ステージ名を指定（local, dev, pre, live） |
 | `FLEETFLOW_CONFIG_PATH` | 設定ファイルの直接パス指定 |
 | `CLOUDFLARE_API_TOKEN` | Cloudflare APIトークン（DNS自動管理用） |
 | `CLOUDFLARE_ZONE_ID` | Cloudflare Zone ID（DNS自動管理用） |
@@ -92,8 +92,8 @@ CI/CDパイプラインからの自動デプロイに最適化されたコマン
 
 ```bash
 flow deploy -s <stage> --yes
-flow deploy -s prod --yes           # 確認なしでデプロイ
-flow deploy -s prod --no-pull --yes # pullをスキップ
+flow deploy -s live --yes           # 確認なしでデプロイ
+flow deploy -s live --no-pull --yes # pullをスキップ
 ```
 
 **オプション**:
@@ -304,7 +304,7 @@ Playbookを実行します。リモートサーバーでのサービス起動な
 
 ```bash
 flow play <playbook>
-flow play deploy-prod.kdl
+flow play deploy-live.kdl
 ```
 
 ### `flow cloud`

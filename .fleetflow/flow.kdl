@@ -25,9 +25,9 @@ stage "dev" {
     }
 }
 
-// 本番環境 (Production)
+// ライブ環境 (Live)
 // ポート範囲: 52000台
-stage "prod" {
+stage "live" {
     service "db" {
         ports {
             port host=52001 container=8000

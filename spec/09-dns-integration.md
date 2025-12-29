@@ -23,9 +23,9 @@ FleetFlowの`cloud up`/`cloud down`コマンドにCloudflare DNS自動管理機�
 
 | サービス | ステージ | ドメイン | サブドメイン |
 |----------|---------|---------|-------------|
-| creo-mcp-server | prod | example.com | `mcp-prod.example.com` |
+| creo-mcp-server | live | example.com | `mcp-live.example.com` |
 | creo-mcp-server | dev | example.com | `mcp-dev.example.com` |
-| creo-api-server | prod | example.com | `api-prod.example.com` |
+| creo-api-server | live | example.com | `api-live.example.com` |
 
 ### サービス名変換ルール
 
@@ -60,7 +60,7 @@ APIトークンは https://dash.cloudflare.com/profile/api-tokens で作成。
 ### cloud up
 
 ```bash
-flow cloud up --stage prod --yes
+flow cloud up --stage live --yes
 ```
 
 1. クラウドプロバイダーでサーバー作成
@@ -72,7 +72,7 @@ flow cloud up --stage prod --yes
 ### cloud down
 
 ```bash
-flow cloud down --stage prod --yes
+flow cloud down --stage live --yes
 ```
 
 1. SSH接続してコンテナ停止
@@ -148,13 +148,13 @@ provider "sakura-cloud" {
     zone "tk1a"
 }
 
-// 本番サーバー
+// ライブサーバー
 server "creo-vps" {
     provider "sakura-cloud"
     plan "4core-8gb"
 
     dns {
-        hostname "vps-prod"
+        hostname "vps-live"
         aliases "app"
     }
 }
@@ -170,7 +170,7 @@ server "creo-dev" {
     }
 }
 
-stage "prod" {
+stage "live" {
     server "creo-vps"
 }
 
@@ -179,9 +179,9 @@ stage "dev" {
 }
 ```
 
-結果（prod）:
-- `vps-prod.creo-memories.in` (A/AAAA) → サーバーIP
-- `app.creo-memories.in` (CNAME) → `vps-prod.creo-memories.in`
+結果（live）:
+- `vps-live.creo-memories.in` (A/AAAA) → サーバーIP
+- `app.creo-memories.in` (CNAME) → `vps-live.creo-memories.in`
 
 結果（dev）:
 - `dev.creo-memories.in` (A/AAAA) → サーバーIP

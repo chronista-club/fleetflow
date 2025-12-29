@@ -12,7 +12,7 @@ Creo Memoriesは、AIエージェント向けのメモリシステムです。Su
 creo-memories/
 ├── .fleetflow/
 │   ├── flow.kdl         # メイン設定（ステージの宣言）
-│   ├── flow.prod.kdl    # 本番用オーバーライド
+│   ├── flow.live.kdl    # ライブ環境用オーバーライド
 │   └── services/        # 論理的な役割ごとのサービス定義
 │       ├── storage.kdl  # DB群
 │       ├── apps.kdl     # アプリ群
@@ -30,7 +30,7 @@ creo-memories/
 macOS上の OrbStack を `provider "orbstack"` として定義し、自分のマシンを `server "mito-mac.local"` のように具現化します。これにより、ローカル開発も「サーバーへのデプロイ」と同じメンタルモデルで扱えます。
 
 ### 3. ステージの統合 (Simplified Stages)
-`local` と `dev` で迷う必要はありません。自分のマシン（サーバー）で動かす環境を `dev`、本番 VPS で動かす環境を `prod` の 2 つに統合します。
+`local` と `dev` で迷う必要はありません。自分のマシン（サーバー）で動かす環境を `dev`、VPS で動かすライブ環境を `live` の 2 つに統合します。
 
 ---
 
@@ -64,7 +64,7 @@ stage "dev" {
     service "seaweedfs"
 }
 
-stage "prod" {
+stage "live" {
     server "creo-vps"
     // 全サービスを起動
     service "surrealdb"
