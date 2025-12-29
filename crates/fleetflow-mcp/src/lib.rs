@@ -65,13 +65,19 @@ impl McpServer {
                 continue;
             }
 
-            let method = request.get("method").and_then(|v| v.as_str()).unwrap_or("unknown");
+            let method = request
+                .get("method")
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown");
             eprintln!("[MCP DEBUG] Processing method: {}", method);
 
             let req_obj: JsonRpcRequest = serde_json::from_value(request)?;
             let response = self.handle_request(req_obj).await?;
             let response_json = serde_json::to_string(&response)?;
-            eprintln!("[MCP DEBUG] Sending response: {} bytes", response_json.len());
+            eprintln!(
+                "[MCP DEBUG] Sending response: {} bytes",
+                response_json.len()
+            );
             println!("{}", response_json);
             io::stdout().flush()?;
             eprintln!("[MCP DEBUG] Response sent and flushed");
