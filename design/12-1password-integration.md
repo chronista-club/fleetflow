@@ -2,23 +2,31 @@
 
 ## アーキテクチャ概要
 
+```mermaid
+flowchart TB
+    subgraph CLI["fleet up / fleet env"]
+        A[KDL Parser] --> B[Service]
+        B --> C[SecretResolver]
+    end
+
+    subgraph SecretResolver
+        C --> D{op:// 検出}
+        D -->|Yes| E[op read 実行]
+        D -->|No| F[値をそのまま使用]
+        E --> G[解決済み環境変数]
+        F --> G
+    end
+
+    subgraph External["外部"]
+        E <--> H[1Password CLI]
+        H <--> I[(1Password Vault)]
+    end
+
+    G --> J[Container Runtime]
+    J --> K[Docker / OrbStack]
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                        fleet up                              │
-├─────────────────────────────────────────────────────────────┤
-│  KDL Parser                                                  │
-│    ↓                                                         │
-│  Service { environment: HashMap<String, String> }            │
-│    ↓                                                         │
-│  SecretResolver                                              │
-│    ├── op:// 検出                                            │
-│    ├── op read 実行                                          │
-│    ├── キャッシュ参照/更新                                    │
-│    └── 解決済み環境変数を返却                                 │
-│    ↓                                                         │
-│  Container Runtime (bollard)                                 │
-└─────────────────────────────────────────────────────────────┘
-```
+
+**設計方針**: キャッシュは行わない。常に1Passwordから最新値を取得し、値の不整合による混乱を防ぐ。
 
 ## モジュール構成
 
@@ -31,7 +39,6 @@ crates/fleetflow-secrets/
     ├── lib.rs
     ├── resolver.rs      # SecretResolver
     ├── onepassword.rs   # 1Password CLI連携
-    ├── cache.rs         # キャッシュ管理
     └── error.rs         # エラー型
 ```
 
@@ -56,28 +63,26 @@ fleetflow (CLI)
 use std::collections::HashMap;
 
 pub struct SecretResolver {
-    cache: SecretsCache,
     onepassword: OnePasswordCli,
 }
 
 impl SecretResolver {
     pub fn new() -> Result<Self, SecretError> {
         Ok(Self {
-            cache: SecretsCache::load_or_default()?,
             onepassword: OnePasswordCli::new()?,
         })
     }
 
     /// 環境変数マップ内のop://参照を解決
     pub async fn resolve_environment(
-        &mut self,
+        &self,
         env: &HashMap<String, String>,
     ) -> Result<HashMap<String, String>, SecretError> {
         let mut resolved = HashMap::new();
 
         for (key, value) in env {
             let resolved_value = if value.starts_with("op://") {
-                self.resolve_secret(value).await?
+                self.onepassword.read(value).await?
             } else {
                 value.clone()
             };
@@ -85,25 +90,6 @@ impl SecretResolver {
         }
 
         Ok(resolved)
-    }
-
-    /// 単一のop://参照を解決
-    async fn resolve_secret(&mut self, reference: &str) -> Result<String, SecretError> {
-        // 1. op read を試行
-        match self.onepassword.read(reference).await {
-            Ok(value) => {
-                // 成功時はキャッシュ更新
-                self.cache.update(reference, &value)?;
-                Ok(value)
-            }
-            Err(e) if e.is_network_error() => {
-                // ネットワークエラー時はキャッシュフォールバック
-                self.cache
-                    .get(reference)
-                    .ok_or(SecretError::CacheMiss(reference.to_string()))
-            }
-            Err(e) => Err(e),
-        }
     }
 
     /// 参照の有効性のみチェック（値は取得しない）
@@ -192,122 +178,7 @@ impl OnePasswordCli {
 }
 ```
 
-### 3. SecretsCache
-
-フォールバック用キャッシュ管理。
-
-```rust
-// crates/fleetflow-secrets/src/cache.rs
-
-use std::collections::HashMap;
-use std::path::PathBuf;
-use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc};
-
-const CACHE_FILE: &str = ".fleetflow/secrets-cache.json";
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct SecretsCache {
-    version: u32,
-    updated_at: DateTime<Utc>,
-    #[serde(default)]
-    secrets: HashMap<String, CachedSecret>,
-    #[serde(skip)]
-    path: PathBuf,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct CachedSecret {
-    /// 暗号化された値（平文は保存しない）
-    encrypted_value: String,
-    cached_at: DateTime<Utc>,
-}
-
-impl SecretsCache {
-    /// キャッシュファイルを読み込み、なければ新規作成
-    pub fn load_or_default() -> Result<Self, SecretError> {
-        let path = Self::cache_path()?;
-
-        if path.exists() {
-            let content = std::fs::read_to_string(&path)?;
-            let mut cache: Self = serde_json::from_str(&content)?;
-            cache.path = path;
-            Ok(cache)
-        } else {
-            Ok(Self {
-                version: 1,
-                updated_at: Utc::now(),
-                secrets: HashMap::new(),
-                path,
-            })
-        }
-    }
-
-    /// キャッシュを更新
-    pub fn update(&mut self, reference: &str, value: &str) -> Result<(), SecretError> {
-        let encrypted = self.encrypt(value)?;
-
-        self.secrets.insert(
-            reference.to_string(),
-            CachedSecret {
-                encrypted_value: encrypted,
-                cached_at: Utc::now(),
-            },
-        );
-
-        self.updated_at = Utc::now();
-        self.save()
-    }
-
-    /// キャッシュから取得
-    pub fn get(&self, reference: &str) -> Option<String> {
-        self.secrets
-            .get(reference)
-            .and_then(|cached| self.decrypt(&cached.encrypted_value).ok())
-    }
-
-    /// キャッシュをファイルに保存
-    fn save(&self) -> Result<(), SecretError> {
-        // .fleetflow ディレクトリを作成
-        if let Some(parent) = self.path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-
-        let content = serde_json::to_string_pretty(self)?;
-        std::fs::write(&self.path, content)?;
-        Ok(())
-    }
-
-    fn cache_path() -> Result<PathBuf, SecretError> {
-        // PROJECT_ROOT から .fleetflow/secrets-cache.json を探す
-        let project_root = std::env::var("FLEETFLOW_PROJECT_ROOT")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| std::env::current_dir().unwrap_or_default());
-
-        Ok(project_root.join(CACHE_FILE))
-    }
-
-    /// 値を暗号化（マシン固有キー使用）
-    fn encrypt(&self, value: &str) -> Result<String, SecretError> {
-        // TODO: 実装 - マシン固有のキーで暗号化
-        // 暫定: Base64エンコード（本番では不十分）
-        Ok(base64::encode(value))
-    }
-
-    /// 値を復号
-    fn decrypt(&self, encrypted: &str) -> Result<String, SecretError> {
-        // TODO: 実装 - マシン固有のキーで復号
-        // 暫定: Base64デコード
-        base64::decode(encrypted)
-            .map_err(|_| SecretError::DecryptionFailed)
-            .and_then(|bytes| {
-                String::from_utf8(bytes).map_err(|_| SecretError::DecryptionFailed)
-            })
-    }
-}
-```
-
-### 4. エラー型
+### 3. エラー型
 
 ```rust
 // crates/fleetflow-secrets/src/error.rs
@@ -337,23 +208,8 @@ pub enum SecretError {
     #[error("シークレット参照の解決に失敗: {reference}\n{message}")]
     OpReadFailed { reference: String, message: String },
 
-    #[error("キャッシュにシークレットがありません: {0}")]
-    CacheMiss(String),
-
-    #[error("キャッシュの復号に失敗")]
-    DecryptionFailed,
-
     #[error("コマンド実行エラー: {0}")]
     CommandFailed(#[from] std::io::Error),
-
-    #[error("JSON解析エラー: {0}")]
-    JsonError(#[from] serde_json::Error),
-}
-
-impl SecretError {
-    pub fn is_network_error(&self) -> bool {
-        matches!(self, Self::NetworkError(_))
-    }
 }
 ```
 
@@ -507,12 +363,6 @@ impl Drop for SecureString {
 - `tracing`使用時に秘密情報をフィルタ
 - `op://`参照はログ可、解決後の値はログ不可
 
-### キャッシュファイル
-
-- パーミッション: `600`（owner read/write only）
-- 暗号化: マシン固有キー（keyring or machine-id ベース）
-- `.gitignore`に自動追加
-
 ## テスト戦略
 
 ### ユニットテスト
@@ -566,5 +416,4 @@ mod integration_tests {
 3. **Phase 3**: `SecretResolver`実装、環境変数解決
 4. **Phase 4**: `fleet env`コマンド実装
 5. **Phase 5**: `fleet validate --secrets`実装
-6. **Phase 6**: キャッシュ機能実装
-7. **Phase 7**: セキュリティ強化（暗号化、zeroize）
+6. **Phase 6**: コンテナ起動時の統合（`fleet up`）
