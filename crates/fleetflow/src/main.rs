@@ -520,8 +520,8 @@ async fn main() -> anyhow::Result<()> {
                 .init();
         }
 
-        let mut server = fleetflow_mcp::McpServer::new();
-        return server.run().await;
+        // rmcp SDK ベースの MCP サーバーを起動（stdio トランスポート）
+        return fleetflow_mcp::run_server().await;
     }
 
     // 通常のCLIコマンドはstderrにログ出力

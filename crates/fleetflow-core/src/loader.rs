@@ -46,7 +46,7 @@ pub fn load_project_from_root_with_stage(project_root: &Path, stage: Option<&str
 
     // 2. 変数収集とテンプレート準備
     debug!("Step 2: Preparing template processor");
-    let mut processor = prepare_template_processor(&discovered)?;
+    let mut processor = prepare_template_processor(&discovered, project_root)?;
 
     // 3. テンプレート展開
     debug!("Step 3: Expanding templates");
@@ -74,9 +74,18 @@ pub fn load_project_from_root_with_stage(project_root: &Path, stage: Option<&str
 }
 
 /// テンプレートプロセッサを準備
-fn prepare_template_processor(discovered: &DiscoveredFiles) -> Result<TemplateProcessor> {
+fn prepare_template_processor(
+    discovered: &DiscoveredFiles,
+    project_root: &Path,
+) -> Result<TemplateProcessor> {
     let mut processor = TemplateProcessor::new();
     let mut all_variables = Variables::new();
+
+    // 0. ビルトイン変数を追加（PROJECT_ROOT）
+    processor.add_variable(
+        "PROJECT_ROOT",
+        serde_json::Value::String(project_root.to_string_lossy().to_string()),
+    );
 
     // 1. グローバル変数（fleet.kdl）
     if let Some(root_file) = &discovered.root {
@@ -284,7 +293,7 @@ pub fn load_project_with_debug(project_root: &Path) -> Result<Flow> {
     }
 
     println!("\n📖 変数収集");
-    let mut processor = prepare_template_processor(&discovered)?;
+    let mut processor = prepare_template_processor(&discovered, project_root)?;
     println!("  ✓ 完了");
 
     println!("\n📝 テンプレート展開");
@@ -312,9 +321,10 @@ mod tests {
     use std::fs;
 
     fn create_test_project(base: &Path) -> Result<()> {
-        // fleet.kdl
+        // .fleetflow/fleet.kdl
+        fs::create_dir_all(base.join(".fleetflow"))?;
         fs::write(
-            base.join("fleet.kdl"),
+            base.join(".fleetflow/fleet.kdl"),
             r#"
 variables {
     app_version "1.0.0"
@@ -394,8 +404,9 @@ stage "local" {
         let temp_dir = tempfile::tempdir().unwrap();
         let project_root = temp_dir.path();
 
-        // fleet.kdl
-        fs::write(project_root.join("fleet.kdl"), "")?;
+        // .fleetflow/fleet.kdl
+        fs::create_dir_all(project_root.join(".fleetflow"))?;
+        fs::write(project_root.join(".fleetflow/fleet.kdl"), "")?;
 
         // variables/common.kdl
         fs::create_dir_all(project_root.join("variables"))?;
@@ -433,8 +444,9 @@ service "api" {
         let temp_dir = tempfile::tempdir().unwrap();
         let project_root = temp_dir.path();
 
-        // fleet.kdl
-        fs::write(project_root.join("fleet.kdl"), "")?;
+        // .fleetflow/fleet.kdl
+        fs::create_dir_all(project_root.join(".fleetflow"))?;
+        fs::write(project_root.join(".fleetflow/fleet.kdl"), "")?;
 
         // services/api.kdl
         fs::create_dir_all(project_root.join("services"))?;
@@ -472,9 +484,10 @@ service "api" {
         let temp_dir = tempfile::tempdir().unwrap();
         let project_root = temp_dir.path();
 
-        // fleet.kdl（ベース）
+        // .fleetflow/fleet.kdl（ベース）
+        fs::create_dir_all(project_root.join(".fleetflow"))?;
         fs::write(
-            project_root.join("fleet.kdl"),
+            project_root.join(".fleetflow/fleet.kdl"),
             r#"
 service "api" {
     image "myapp"
@@ -513,9 +526,10 @@ service "api" {
         let temp_dir = tempfile::tempdir().unwrap();
         let project_root = temp_dir.path();
 
-        // fleet.kdl（ベース）
+        // .fleetflow/fleet.kdl（ベース）
+        fs::create_dir_all(project_root.join(".fleetflow"))?;
         fs::write(
-            project_root.join("fleet.kdl"),
+            project_root.join(".fleetflow/fleet.kdl"),
             r#"
 service "api" {
     image "myapp"
@@ -562,18 +576,21 @@ service "api" {
         let temp_dir = tempfile::tempdir().unwrap();
         let project_root = temp_dir.path();
 
-        // .env
+        // .fleetflow ディレクトリを作成
+        fs::create_dir_all(project_root.join(".fleetflow"))?;
+
+        // .fleetflow/.env
         fs::write(
-            project_root.join(".env"),
+            project_root.join(".fleetflow/.env"),
             r#"
 REGISTRY=ghcr.io/myorg
 IMAGE_TAG=v1.2.3
 "#,
         )?;
 
-        // fleet.kdl
+        // .fleetflow/fleet.kdl
         fs::write(
-            project_root.join("fleet.kdl"),
+            project_root.join(".fleetflow/fleet.kdl"),
             r#"
 service "api" {
     image "{{ REGISTRY }}/api:{{ IMAGE_TAG }}"
