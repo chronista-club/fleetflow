@@ -59,7 +59,7 @@ service "scheduler" {
 #### 1. 基本的な変数展開
 
 ```kdl
-// flow.kdl
+// fleet.kdl
 variables {
     app_version "1.0.0"
     registry "ghcr.io/myorg"
@@ -339,7 +339,7 @@ service "mysql" {
 ### 1. 変数のスコープ
 
 ```kdl
-// グローバル変数（flow.kdl）
+// グローバル変数（fleet.kdl）
 variables {
     global_version "1.0.0"
 }
@@ -370,7 +370,7 @@ service "api" {
 ```
 1. ステージ固有の変数（stage内のvariables）
 2. サービスファイル内の変数
-3. グローバル変数（flow.kdl内のvariables）
+3. グローバル変数（fleet.kdl内のvariables）
 4. 環境変数
 ```
 
@@ -432,7 +432,7 @@ service "api-2" {
 
 ```
 project/
-├── flow.kdl              # グローバル設定と変数
+├── fleet.kdl              # グローバル設定と変数
 │
 ├── variables/            # 変数定義を分離
 │   ├── common.kdl        # 共通変数
@@ -543,7 +543,7 @@ fn parse_with_template(project_root: PathBuf) -> Result<FlowConfig> {
 **アルゴリズム**:
 
 ```
-1. flow.kdl のグローバル変数を収集
+1. fleet.kdl のグローバル変数を収集
 2. variables/**/*.kdl の変数を収集
 3. 環境変数を env() 関数として登録
 4. ステージ固有の変数は後で上書き
@@ -568,7 +568,7 @@ service "api" {
   変数 'undefined_var' が定義されていません
   
   解決方法:
-    1. flow.kdl に変数を定義:
+    1. fleet.kdl に変数を定義:
        variables {
            undefined_var "value"
        }
@@ -633,7 +633,7 @@ fleet validate --debug-template
 ### ユースケース1: マイクロサービスのバージョン統一
 
 ```kdl
-// flow.kdl
+// fleet.kdl
 variables {
     app_version "1.2.3"
     registry "ghcr.io/myorg"
@@ -656,7 +656,7 @@ service "scheduler" {
 ### ユースケース2: 環境ごとのレプリカ数
 
 ```kdl
-// flow.kdl
+// fleet.kdl
 variables {
     environment env("ENV", default="local")
     replicas_map {

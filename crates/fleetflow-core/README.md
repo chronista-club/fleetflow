@@ -136,7 +136,7 @@ KDL形式の設定ファイルを解析してFlowオブジェクトに変換。
 ```rust
 use fleetflow_core::parser;
 
-let flow = parser::parse_kdl_file("flow.kdl")?;
+let flow = parser::parse_kdl_file("fleet.kdl")?;
 ```
 
 ### プロジェクトローダー

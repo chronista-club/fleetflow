@@ -39,7 +39,7 @@ MCP サーバーは、AI に対して以下の「ツール」を提供します�
 
 1. **プロジェクト初期化**:
    - ユーザー: 「このプロジェクトを FleetFlow で動かせるようにして」
-   - AI: `fleetflow_inspect_project` で現状を確認し、`flow.kdl` を生成する。
+   - AI: `fleetflow_inspect_project` で現状を確認し、`fleet.kdl` を生成する。
 
 2. **デバッグと修復**:
    - AI: 「コンテナが起動に失敗しています」

@@ -147,7 +147,7 @@ pub host: PathBuf,  // String ではなく PathBuf
 ### データフロー
 
 ```
-fleetflow.kdl (ファイル)
+fleetfleet.kdl (ファイル)
     ↓ [flow-config]
 設定ファイルパス解決
     ↓ [flow-atom::parser]

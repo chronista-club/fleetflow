@@ -32,7 +32,7 @@ sequenceDiagram
     participant OS
 
     User->>Flow: fleet up --stage=local
-    Flow->>Flow: flow.kdl を解析
+    Flow->>Flow: fleet.kdl を解析
     Flow->>Docker: コンテナ作成リクエスト
     Docker->>OS: プロセス起動
     OS-->>Docker: PID: 1234 (postgres)
@@ -55,7 +55,7 @@ graph TD
     end
 
     subgraph "抽象度: 高い（環境の設計）"
-        A[Flow/Stage定義<br/>flow.kdl]
+        A[Flow/Stage定義<br/>fleet.kdl]
     end
 
     subgraph "抽象度: 中程度"
@@ -83,7 +83,7 @@ graph TD
 
 ```mermaid
 stateDiagram-v2
-    [*] --> 定義: flow.kdlに記述
+    [*] --> 定義: fleet.kdlに記述
     定義 --> 解析: fleet up
     解析 --> イメージPull: Dockerイメージ取得
     イメージPull --> コンテナ作成: docker create
@@ -159,14 +159,14 @@ service "api" {
 | 観点         | サービス（Service）  | コンテナ（Container）   |
 | ------------ | -------------------- | ----------------------- |
 | **抽象度**   | 高い（論理的）       | 低い（物理的）          |
-| **定義場所** | flow.kdl             | 実行時にDockerが作成    |
+| **定義場所** | fleet.kdl             | 実行時にDockerが作成    |
 | **スコープ** | アプリケーション全体 | 1つの実行インスタンス   |
 | **例**       | "postgres"サービス   | flow-postgres-1コンテナ |
 
 **関係性**:
 
 ```
-Service (flow.kdl)
+Service (fleet.kdl)
   ↓ 変換
 Docker Image (postgres:16)
   ↓ 起動

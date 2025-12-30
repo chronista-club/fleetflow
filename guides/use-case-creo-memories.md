@@ -11,7 +11,7 @@ Creo Memoriesは、AIエージェント向けのメモリシステムです。Su
 ```
 creo-memories/
 ├── .fleetflow/
-│   ├── flow.kdl         # メイン設定（ステージの宣言）
+│   ├── fleet.kdl         # メイン設定（ステージの宣言）
 │   ├── flow.live.kdl    # ライブ環境用オーバーライド
 │   └── services/        # 論理的な役割ごとのサービス定義
 │       ├── storage.kdl  # DB群
@@ -24,7 +24,7 @@ creo-memories/
 ## おすすめ構成の 3 つの柱
 
 ### 1. サービスのファイル分割 (Service-based)
-サービス定義を `services/*.kdl` に分割します。これにより、`flow.kdl` が読みやすくなり、複数の環境で同じ構成を再利用しやすくなります。
+サービス定義を `services/*.kdl` に分割します。これにより、`fleet.kdl` が読みやすくなり、複数の環境で同じ構成を再利用しやすくなります。
 
 ### 2. 自分のマシンを「サーバー」として定義 (Local Machine as Server)
 macOS上の OrbStack を `provider "orbstack"` として定義し、自分のマシンを `server "mito-mac.local"` のように具現化します。これにより、ローカル開発も「サーバーへのデプロイ」と同じメンタルモデルで扱えます。
@@ -34,7 +34,7 @@ macOS上の OrbStack を `provider "orbstack"` として定義し、自分のマ
 
 ---
 
-## 実践例: flow.kdl
+## 実践例: fleet.kdl
 
 ```kdl
 project "creo-memories"

@@ -10,7 +10,7 @@ use tracing::{debug, info, warn};
 /// 発見されたファイル群
 #[derive(Debug, Clone, Default)]
 pub struct DiscoveredFiles {
-    /// ルートファイル (flow.kdl)
+    /// ルートファイル (fleet.kdl)
     pub root: Option<PathBuf>,
     /// クラウドインフラ定義ファイル (cloud.kdl)
     pub cloud: Option<PathBuf>,
@@ -38,15 +38,15 @@ pub struct DiscoveredFiles {
 /// 以下の優先順位で検索:
 /// 1. 環境変数 FLEET_PROJECT_ROOT
 /// 2. カレントディレクトリから上に向かって以下を探す:
-///    - flow.kdl
-///    - .fleetflow/flow.kdl
+///    - .fleetflow/fleet.kdl (デフォルト)
+///    - fleet.kdl (フォールバック)
 #[tracing::instrument]
 pub fn find_project_root() -> Result<PathBuf> {
     // 1. 環境変数
     if let Ok(root) = std::env::var("FLEET_PROJECT_ROOT") {
         let path = PathBuf::from(&root);
         debug!(env_root = %root, "Checking FLEET_PROJECT_ROOT");
-        if path.join("flow.kdl").exists() || path.join(".fleetflow/flow.kdl").exists() {
+        if path.join("fleet.kdl").exists() || path.join(".fleetflow/fleet.kdl").exists() {
             info!(project_root = %path.display(), "Found project root from environment variable");
             return Ok(path);
         }
@@ -58,18 +58,18 @@ pub fn find_project_root() -> Result<PathBuf> {
     debug!(start_dir = %start_dir.display(), "Searching for project root");
 
     loop {
-        // flow.kdl をチェック
-        let flow_file = current.join("flow.kdl");
-        debug!(checking = %current.display(), "Looking for flow.kdl");
-        if flow_file.exists() {
-            info!(project_root = %current.display(), "Found project root (flow.kdl)");
+        // .fleetflow/fleet.kdl をチェック（デフォルト）
+        let fleetflow_dir_file = current.join(".fleetflow/fleet.kdl");
+        debug!(checking = %current.display(), "Looking for .fleetflow/fleet.kdl");
+        if fleetflow_dir_file.exists() {
+            info!(project_root = %current.display(), "Found project root (.fleetflow/fleet.kdl)");
             return Ok(current);
         }
 
-        // .fleetflow/flow.kdl をチェック
-        let fleetflow_dir_file = current.join(".fleetflow/flow.kdl");
-        if fleetflow_dir_file.exists() {
-            info!(project_root = %current.display(), "Found project root (.fleetflow/flow.kdl)");
+        // fleet.kdl をチェック（フォールバック）
+        let flow_file = current.join("fleet.kdl");
+        if flow_file.exists() {
+            info!(project_root = %current.display(), "Found project root (fleet.kdl)");
             return Ok(current);
         }
 
@@ -100,15 +100,15 @@ pub fn discover_files_with_stage(
     debug!("Starting file discovery");
     let mut discovered = DiscoveredFiles::default();
 
-    // flow.kdl または .fleetflow/flow.kdl
-    let root_file = project_root.join("flow.kdl");
-    let fleetflow_root_file = project_root.join(".fleetflow/flow.kdl");
-    if root_file.exists() {
-        debug!(file = %root_file.display(), "Found root file");
-        discovered.root = Some(root_file);
-    } else if fleetflow_root_file.exists() {
+    // .fleetflow/fleet.kdl（デフォルト）または fleet.kdl（フォールバック）
+    let fleetflow_root_file = project_root.join(".fleetflow/fleet.kdl");
+    let root_file = project_root.join("fleet.kdl");
+    if fleetflow_root_file.exists() {
         debug!(file = %fleetflow_root_file.display(), "Found root file in .fleetflow/");
         discovered.root = Some(fleetflow_root_file);
+    } else if root_file.exists() {
+        debug!(file = %root_file.display(), "Found root file");
+        discovered.root = Some(root_file);
     }
 
     // cloud.kdl または .fleetflow/cloud.kdl（クラウドインフラ定義）
@@ -277,8 +277,8 @@ mod tests {
     use std::fs;
 
     fn create_test_project(base: &Path) -> Result<()> {
-        // flow.kdl
-        fs::write(base.join("flow.kdl"), "// root")?;
+        // fleet.kdl
+        fs::write(base.join("fleet.kdl"), "// root")?;
 
         // services/
         fs::create_dir_all(base.join("services"))?;
@@ -319,7 +319,7 @@ mod tests {
 
         let discovered = discover_files(project_root)?;
 
-        // flow.kdl
+        // fleet.kdl
         assert!(discovered.root.is_some());
 
         // services
@@ -348,8 +348,8 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let project_root = temp_dir.path();
 
-        // 最小構成: flow.kdl のみ
-        fs::write(project_root.join("flow.kdl"), "// root")?;
+        // 最小構成: fleet.kdl のみ
+        fs::write(project_root.join("fleet.kdl"), "// root")?;
 
         let discovered = discover_files(project_root)?;
 
@@ -367,7 +367,7 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let project_root = temp_dir.path();
 
-        fs::write(project_root.join("flow.kdl"), "// root")?;
+        fs::write(project_root.join("fleet.kdl"), "// root")?;
         fs::create_dir_all(project_root.join("services"))?;
 
         // アルファベット順ではない順序で作成
@@ -390,10 +390,10 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let project_root = temp_dir.path();
 
-        // .fleetflow/ ディレクトリに flow.kdl を配置
+        // .fleetflow/ ディレクトリに fleet.kdl を配置
         fs::create_dir_all(project_root.join(".fleetflow"))?;
         fs::write(
-            project_root.join(".fleetflow/flow.kdl"),
+            project_root.join(".fleetflow/fleet.kdl"),
             "// root in .fleetflow",
         )?;
         fs::write(
@@ -403,14 +403,14 @@ mod tests {
 
         let discovered = discover_files(project_root)?;
 
-        // .fleetflow/flow.kdl が発見される
+        // .fleetflow/fleet.kdl が発見される
         assert!(discovered.root.is_some());
         assert!(
             discovered
                 .root
                 .as_ref()
                 .unwrap()
-                .ends_with(".fleetflow/flow.kdl")
+                .ends_with(".fleetflow/fleet.kdl")
         );
 
         // .fleetflow/flow.local.kdl が発見される
@@ -427,30 +427,28 @@ mod tests {
     }
 
     #[test]
-    fn test_root_file_priority_over_fleetflow_dir() -> Result<()> {
+    fn test_fleetflow_dir_priority_over_root_file() -> Result<()> {
         let temp_dir = tempfile::tempdir().unwrap();
         let project_root = temp_dir.path();
 
-        // 両方に flow.kdl を配置
-        fs::write(project_root.join("flow.kdl"), "// root")?;
+        // 両方に fleet.kdl を配置
+        fs::write(project_root.join("fleet.kdl"), "// root")?;
         fs::create_dir_all(project_root.join(".fleetflow"))?;
         fs::write(
-            project_root.join(".fleetflow/flow.kdl"),
+            project_root.join(".fleetflow/fleet.kdl"),
             "// root in .fleetflow",
         )?;
 
         let discovered = discover_files(project_root)?;
 
-        // ./flow.kdl が優先される
+        // .fleetflow/fleet.kdl が優先される
         assert!(discovered.root.is_some());
-        assert!(discovered.root.as_ref().unwrap().ends_with("flow.kdl"));
         assert!(
-            !discovered
+            discovered
                 .root
                 .as_ref()
                 .unwrap()
-                .to_string_lossy()
-                .contains(".fleetflow")
+                .ends_with(".fleetflow/fleet.kdl")
         );
 
         Ok(())

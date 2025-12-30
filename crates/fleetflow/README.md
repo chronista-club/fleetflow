@@ -25,7 +25,7 @@ cargo install --git https://github.com/chronista-club/fleetflow
 
 ### 1. 設定ファイルを作成
 
-`flow.kdl`:
+`fleet.kdl`:
 ```kdl
 service "postgres" {
     version "16"

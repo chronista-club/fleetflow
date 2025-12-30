@@ -5,7 +5,7 @@ mod common;
 use common::TestProject;
 use std::fs;
 
-/// 設定優先度の複合テスト（.env < flow.kdl < flow.{stage}.kdl < flow.local.kdl）
+/// 設定優先度の複合テスト（.env < fleet.kdl < flow.{stage}.kdl < flow.local.kdl）
 ///
 /// Docker依存: コンテナ起動・ポートバインディング検証が必要
 /// 実行方法: `cargo test --test config_priority_test -- --ignored`
@@ -19,7 +19,7 @@ async fn test_config_priority_complex() {
     // 1. .env (最底辺)
     fs::write(project.path().join(".env"), "DB_TAG=v1\nDB_PORT=8000").unwrap();
 
-    // 2. flow.kdl (基本)
+    // 2. fleet.kdl (基本)
     project.write_flow_kdl(
         r#"
 project "priority-test"
@@ -66,10 +66,10 @@ service "db" {
     .unwrap();
 
     // 5. デバッグ: 生成されたファイルの内容を確認
-    println!("\n=== flow.kdl ===");
+    println!("\n=== fleet.kdl ===");
     println!(
         "{}",
-        fs::read_to_string(project.path().join("flow.kdl")).unwrap()
+        fs::read_to_string(project.path().join("fleet.kdl")).unwrap()
     );
     println!("\n=== flow.prod.kdl ===");
     println!(

@@ -162,7 +162,7 @@ dns "creo-memories.com" {
 }
 ```
 
-## 完全な例（flow.kdl）
+## 完全な例（fleet.kdl）
 
 ```kdl
 providers {

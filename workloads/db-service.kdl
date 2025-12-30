@@ -7,7 +7,7 @@ service "db" {
     // 既存設定に合わせた起動コマンド (RocksDBストレージ)
     command "start --user root --pass root --bind [::]:8000 rocksdb:///data/database.db"
 
-    // ポート設定はステージごとに定義（flow.kdl参照）
+    // ポート設定はステージごとに定義（fleet.kdl参照）
 
     volumes {
         volume "./data/surrealdb" "/data"

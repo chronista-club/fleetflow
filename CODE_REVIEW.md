@@ -111,13 +111,13 @@ pub fn find_project_root() -> Result<PathBuf> {
                 format!("無効なプロジェクトルート: {}", e)
             ))?;
         
-        // ✅ flow.kdl の存在確認
-        let flow_file = canonical.join("flow.kdl");
+        // ✅ fleet.kdl の存在確認
+        let flow_file = canonical.join("fleet.kdl");
         if flow_file.exists() {
             // ✅ シンボリックリンク攻撃対策
             if flow_file.is_symlink() {
                 return Err(FlowError::InvalidConfig(
-                    "flow.kdl はシンボリックリンクにできません".to_string()
+                    "fleet.kdl はシンボリックリンクにできません".to_string()
                 ));
             }
             return Ok(canonical);
@@ -157,12 +157,12 @@ if let Some(root_file) = &discovered.root {
 if let Some(root_file) = &discovered.root {
     let content = std::fs::read_to_string(root_file)
         .map_err(|e| FlowError::IoError(
-            format!("flow.kdl の読み込みに失敗: {} - {}", 
+            format!("fleet.kdl の読み込みに失敗: {} - {}", 
                     root_file.display(), e)
         ))?;
     let vars = extract_variables(&content)
         .map_err(|e| FlowError::InvalidConfig(
-            format!("flow.kdl の変数パースに失敗: {}", e)
+            format!("fleet.kdl の変数パースに失敗: {}", e)
         ))?;
     all_variables.extend(vars);
 }

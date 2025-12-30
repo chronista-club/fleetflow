@@ -142,7 +142,7 @@ jobs:
           IMAGE_TAG: ${{ github.event.inputs.tag }}
 ```
 
-## flow.kdl の設定例
+## fleet.kdl の設定例
 
 ### 基本設定
 

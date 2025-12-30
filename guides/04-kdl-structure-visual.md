@@ -6,7 +6,7 @@ FleetFlowのKDL設定ファイル構造をMermaidグラフで視覚的に理解�
 
 ```mermaid
 graph TB
-    subgraph "flow.kdl"
+    subgraph "fleet.kdl"
         PROJECT[project "name"]
         STAGE[stage "name"]
         SERVICE[service "name"]
@@ -245,7 +245,7 @@ graph TB
 ```mermaid
 flowchart LR
     subgraph "設定ファイル検索順序"
-        F1["flow.kdl"]
+        F1["fleet.kdl"]
         F2["flow.local.kdl"]
         F3["flow.{stage}.kdl"]
         F4[".fleetflow/*.kdl"]

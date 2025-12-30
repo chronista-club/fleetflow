@@ -29,7 +29,7 @@ curl -sSf https://raw.githubusercontent.com/chronista-club/fleetflow/main/instal
 
 ### 2. 設定ファイルの作成
 
-プロジェクトルートに `flow.kdl` を作成します（設定例は下記参照）。
+`.fleetflow/fleet.kdl` を作成します（設定例は下記参照）。
 
 ### 3. 環境のセットアップと起動
 
@@ -73,7 +73,7 @@ fleet validate         # 設定ファイルを検証
 
 ## 設定ファイル
 
-### flow.kdl
+### fleet.kdl
 
 ```kdl
 project "my-app"
@@ -112,10 +112,11 @@ service "db" {
 }
 ```
 
-### 環境変数（.fleetflow/）
+### ディレクトリ構造（.fleetflow/）
 
 ```
 .fleetflow/
+├── fleet.kdl      # メイン設定ファイル
 ├── .env           # グローバル（共通）
 ├── .env.local     # local 固有
 ├── .env.dev       # dev 固有

@@ -135,7 +135,7 @@ impl RegistryAuth {
    │
 2. CLI: BuildArgs をパース
    │
-3. Config: flow.kdl を読み込み
+3. Config: fleet.kdl を読み込み
    │  - service "api" { image "ghcr.io/org/myapp" }
    │
 4. Builder: イメージをビルド

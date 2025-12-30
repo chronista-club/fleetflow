@@ -13,7 +13,7 @@ FleetFlowは、`include` 文すら不要にする、規約ベースの自動イ�
 
 ```
 ❌ 従来の方法（明示的なinclude）:
-flow.kdl に以下を記述する必要がある:
+fleet.kdl に以下を記述する必要がある:
   include "services/api.kdl"
   include "services/postgres.kdl"
   include "services/redis.kdl"
@@ -41,7 +41,7 @@ flow.kdl に以下を記述する必要がある:
 
 ```
 project/
-├── flow.kdl              # ルートファイル（エントリーポイント）
+├── fleet.kdl              # ルートファイル（エントリーポイント）
 │
 ├── services/             # サービス定義ディレクトリ
 │   ├── api.kdl           # 自動インポート
@@ -86,7 +86,7 @@ services/
 
 **動作**:
 
-1. `flow.kdl` が存在するディレクトリをプロジェクトルートとする
+1. `fleet.kdl` が存在するディレクトリをプロジェクトルートとする
 2. 以下のディレクトリを自動的にスキャン:
    - `./services/**/*.kdl` → service 定義
    - `./stages/**/*.kdl` → stage 定義
@@ -124,7 +124,7 @@ fn discover_files(project_root: PathBuf) -> Result<DiscoveredFiles> {
 **読み込み順序**:
 
 ```
-1. flow.kdl（ルートファイル）
+1. fleet.kdl（ルートファイル）
 2. services/**/*.kdl（アルファベット順）
 3. stages/**/*.kdl（アルファベット順）
 4. variables/**/*.kdl（アルファベット順）
@@ -140,7 +140,7 @@ fn discover_files(project_root: PathBuf) -> Result<DiscoveredFiles> {
 
 ```
 読み込み順序:
-1. flow.kdl
+1. fleet.kdl
 2. services/api.kdl
 3. services/backend/worker.kdl
 4. services/postgres.kdl
@@ -150,11 +150,11 @@ fn discover_files(project_root: PathBuf) -> Result<DiscoveredFiles> {
 8. stages/live.kdl
 ```
 
-### FR-003: ルートファイル (flow.kdl) の役割
+### FR-003: ルートファイル (fleet.kdl) の役割
 
 **目的**: プロジェクト全体のエントリーポイントとグローバル設定
 
-**flow.kdl の用途**:
+**fleet.kdl の用途**:
 
 1. **プロジェクトの識別**: このファイルの存在でプロジェクトルートを特定
 2. **グローバル設定**: 全体に適用される設定を記述
@@ -163,14 +163,14 @@ fn discover_files(project_root: PathBuf) -> Result<DiscoveredFiles> {
 **最小構成**:
 
 ```kdl
-// flow.kdl
+// fleet.kdl
 // 空でもOK（services/, stages/ が自動読み込みされる）
 ```
 
 **推奨構成**:
 
 ```kdl
-// flow.kdl
+// fleet.kdl
 project "myapp" {
     version "1.0.0"
     description "My awesome application"
@@ -185,7 +185,7 @@ defaults {
 **フル構成**:
 
 ```kdl
-// flow.kdl
+// fleet.kdl
 project "myapp" {
     version "1.0.0"
     description "My awesome application"
@@ -402,7 +402,7 @@ flow.local.kdl    # ルートディレクトリに配置（gitignore推奨）
 **読み込み順序**:
 
 ```
-1. flow.kdl
+1. fleet.kdl
 2. services/**/*.kdl
 3. stages/**/*.kdl
 4. flow.local.kdl  ← 最後に読み込み、すべてをオーバーライド可能
@@ -514,7 +514,7 @@ fleet validate --debug
 ```
 🔍 プロジェクト検出
   ルート: /path/to/project
-  flow.kdl: 検出
+  fleet.kdl: 検出
 
 🔍 ディレクトリスキャン
   services/: 検出
@@ -533,7 +533,7 @@ fleet validate --debug
   ✓ stages/prod.kdl
 
 📖 読み込み順序
-  1. flow.kdl
+  1. fleet.kdl
   2. services/api.kdl
   3. services/backend/worker.kdl
   4. services/postgres.kdl
@@ -577,7 +577,7 @@ fleet validate --debug
 **Before（明示的include）**:
 
 ```kdl
-// flow.kdl
+// fleet.kdl
 include "services/api.kdl"
 include "services/postgres.kdl"
 include "stages/local.kdl"
@@ -586,7 +586,7 @@ include "stages/local.kdl"
 **After（自動インポート）**:
 
 ```kdl
-// flow.kdl
+// fleet.kdl
 // 空でOK（規約ディレクトリから自動読み込み）
 ```
 
@@ -600,7 +600,7 @@ include "stages/local.kdl"
    mv local.kdl stages/
    ```
 
-2. flow.kdl から `include` 文を削除
+2. fleet.kdl から `include` 文を削除
 
 3. 動作確認:
    ```bash

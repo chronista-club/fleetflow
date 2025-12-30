@@ -4,12 +4,12 @@ FleetFlowを最大限に活用し、クリーンで保守性の高いインフ�
 
 ## 1. サービスのファイル分割 (Service-based Architecture)
 
-全ての定義を `flow.kdl` に詰め込むのではなく、論理的な役割ごとにファイルを分割します。
+全ての定義を `fleet.kdl` に詰め込むのではなく、論理的な役割ごとにファイルを分割します。
 
 ### 推奨ディレクトリ構造
 ```
 .fleetflow/
-├── flow.kdl           # メイン（Stageの宣言）
+├── fleet.kdl           # メイン（Stageの宣言）
 ├── flow.live.kdl      # ライブ環境用オーバーライド（任意）
 └── services/          # 自動読み込みディレクトリ
     ├── storage.kdl    # データベース関連
@@ -21,7 +21,7 @@ FleetFlowを最大限に活用し、クリーンで保守性の高いインフ�
 
 ローカル開発環境も「特定のリソース（Macなど）へのデプロイ」として捉えます。
 
-### flow.kdl での定義例
+### fleet.kdl での定義例
 ```kdl
 providers {
     orbstack  // macOS + OrbStack の場合

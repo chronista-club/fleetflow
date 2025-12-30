@@ -47,7 +47,7 @@ impl BuildError {
                      \n\
                      解決方法:\n\
                      1. Dockerfileのパスを確認してください\n\
-                     2. flow.kdlで明示的にパスを指定してください:\n\
+                     2. fleet.kdlで明示的にパスを指定してください:\n\
                         dockerfile \"path/to/Dockerfile\"",
                     path.display()
                 )
@@ -64,7 +64,7 @@ impl BuildError {
                 format!(
                     "ビルドコンテキストが見つかりません: {}\n\
                      \n\
-                     flow.kdlでcontextパスを確認してください。",
+                     fleet.kdlでcontextパスを確認してください。",
                     path.display()
                 )
             }
@@ -85,7 +85,7 @@ impl BuildError {
                     "イメージ名にレジストリが含まれていません: {}\n\
                      \n\
                      解決方法:\n\
-                     flow.kdlで完全なイメージ名を指定してください:\n\
+                     fleet.kdlで完全なイメージ名を指定してください:\n\
                      image \"ghcr.io/org/{}\"",
                     image, image
                 )

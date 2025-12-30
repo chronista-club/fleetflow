@@ -24,7 +24,7 @@ KDL（KDL Document Language）形式の設定ファイルをパースし、Fleet
 KDLファイルを読み込み、`FlowConfig` に変換できること。
 
 ```rust
-let config = parse_kdl_file("fleetflow.kdl")?;
+let config = parse_kdl_file("fleetfleet.kdl")?;
 ```
 
 #### FR-002: KDL文字列のパース
@@ -110,7 +110,7 @@ service "postgres" {
 複数のファイルで同じサービスを定義した場合、後のファイルの定義が前の定義とマージされる：
 
 ```kdl
-// flow.kdl（ベース設定）
+// fleet.kdl（ベース設定）
 service "api" {
     image "myapp:latest"
     ports { port 8080 3000 }
@@ -168,10 +168,10 @@ service "api" {
 **アクター**: 開発者
 
 **前提条件**:
-- 有効なfleetflow.kdlファイルが存在
+- 有効なfleetfleet.kdlファイルが存在
 
 **フロー**:
-1. 開発者が `parse_kdl_file("fleetflow.kdl")` を呼び出す
+1. 開発者が `parse_kdl_file("fleetfleet.kdl")` を呼び出す
 2. パーサーがファイルを読み込み
 3. KDL構文を解析
 4. `FlowConfig` 構造体を生成

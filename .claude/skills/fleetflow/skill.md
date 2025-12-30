@@ -50,7 +50,7 @@ cargo install --git https://github.com/chronista-club/fleetflow
 ### 最小構成
 
 ```kdl
-// flow.kdl
+// fleet.kdl
 project "myapp"
 
 stage "local" {
@@ -174,7 +174,7 @@ service "db" {
 複数ファイルで同じサービスを定義すると、設定がマージされます：
 
 ```kdl
-// flow.kdl（ベース設定）
+// fleet.kdl（ベース設定）
 service "api" {
     image "myapp:latest"
     ports { port 8080 3000 }
@@ -417,7 +417,7 @@ fleetflow/
 このスキルは以下の場合に参照してください：
 
 - プロジェクトにFleetFlowを導入する際
-- `flow.kdl` 設定ファイルを作成・編集する際
+- `fleet.kdl` 設定ファイルを作成・編集する際
 - コンテナ環境の構築・管理を行う際
 - ローカル開発環境のセットアップ時
 - クラウドインフラを宣言的に管理する際

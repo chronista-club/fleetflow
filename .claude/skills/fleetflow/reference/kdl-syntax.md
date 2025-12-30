@@ -1,6 +1,6 @@
 # KDL構文リファレンス
 
-FleetFlowの設定ファイル（flow.kdl）の構文詳細です。
+FleetFlowの設定ファイル（fleet.kdl）の構文詳細です。
 
 ## 基本構造
 
@@ -316,7 +316,7 @@ stage "dev" {
 複数ファイルで同じサービスを定義した場合、設定がマージされます：
 
 ```kdl
-// flow.kdl（ベース設定）
+// fleet.kdl（ベース設定）
 service "api" {
     image "myapp:latest"
     ports { port 8080 3000 }
@@ -350,10 +350,10 @@ FleetFlowは以下の優先順位で設定ファイルを検索します：
 2. カレントディレクトリ:
    - `flow.local.kdl` (ローカル専用)
    - `.flow.local.kdl`
-   - `flow.kdl` (標準)
-   - `.flow.kdl`
+   - `fleet.kdl` (標準)
+   - `.fleet.kdl`
 3. `.fleetflow/` ディレクトリ
-4. `~/.config/fleetflow/flow.kdl` (グローバル)
+4. `~/.config/fleetflow/fleet.kdl` (グローバル)
 
 ## 完全な例
 

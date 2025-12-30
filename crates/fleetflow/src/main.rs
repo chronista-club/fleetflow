@@ -92,7 +92,7 @@ fn print_loaded_config_files(project_root: &std::path::Path) {
     use colored::Colorize;
     println!("📄 読み込んだ設定ファイル:");
 
-    let flow_kdl = project_root.join("flow.kdl");
+    let flow_kdl = project_root.join("fleet.kdl");
     if flow_kdl.exists() {
         println!("  • {}", flow_kdl.display().to_string().cyan());
     }
@@ -467,7 +467,7 @@ enum CloudCommands {
 enum ServerCommands {
     /// サーバーを作成
     Create {
-        /// サーバー名（flow.kdlで定義されたもの）
+        /// サーバー名（fleet.kdlで定義されたもの）
         name: String,
         /// 確認なしで実行
         #[arg(short, long)]
@@ -584,7 +584,7 @@ async fn main() -> anyhow::Result<()> {
         Err(e) => return Err(e.into()),
     };
 
-    // プロジェクト全体をロード（flow.kdl + stage固有設定 + localを自動マージ）
+    // プロジェクト全体をロード（fleet.kdl + stage固有設定 + localを自動マージ）
     // コマンドからステージを取得、または FLEET_STAGE 環境変数から取得
     let stage_from_env = std::env::var("FLEET_STAGE").ok();
     let stage_name_hint: Option<&str> = match &cli.command {
@@ -2009,7 +2009,7 @@ async fn main() -> anyhow::Result<()> {
                     eprintln!("{}", "✗ プロジェクトルートが見つかりません".red().bold());
                     eprintln!("  {}", e);
                     eprintln!();
-                    eprintln!("flow.kdl が存在するディレクトリで実行してください");
+                    eprintln!("fleet.kdl が存在するディレクトリで実行してください");
                     std::process::exit(1);
                 }
             }
@@ -2102,7 +2102,7 @@ async fn handle_server_command(
         ServerCommands::Create { name, yes } => {
             let server = config.servers.get(&name).ok_or_else(|| {
                 anyhow::anyhow!(
-                    "サーバー '{}' が見つかりません。flow.kdl で定義してください。",
+                    "サーバー '{}' が見つかりません。fleet.kdl で定義してください。",
                     name
                 )
             })?;
@@ -2478,7 +2478,7 @@ async fn handle_cloud_command(
 
             if config.providers.is_empty() {
                 println!("{}", "クラウドプロバイダーが設定されていません。".yellow());
-                println!("flow.kdl に provider ブロックを追加してください。");
+                println!("fleet.kdl に provider ブロックを追加してください。");
             }
         }
         CloudCommands::Status { stage } => {

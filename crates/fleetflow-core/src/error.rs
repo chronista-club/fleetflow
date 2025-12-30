@@ -29,7 +29,7 @@ pub enum FlowError {
     DiscoveryError { path: PathBuf, message: String },
 
     #[error(
-        "プロジェクトルートが見つかりません\n探索開始位置: {0}\nヒント: flow.kdl ファイルを含むディレクトリで実行してください"
+        "プロジェクトルートが見つかりません\n探索開始位置: {0}\nヒント: fleet.kdl ファイルを含むディレクトリで実行してください"
     )]
     ProjectRootNotFound(PathBuf),
 

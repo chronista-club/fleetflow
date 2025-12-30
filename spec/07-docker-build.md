@@ -28,7 +28,7 @@ FleetFlowにDockerイメージのビルド機能を追加し、カスタムア�
 
 1. **開発体験の向上**
    - Docker Composeと同等のビルド機能を提供
-   - flow.kdl一つで完結する開発環境構築
+   - fleet.kdl一つで完結する開発環境構築
 
 2. **柔軟性の確保**
    - 既存イメージとカスタムビルドの両対応
@@ -91,7 +91,7 @@ service "api" {
 ```
 
 - `dockerfile` フィールドでDockerfileのパスを指定
-- プロジェクトルート（flow.kdlがある場所）からの相対パス
+- プロジェクトルート（fleet.kdlがある場所）からの相対パス
 - 絶対パスも可能
 
 #### 1.2 規約ベース自動検出
@@ -118,7 +118,7 @@ service "api" {
 ```kdl
 service "api" {
     dockerfile "./services/api/Dockerfile"
-    // context: プロジェクトルート（flow.kdlがある場所）
+    // context: プロジェクトルート（fleet.kdlがある場所）
 }
 ```
 
@@ -411,7 +411,7 @@ fleet build api local
 fleet build --no-cache local
 ```
 
-## flow.kdl記法
+## fleet.kdl記法
 
 ### 完全な例
 

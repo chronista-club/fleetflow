@@ -37,7 +37,7 @@ pub fn load_project_from_root(project_root: &Path) -> Result<Flow> {
 /// ステージ指定でプロジェクトをロード
 ///
 /// stage が指定されている場合、flow.{stage}.kdl も読み込んでマージします。
-/// 読み込み順序: flow.kdl → flow.{stage}.kdl → flow.local.kdl
+/// 読み込み順序: fleet.kdl → flow.{stage}.kdl → flow.local.kdl
 #[instrument(skip(project_root), fields(project_root = %project_root.display()))]
 pub fn load_project_from_root_with_stage(project_root: &Path, stage: Option<&str>) -> Result<Flow> {
     // 1. ファイル発見
@@ -78,7 +78,7 @@ fn prepare_template_processor(discovered: &DiscoveredFiles) -> Result<TemplatePr
     let mut processor = TemplateProcessor::new();
     let mut all_variables = Variables::new();
 
-    // 1. グローバル変数（flow.kdl）
+    // 1. グローバル変数（fleet.kdl）
     if let Some(root_file) = &discovered.root {
         let content = std::fs::read_to_string(root_file).map_err(|e| FlowError::IoError {
             path: root_file.clone(),
@@ -155,7 +155,7 @@ fn expand_all_files(
         expanded.push_str("\n\n");
     }
 
-    // 1. flow.kdl
+    // 1. fleet.kdl
     if let Some(root_file) = &discovered.root {
         debug!(file = %root_file.display(), "Rendering root file");
         let rendered = processor.render_file(root_file)?;
@@ -216,9 +216,9 @@ pub fn load_project_with_debug(project_root: &Path) -> Result<Flow> {
     let discovered = discover_files_with_stage(project_root, stage_ref)?;
 
     if discovered.root.is_some() {
-        println!("  flow.kdl: ✓ 検出");
+        println!("  fleet.kdl: ✓ 検出");
     } else {
-        println!("  flow.kdl: ✗ 未検出");
+        println!("  fleet.kdl: ✗ 未検出");
     }
 
     if discovered.cloud.is_some() {
@@ -312,9 +312,9 @@ mod tests {
     use std::fs;
 
     fn create_test_project(base: &Path) -> Result<()> {
-        // flow.kdl
+        // fleet.kdl
         fs::write(
-            base.join("flow.kdl"),
+            base.join("fleet.kdl"),
             r#"
 variables {
     app_version "1.0.0"
@@ -394,8 +394,8 @@ stage "local" {
         let temp_dir = tempfile::tempdir().unwrap();
         let project_root = temp_dir.path();
 
-        // flow.kdl
-        fs::write(project_root.join("flow.kdl"), "")?;
+        // fleet.kdl
+        fs::write(project_root.join("fleet.kdl"), "")?;
 
         // variables/common.kdl
         fs::create_dir_all(project_root.join("variables"))?;
@@ -433,8 +433,8 @@ service "api" {
         let temp_dir = tempfile::tempdir().unwrap();
         let project_root = temp_dir.path();
 
-        // flow.kdl
-        fs::write(project_root.join("flow.kdl"), "")?;
+        // fleet.kdl
+        fs::write(project_root.join("fleet.kdl"), "")?;
 
         // services/api.kdl
         fs::create_dir_all(project_root.join("services"))?;
@@ -472,9 +472,9 @@ service "api" {
         let temp_dir = tempfile::tempdir().unwrap();
         let project_root = temp_dir.path();
 
-        // flow.kdl（ベース）
+        // fleet.kdl（ベース）
         fs::write(
-            project_root.join("flow.kdl"),
+            project_root.join("fleet.kdl"),
             r#"
 service "api" {
     image "myapp"
@@ -513,9 +513,9 @@ service "api" {
         let temp_dir = tempfile::tempdir().unwrap();
         let project_root = temp_dir.path();
 
-        // flow.kdl（ベース）
+        // fleet.kdl（ベース）
         fs::write(
-            project_root.join("flow.kdl"),
+            project_root.join("fleet.kdl"),
             r#"
 service "api" {
     image "myapp"
@@ -571,9 +571,9 @@ IMAGE_TAG=v1.2.3
 "#,
         )?;
 
-        // flow.kdl
+        // fleet.kdl
         fs::write(
-            project_root.join("flow.kdl"),
+            project_root.join("fleet.kdl"),
             r#"
 service "api" {
     image "{{ REGISTRY }}/api:{{ IMAGE_TAG }}"

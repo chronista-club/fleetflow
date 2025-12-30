@@ -623,7 +623,7 @@ impl McpServer {
             "tools": [
                 {
                     "name": "fleetflow_inspect_project",
-                    "description": "カレントディレクトリにある FleetFlow プロジェクト（flow.kdl 等）を解析し、定義されているサービス名、イメージ名、ステージ名、環境変数などの情報を取得します。プロジェクトの全体像を把握するために最初に使用してください。",
+                    "description": "カレントディレクトリにある FleetFlow プロジェクト（fleet.kdl 等）を解析し、定義されているサービス名、イメージ名、ステージ名、環境変数などの情報を取得します。プロジェクトの全体像を把握するために最初に使用してください。",
                     "inputSchema": {
                         "type": "object",
                         "properties": {}
@@ -716,7 +716,7 @@ impl McpServer {
                 },
                 {
                     "name": "fleetflow_validate",
-                    "description": "FleetFlow設定ファイル（flow.kdl等）の構文と整合性を検証します。エラーがあれば詳細を報告します。",
+                    "description": "FleetFlow設定ファイル（fleet.kdl等）の構文と整合性を検証します。エラーがあれば詳細を報告します。",
                     "inputSchema": {
                         "type": "object",
                         "properties": {}

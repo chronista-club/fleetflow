@@ -17,13 +17,13 @@ pub fn get_config_dir() -> Result<PathBuf> {
     Ok(config_dir)
 }
 
-/// プロジェクトのflow.kdlファイルを探す
+/// プロジェクトのfleet.kdlファイルを探す
 ///
 /// 以下の優先順位で設定ファイルを検索:
 /// 1. 環境変数 FLEETFLOW_CONFIG_PATH (直接パス指定)
-/// 2. カレントディレクトリ: flow.local.kdl, .flow.local.kdl, flow.kdl, .flow.kdl
+/// 2. カレントディレクトリ: flow.local.kdl, .flow.local.kdl, fleet.kdl, .fleet.kdl
 /// 3. ./.fleetflow/ ディレクトリ内: 同様の順序
-/// 4. ~/.config/fleetflow/flow.kdl (グローバル設定)
+/// 4. ~/.config/fleetflow/fleet.kdl (グローバル設定)
 pub fn find_flow_file() -> Result<PathBuf> {
     // 1. 環境変数で直接指定
     if let Ok(config_path) = std::env::var("FLEETFLOW_CONFIG_PATH") {
@@ -34,7 +34,7 @@ pub fn find_flow_file() -> Result<PathBuf> {
     }
 
     let current_dir = std::env::current_dir()?;
-    let candidates = ["flow.local.kdl", ".flow.local.kdl", "flow.kdl", ".flow.kdl"];
+    let candidates = ["flow.local.kdl", ".flow.local.kdl", "fleet.kdl", ".fleet.kdl"];
 
     // 2. カレントディレクトリで検索
     for filename in &candidates {
@@ -55,9 +55,9 @@ pub fn find_flow_file() -> Result<PathBuf> {
         }
     }
 
-    // 4. グローバル設定ファイル (~/.config/fleetflow/flow.kdl)
+    // 4. グローバル設定ファイル (~/.config/fleetflow/fleet.kdl)
     if let Some(config_dir) = dirs::config_dir() {
-        let global_config = config_dir.join("fleetflow").join("flow.kdl");
+        let global_config = config_dir.join("fleetflow").join("fleet.kdl");
         if global_config.exists() {
             return Ok(global_config);
         }
@@ -89,8 +89,8 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let original_dir = std::env::current_dir().ok();
 
-        // flow.kdlを作成
-        fs::write(temp_dir.path().join("flow.kdl"), "// test").unwrap();
+        // fleet.kdlを作成
+        fs::write(temp_dir.path().join("fleet.kdl"), "// test").unwrap();
 
         // テンポラリディレクトリに移動
         std::env::set_current_dir(&temp_dir).unwrap();
@@ -99,7 +99,7 @@ mod tests {
         assert!(result.is_ok());
 
         let flow_file = result.unwrap();
-        assert!(flow_file.ends_with("flow.kdl"));
+        assert!(flow_file.ends_with("fleet.kdl"));
 
         // 元のディレクトリに戻る（エラーは無視）
         if let Some(dir) = original_dir {
@@ -113,8 +113,8 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let original_dir = std::env::current_dir().ok();
 
-        // flow.kdl と flow.local.kdl の両方を作成
-        fs::write(temp_dir.path().join("flow.kdl"), "// global").unwrap();
+        // fleet.kdl と flow.local.kdl の両方を作成
+        fs::write(temp_dir.path().join("fleet.kdl"), "// global").unwrap();
         fs::write(temp_dir.path().join("flow.local.kdl"), "// local").unwrap();
 
         // ディレクトリを移動して検索（環境変数ではなくcurrent_dir方式）
@@ -139,12 +139,12 @@ mod tests {
         // .fleetflow/ ディレクトリを作成
         let flow_dir = temp_dir.path().join(".fleetflow");
         fs::create_dir(&flow_dir).unwrap();
-        fs::write(flow_dir.join("flow.kdl"), "// in flow dir").unwrap();
+        fs::write(flow_dir.join("fleet.kdl"), "// in flow dir").unwrap();
 
         std::env::set_current_dir(&temp_dir).unwrap();
 
         let result = find_flow_file().unwrap();
-        assert!(result.ends_with(".fleetflow/flow.kdl"));
+        assert!(result.ends_with(".fleetflow/fleet.kdl"));
 
         if let Some(dir) = original_dir {
             let _ = std::env::set_current_dir(dir);
@@ -203,9 +203,9 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let original_dir = std::env::current_dir().ok();
 
-        // .flow.local.kdl と flow.kdl を作成
+        // .flow.local.kdl と fleet.kdl を作成
         fs::write(temp_dir.path().join(".flow.local.kdl"), "// hidden local").unwrap();
-        fs::write(temp_dir.path().join("flow.kdl"), "// visible").unwrap();
+        fs::write(temp_dir.path().join("fleet.kdl"), "// visible").unwrap();
 
         std::env::set_current_dir(&temp_dir).unwrap();
 

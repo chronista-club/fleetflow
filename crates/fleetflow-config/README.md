@@ -36,10 +36,10 @@ println!("Config dir: {}", config_dir.display());
 2. **カレントディレクトリ**:
    - `flow.local.kdl`
    - `.flow.local.kdl`
-   - `flow.kdl`
-   - `.flow.kdl`
+   - `fleet.kdl`
+   - `.fleet.kdl`
 3. **.fleetflowディレクトリ** `./.fleetflow/` 内で同様の順序
-4. **グローバル設定** `~/.config/fleetflow/flow.kdl`
+4. **グローバル設定** `~/.config/fleetflow/fleet.kdl`
 
 ## 設定ディレクトリ
 
@@ -60,7 +60,7 @@ match find_flow_file() {
     Ok(path) => println!("Found: {}", path.display()),
     Err(ConfigError::FlowFileNotFound) => {
         eprintln!("設定ファイルが見つかりません");
-        eprintln!("flow.kdl を作成してください");
+        eprintln!("fleet.kdl を作成してください");
     }
     Err(e) => eprintln!("エラー: {}", e),
 }

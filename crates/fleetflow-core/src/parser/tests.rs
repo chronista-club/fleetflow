@@ -499,7 +499,7 @@ fn test_parse_full_cloud_config() {
 
 #[test]
 fn test_service_merge_environment() {
-    // flow.kdl と flow.local.kdl を結合したような状態をシミュレート
+    // fleet.kdl と flow.local.kdl を結合したような状態をシミュレート
     let kdl = r#"
         service "api" {
             image "myapp:latest"

@@ -45,7 +45,7 @@ playbooks/
 
 - `playbooks/live/` 内のplaybookは `stage "live"` に対して実行される
 - `playbooks/pre/` 内のplaybookは `stage "pre"` に対して実行される
-- ディレクトリ名と `flow.kdl` のステージ定義が一致している必要がある
+- ディレクトリ名と `fleet.kdl` のステージ定義が一致している必要がある
 - 環境をまたぐ共通playbookは設けない（シンプルさ優先）
 
 ## 3. CLIコマンド

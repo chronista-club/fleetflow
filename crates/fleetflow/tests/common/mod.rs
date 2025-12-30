@@ -13,7 +13,7 @@ impl TestProject {
     }
 
     pub fn write_flow_kdl(&self, content: &str) {
-        let path = self.root.path().join("flow.kdl");
+        let path = self.root.path().join("fleet.kdl");
         fs::write(path, content).unwrap();
     }
 

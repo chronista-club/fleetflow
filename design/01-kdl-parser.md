@@ -54,7 +54,7 @@ fn infer_image_name(service_name: &str, version: Option<&str>) -> String
 ### 1. ファイル読み込み
 
 ```rust
-parse_kdl_file("fleetflow.kdl")
+parse_kdl_file("fleetfleet.kdl")
     ↓
 fs::read_to_string()  // ファイル → String
     ↓
@@ -262,12 +262,12 @@ fn test_parse_simple_service() {
 
 ### 統合テスト
 
-#### シナリオ1: 実際のfleetflow.kdlファイル
+#### シナリオ1: 実際のfleetfleet.kdlファイル
 
 ```rust
 #[test]
 fn test_parse_real_config() {
-    let config = parse_kdl_file("tests/fixtures/fleetflow.kdl").unwrap();
+    let config = parse_kdl_file("tests/fixtures/fleetfleet.kdl").unwrap();
     // 期待される構造を検証
 }
 ```

@@ -54,7 +54,7 @@ fleet up
 
 ## 設定
 
-このサンプルは `flow.kdl` で以下のように定義されています：
+このサンプルは `fleet.kdl` で以下のように定義されています：
 
 ```kdl
 // 一度実行して終了するコンテナ
@@ -123,7 +123,7 @@ fleet up nginx
 
 ```
 examples/hello-world/
-├── flow.kdl          # サービス定義
+├── fleet.kdl          # サービス定義
 ├── index.html        # Hello Worldページ
 └── README.md         # このファイル
 ```

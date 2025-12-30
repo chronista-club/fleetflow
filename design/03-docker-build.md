@@ -11,7 +11,7 @@
 
 ```
 ┌─────────────────┐
-│   flow.kdl      │
+│   fleet.kdl      │
 └────────┬────────┘
          │ parse
          ▼
@@ -1019,9 +1019,9 @@ CMD echo "Hello from ${APP_ENV}"
         "#,
     ).unwrap();
 
-    // flow.kdlを作成
+    // fleet.kdlを作成
     std::fs::write(
-        temp_dir.path().join("flow.kdl"),
+        temp_dir.path().join("fleet.kdl"),
         r#"
 project "test"
 
@@ -1103,7 +1103,7 @@ impl BuildError {
                      \n\
                      解決方法:\n\
                      1. Dockerfileのパスを確認してください\n\
-                     2. flow.kdlで明示的にパスを指定してください:\n\
+                     2. fleet.kdlで明示的にパスを指定してください:\n\
                         dockerfile \"path/to/Dockerfile\"",
                     path.display()
                 )

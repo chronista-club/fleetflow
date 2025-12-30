@@ -18,7 +18,7 @@ FleetFlowでカスタムDockerイメージをビルドする方法を、実践�
 
 - Dockerfileの基本的な書き方
 - FleetFlowの基本的な使い方（`fleet up`, `fleet down`）
-- flow.kdlの基本構文
+- fleet.kdlの基本構文
 
 ## 基本的な使い方
 
@@ -27,7 +27,7 @@ FleetFlowでカスタムDockerイメージをビルドする方法を、実践�
 **プロジェクト構造**:
 ```
 my-app/
-├── flow.kdl
+├── fleet.kdl
 ├── services/
 │   └── api/
 │       ├── Dockerfile
@@ -36,7 +36,7 @@ my-app/
 │           └── index.js
 ```
 
-**flow.kdl**:
+**fleet.kdl**:
 ```kdl
 project "my-app"
 
@@ -78,13 +78,13 @@ Dockerfileが規約と異なる場所にある場合：
 **プロジェクト構造**:
 ```
 my-app/
-├── flow.kdl
+├── fleet.kdl
 ├── backend/
 │   ├── api.dockerfile
 │   └── src/
 ```
 
-**flow.kdl**:
+**fleet.kdl**:
 ```kdl
 service "api" {
     dockerfile "./backend/api.dockerfile"
@@ -99,7 +99,7 @@ service "api" {
 
 ### 1. 基本的なビルド引数
 
-**flow.kdl**:
+**fleet.kdl**:
 ```kdl
 variables {
     NODE_VERSION "20"
@@ -201,7 +201,7 @@ EXPOSE 3000
 CMD ["npm", "start"]
 ```
 
-**flow.kdl**:
+**fleet.kdl**:
 ```kdl
 stage "local" {
     service "api"
@@ -288,7 +288,7 @@ fleet up --build --no-cache local
 **プロジェクト構造**:
 ```
 webapp/
-├── flow.kdl
+├── fleet.kdl
 ├── frontend/
 │   ├── Dockerfile
 │   ├── package.json
@@ -300,7 +300,7 @@ webapp/
 └── docker-compose.yml  # 削除可能
 ```
 
-**flow.kdl**:
+**fleet.kdl**:
 ```kdl
 project "webapp"
 
@@ -419,7 +419,7 @@ fleet up --build local
 **プロジェクト構造**:
 ```
 microservices/
-├── flow.kdl
+├── fleet.kdl
 ├── services/
 │   ├── auth-service/
 │   │   ├── Dockerfile
@@ -435,7 +435,7 @@ microservices/
     └── Dockerfile
 ```
 
-**flow.kdl**:
+**fleet.kdl**:
 ```kdl
 project "microservices"
 
@@ -548,7 +548,7 @@ CMD ["./service"]
 **プロジェクト構造**:
 ```
 monorepo/
-├── flow.kdl
+├── fleet.kdl
 ├── package.json         # ルートのworkspace設定
 ├── pnpm-workspace.yaml
 ├── packages/
@@ -567,7 +567,7 @@ monorepo/
         └── src/
 ```
 
-**flow.kdl**:
+**fleet.kdl**:
 ```kdl
 project "monorepo"
 

@@ -406,7 +406,7 @@ fleet version
 ```
 
 **解決方法**:
-1. カレントディレクトリに`flow.kdl`があるか確認
+1. カレントディレクトリに`fleet.kdl`があるか確認
 2. 環境変数`FLEETFLOW_CONFIG_PATH`を確認
 3. `fleet validate`で検証
 
@@ -430,7 +430,7 @@ fleet version
 **解決方法**:
 1. 他のコンテナを確認: `docker ps`
 2. ホストのプロセスを確認: `lsof -i :xxxx`
-3. flow.kdlで別のポート番号を指定
+3. fleet.kdlで別のポート番号を指定
 
 ### コンテナが起動しない
 

@@ -41,9 +41,9 @@ struct Template {
 /// 設定ファイルの保存先
 #[derive(Debug, Clone, PartialEq)]
 enum ConfigPath {
-    CurrentDir,   // ./flow.kdl
-    FlowDir,      // ./.fleetflow/flow.kdl
-    GlobalConfig, // ~/.config/flow/flow.kdl
+    CurrentDir,   // ./fleet.kdl
+    FlowDir,      // ./.fleetflow/fleet.kdl
+    GlobalConfig, // ~/.config/flow/fleet.kdl
 }
 
 impl InitWizardState {
@@ -112,9 +112,9 @@ impl InitWizardState {
 
     fn get_config_path_string(&self) -> &str {
         match self.config_path {
-            ConfigPath::CurrentDir => "./flow.kdl",
-            ConfigPath::FlowDir => "./.fleetflow/flow.kdl",
-            ConfigPath::GlobalConfig => "~/.config/fleetflow/flow.kdl",
+            ConfigPath::CurrentDir => "./fleet.kdl",
+            ConfigPath::FlowDir => "./.fleetflow/fleet.kdl",
+            ConfigPath::GlobalConfig => "~/.config/fleetflow/fleet.kdl",
         }
     }
 }
@@ -267,9 +267,9 @@ fn draw_template_selection(frame: &mut Frame, area: Rect, state: &InitWizardStat
 
 fn draw_path_selection(frame: &mut Frame, area: Rect, state: &InitWizardState) {
     let paths = [
-        ("./flow.kdl", "カレントディレクトリ (推奨)"),
-        ("./.fleetflow/flow.kdl", ".fleetflowディレクトリ内"),
-        ("~/.config/fleetflow/flow.kdl", "グローバル設定"),
+        ("./fleet.kdl", "カレントディレクトリ (推奨)"),
+        ("./.fleetflow/fleet.kdl", ".fleetflowディレクトリ内"),
+        ("~/.config/fleetflow/fleet.kdl", "グローバル設定"),
     ];
 
     let items: Vec<ListItem> = paths
