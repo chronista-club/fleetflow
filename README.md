@@ -24,19 +24,12 @@ FleetFlow は、KDL (KDL Document Language) をベースにした革新的な環
 ### 1. インストール
 
 ```bash
-# Homebrew (macOS)
-brew install chronista-club/tap/fleetflow
-
-# または curl
 curl -sSf https://raw.githubusercontent.com/chronista-club/fleetflow/main/install.sh | sh
 ```
 
-### 2. プロジェクトの初期化
+### 2. 設定ファイルの作成
 
-```bash
-mkdir my-project && cd my-project
-fleet init
-```
+プロジェクトルートに `flow.kdl` を作成します（設定例は下記参照）。
 
 ### 3. 環境のセットアップと起動
 
