@@ -44,6 +44,9 @@ pub enum FlowError {
 
     #[error("サービス '{0}' に image が指定されていません")]
     MissingImage(String),
+
+    #[error("1Passwordエラー: {0}")]
+    OnePasswordError(String),
 }
 
 pub type Result<T> = std::result::Result<T, FlowError>;

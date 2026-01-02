@@ -2,6 +2,7 @@ pub mod discovery;
 pub mod error;
 pub mod loader;
 pub mod model;
+pub mod onepassword;
 pub mod parser;
 pub mod template;
 
