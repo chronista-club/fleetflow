@@ -1,4 +1,3 @@
-mod setup;
 mod tui;
 
 use clap::{Parser, Subcommand};
@@ -397,9 +396,9 @@ enum Commands {
         #[arg(long)]
         no_cache: bool,
     },
-    /// クラウドリソースを管理
+    /// ステージを管理（インフラ＋コンテナを統一的に操作）
     #[command(subcommand)]
-    Cloud(CloudCommands),
+    Stage(StageCommands),
     /// MCP (Model Context Protocol) サーバーを起動
     Mcp,
     /// Playbookを実行（リモートサーバーでサービスを起動）
@@ -413,86 +412,60 @@ enum Commands {
         #[arg(long)]
         pull: bool,
     },
-    /// ステージの環境をセットアップ（冪等）
-    Setup {
-        /// ステージ名 (local, dev, stg, prod)
-        /// 環境変数 FLEET_STAGE または --stage オプションで指定
-        #[arg(short, long, env = "FLEET_STAGE")]
-        stage: Option<String>,
-        /// 確認なしで実行
-        #[arg(short, long)]
-        yes: bool,
-        /// セットアップをスキップするステップ（カンマ区切り）
-        #[arg(long)]
-        skip: Option<String>,
-    },
 }
 
-/// クラウド関連のサブコマンド
+/// ステージ管理のサブコマンド
 #[derive(Subcommand)]
-enum CloudCommands {
-    /// クラウドリソースの状態を表示
-    Status {
-        /// ステージ名を指定 (production, staging)
-        #[arg(short, long)]
-        stage: Option<String>,
-    },
-    /// クラウドプロバイダーの認証状態を確認
-    Auth,
-    /// クラウドリソースを作成/更新
+enum StageCommands {
+    /// ステージを起動（インフラ＋コンテナ）
     Up {
-        /// ステージ名を指定
-        #[arg(short, long)]
+        /// ステージ名 (local, dev, pre, prod)
         stage: String,
-        /// 確認なしで実行
-        #[arg(short, long)]
+        /// 確認プロンプトをスキップ
+        #[arg(short = 'y', long)]
         yes: bool,
+        /// 起動前に最新イメージをpullする
+        #[arg(long)]
+        pull: bool,
     },
-    /// クラウドリソースを削除
+    /// ステージを停止
     Down {
-        /// ステージ名を指定
-        #[arg(short, long)]
+        /// ステージ名 (local, dev, pre, prod)
         stage: String,
-        /// 確認なしで実行
-        #[arg(short, long)]
+        /// サーバー電源をOFFにする（リモートステージのみ）
+        #[arg(long)]
+        suspend: bool,
+        /// サーバーを削除する（⚠️ 課金完全停止、データ削除）
+        #[arg(long)]
+        destroy: bool,
+        /// 確認プロンプトをスキップ
+        #[arg(short = 'y', long)]
         yes: bool,
     },
-    /// サーバーの管理（作成・削除・一覧）
-    #[command(subcommand)]
-    Server(ServerCommands),
-}
-
-/// サーバー管理のサブコマンド
-#[derive(Subcommand)]
-enum ServerCommands {
-    /// サーバーを作成
-    Create {
-        /// サーバー名（fleet.kdlで定義されたもの）
-        name: String,
-        /// 確認なしで実行
+    /// ステージの状態を表示
+    Status {
+        /// ステージ名 (local, dev, pre, prod)
+        stage: String,
+    },
+    /// ログを表示
+    Logs {
+        /// ステージ名 (local, dev, pre, prod)
+        stage: String,
+        /// 特定サービスのログのみ
         #[arg(short, long)]
-        yes: bool,
-    },
-    /// サーバーを停止（電源OFF）
-    Stop {
-        /// サーバー名
-        name: String,
-    },
-    /// サーバーを起動（電源ON）
-    Start {
-        /// サーバー名
-        name: String,
-    },
-    /// サーバーを削除（⚠️ 完全削除）
-    Delete {
-        /// サーバー名
-        name: String,
-        /// 確認なしで実行
+        service: Option<String>,
+        /// リアルタイム追従
         #[arg(short, long)]
-        yes: bool,
+        follow: bool,
+        /// 最新N行
+        #[arg(short = 'n', long, default_value = "100")]
+        tail: usize,
     },
-    /// サーバー一覧を表示
-    List,
+    /// コンテナ一覧
+    Ps {
+        /// ステージ名（省略時は全ステージ）
+        stage: Option<String>,
+    },
 }
 
 #[tokio::main]
@@ -598,7 +571,13 @@ async fn main() -> anyhow::Result<()> {
         Commands::Validate { stage, .. } => stage.as_deref(),
         Commands::Deploy { stage, .. } => stage.as_deref(),
         Commands::Build { stage, .. } => stage.as_deref(),
-        Commands::Setup { stage, .. } => stage.as_deref(),
+        Commands::Stage(stage_cmd) => match stage_cmd {
+            StageCommands::Up { stage, .. } => Some(stage.as_str()),
+            StageCommands::Down { stage, .. } => Some(stage.as_str()),
+            StageCommands::Status { stage } => Some(stage.as_str()),
+            StageCommands::Logs { stage, .. } => Some(stage.as_str()),
+            StageCommands::Ps { stage } => stage.as_deref(),
+        },
         _ => stage_from_env.as_deref(),
     };
 
@@ -2041,8 +2020,8 @@ async fn main() -> anyhow::Result<()> {
             )
             .await?;
         }
-        Commands::Cloud(cloud_cmd) => {
-            handle_cloud_command(cloud_cmd, &config).await?;
+        Commands::Stage(stage_cmd) => {
+            handle_stage_command(stage_cmd, &project_root, &config).await?;
         }
         Commands::Mcp => {
             // 早期リターンで処理済み（main関数冒頭）
@@ -2059,825 +2038,477 @@ async fn main() -> anyhow::Result<()> {
         } => {
             handle_play_command(&project_root, &playbook, yes, pull).await?;
         }
-        Commands::Setup { stage, yes, skip } => {
-            handle_setup_command(&project_root, &config, stage, yes, skip).await?;
-        }
     }
 
     Ok(())
 }
 
-/// サーバー管理コマンドを処理
-async fn handle_server_command(
-    cmd: ServerCommands,
+/// ステージ管理コマンドを処理
+async fn handle_stage_command(
+    cmd: StageCommands,
+    project_root: &std::path::Path,
     config: &fleetflow_core::Flow,
 ) -> anyhow::Result<()> {
-    use fleetflow_cloud_cloudflare::{CloudflareDns, DnsConfig};
-    use fleetflow_cloud_sakura::SakuraCloudProvider;
-
     match cmd {
-        ServerCommands::List => {
-            println!("{}", "登録済みサーバー一覧:".blue().bold());
-            if config.servers.is_empty() {
-                println!("  {}", "サーバーが定義されていません".yellow());
-            } else {
-                for (name, server) in &config.servers {
-                    println!("\n  {} {}", "•".cyan(), name.bold());
-                    println!("    プロバイダー: {}", server.provider.cyan());
-                    if let Some(plan) = &server.plan {
-                        println!("    プラン: {}", plan);
-                    }
-                    if let Some(disk) = server.disk_size {
-                        println!("    ディスク: {}GB", disk);
-                    }
-                    if let Some(os) = &server.os {
-                        println!("    OS: {}", os);
-                    }
-                    if !server.dns_aliases.is_empty() {
-                        println!("    DNSエイリアス: {}", server.dns_aliases.join(", "));
-                    }
-                }
-            }
-        }
-        ServerCommands::Create { name, yes } => {
-            let server = config.servers.get(&name).ok_or_else(|| {
+        StageCommands::Up {
+            stage,
+            yes: _,
+            pull,
+        } => {
+            // Phase 1: 既存のUpロジックを呼び出す（将来的にはStageOrchestratorに移行）
+            println!(
+                "{}",
+                format!("ステージ '{}' を起動中...", stage).blue().bold()
+            );
+            print_loaded_config_files(project_root);
+
+            let stage_config = config.stages.get(&stage).ok_or_else(|| {
+                let available: Vec<_> = config.stages.keys().collect();
                 anyhow::anyhow!(
-                    "サーバー '{}' が見つかりません。fleet.kdl で定義してください。",
-                    name
+                    "ステージ '{}' が見つかりません。利用可能: {:?}",
+                    stage,
+                    available
                 )
             })?;
 
-            println!("{}", format!("サーバー '{}' を作成します...", name).blue());
-            println!("  プロバイダー: {}", server.provider.cyan());
-            if let Some(plan) = &server.plan {
-                println!("  プラン: {}", plan);
-            }
-            if let Some(disk) = server.disk_size {
-                println!("  ディスク: {}GB", disk);
-            }
-            if let Some(os) = &server.os {
-                println!("  OS: {}", os);
-            }
-
-            if !yes {
-                println!("\n実行するには --yes オプションを指定してください");
-                return Ok(());
-            }
-
-            if server.provider != "sakura-cloud" {
-                return Err(anyhow::anyhow!(
-                    "プロバイダー '{}' はサポートされていません",
-                    server.provider
-                ));
-            }
-
-            // プロバイダー設定からzoneを取得
-            let zone = config
-                .providers
-                .get("sakura-cloud")
-                .and_then(|p| p.zone.as_deref())
-                .unwrap_or("tk1a");
-
-            let provider = SakuraCloudProvider::new(zone);
-
-            // 既存サーバーチェック
-            println!("  ↓ 既存サーバーを確認中...");
-            if let Ok(Some(existing)) = provider.find_server_by_tag(&config.name, &name).await {
-                println!(
-                    "  {} サーバー '{}' は既に存在します (ID: {})",
-                    "⚠".yellow(),
-                    name,
-                    existing.id.cyan()
-                );
-                return Ok(());
-            }
-
-            // サーバー作成
-            println!("  ↓ サーバーを作成中...");
-            let create_config = fleetflow_cloud_sakura::CreateServerOptions {
-                name: name.clone(),
-                plan: server.plan.clone(),
-                disk_size: server.disk_size.map(|d| d as i32),
-                os: server.os.clone(),
-                archive: server.archive.clone(),
-                ssh_keys: server.ssh_keys.clone(),
-                startup_scripts: server.startup_script.clone().into_iter().collect(),
-                init_script_vars: server.init_script_vars.clone(),
-                tags: vec![
-                    format!("fleetflow:{}:{}", config.name, name),
-                    format!("fleetflow:project:{}", config.name),
-                ],
-            };
-
-            match provider.create_server(&create_config).await {
-                Ok(info) => {
-                    println!("  {} サーバー作成完了!", "✓".green().bold());
-                    println!("    ID: {}", info.id.cyan());
-                    if let Some(ip) = &info.ip_address {
-                        println!("    IP: {}", ip.cyan());
-
-                        // DNS設定（環境変数が設定されている場合）
-                        if let Ok(dns_config) = DnsConfig::from_env() {
-                            let dns = CloudflareDns::new(dns_config);
-                            let subdomain = &name; // サーバー名をそのままサブドメインに
-                            println!("  ↓ DNSレコードを設定中...");
-                            match dns.ensure_record(subdomain, ip).await {
-                                Ok(record) => {
-                                    println!(
-                                        "  {} DNS: {}",
-                                        "✓".green().bold(),
-                                        record.name.cyan()
-                                    );
-
-                                    // DNSエイリアス（CNAME）の設定
-                                    if !server.dns_aliases.is_empty() {
-                                        println!("  ↓ DNSエイリアスを設定中...");
-                                        for alias in &server.dns_aliases {
-                                            let target = dns.full_domain(subdomain);
-                                            match dns.ensure_cname_record(alias, &target).await {
-                                                Ok(cname_record) => {
-                                                    println!(
-                                                        "    {} CNAME: {} → {}",
-                                                        "✓".green().bold(),
-                                                        cname_record.name.cyan(),
-                                                        target
-                                                    );
-                                                }
-                                                Err(e) => {
-                                                    println!(
-                                                        "    {} CNAMEエラー ({}): {}",
-                                                        "✗".red().bold(),
-                                                        alias,
-                                                        e
-                                                    );
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                                Err(e) => {
-                                    println!("  {} DNS設定エラー: {}", "✗".red().bold(), e);
-                                }
-                            }
-                        }
-                    }
-                }
-                Err(e) => {
-                    println!("  {} サーバー作成エラー: {}", "✗".red().bold(), e);
-                    return Err(e.into());
-                }
-            }
-
-            println!("\n{}", "✓ サーバーの作成が完了しました".green().bold());
-        }
-        ServerCommands::Stop { name } => {
-            let server = config
-                .servers
-                .get(&name)
-                .ok_or_else(|| anyhow::anyhow!("サーバー '{}' が見つかりません", name))?;
-
-            if server.provider != "sakura-cloud" {
-                return Err(anyhow::anyhow!(
-                    "プロバイダー '{}' はサポートされていません",
-                    server.provider
-                ));
-            }
-
-            let zone = config
-                .providers
-                .get("sakura-cloud")
-                .and_then(|p| p.zone.as_deref())
-                .unwrap_or("tk1a");
-
-            let provider = SakuraCloudProvider::new(zone);
-
-            println!("  ↓ サーバーを検索中...");
-            match provider.find_server_by_tag(&config.name, &name).await {
-                Ok(Some(existing)) => {
-                    println!("  ℹ サーバー発見: {} (ID: {})", name, existing.id.cyan());
-                    println!("  ↓ サーバーを停止中...");
-                    match provider.power_off(&existing.id).await {
-                        Ok(_) => {
-                            println!("  {} サーバー停止完了!", "✓".green().bold());
-                        }
-                        Err(e) => {
-                            println!("  {} 停止エラー: {}", "✗".red().bold(), e);
-                            return Err(e.into());
-                        }
-                    }
-                }
-                Ok(None) => {
-                    println!("  {} サーバー '{}' が見つかりません", "⚠".yellow(), name);
-                }
-                Err(e) => {
-                    return Err(e.into());
-                }
-            }
-        }
-        ServerCommands::Start { name } => {
-            let server = config
-                .servers
-                .get(&name)
-                .ok_or_else(|| anyhow::anyhow!("サーバー '{}' が見つかりません", name))?;
-
-            if server.provider != "sakura-cloud" {
-                return Err(anyhow::anyhow!(
-                    "プロバイダー '{}' はサポートされていません",
-                    server.provider
-                ));
-            }
-
-            let zone = config
-                .providers
-                .get("sakura-cloud")
-                .and_then(|p| p.zone.as_deref())
-                .unwrap_or("tk1a");
-
-            let provider = SakuraCloudProvider::new(zone);
-
-            println!("  ↓ サーバーを検索中...");
-            match provider.find_server_by_tag(&config.name, &name).await {
-                Ok(Some(existing)) => {
-                    println!("  ℹ サーバー発見: {} (ID: {})", name, existing.id.cyan());
-                    println!("  ↓ サーバーを起動中...");
-                    match provider.power_on(&existing.id).await {
-                        Ok(_) => {
-                            println!("  {} サーバー起動完了!", "✓".green().bold());
-                        }
-                        Err(e) => {
-                            println!("  {} 起動エラー: {}", "✗".red().bold(), e);
-                            return Err(e.into());
-                        }
-                    }
-                }
-                Ok(None) => {
-                    println!("  {} サーバー '{}' が見つかりません", "⚠".yellow(), name);
-                }
-                Err(e) => {
-                    return Err(e.into());
-                }
-            }
-        }
-        ServerCommands::Delete { name, yes } => {
-            let server = config
-                .servers
-                .get(&name)
-                .ok_or_else(|| anyhow::anyhow!("サーバー '{}' が見つかりません", name))?;
-
-            println!("{}", format!("サーバー '{}' を削除します...", name).red());
-
-            if !yes {
-                println!("\n{}", "警告: この操作は取り消せません!".red().bold());
-                println!("実行するには --yes オプションを指定してください");
-                return Ok(());
-            }
-
-            if server.provider != "sakura-cloud" {
-                return Err(anyhow::anyhow!(
-                    "プロバイダー '{}' はサポートされていません",
-                    server.provider
-                ));
-            }
-
-            let zone = config
-                .providers
-                .get("sakura-cloud")
-                .and_then(|p| p.zone.as_deref())
-                .unwrap_or("tk1a");
-
-            let provider = SakuraCloudProvider::new(zone);
-
-            // サーバー検索
-            println!("  ↓ サーバーを検索中...");
-            match provider.find_server_by_tag(&config.name, &name).await {
-                Ok(Some(existing)) => {
-                    println!("  ℹ サーバー発見: {} (ID: {})", name, existing.id.cyan());
-
-                    // DNS削除（環境変数が設定されている場合）
-                    if let Ok(dns_config) = DnsConfig::from_env() {
-                        let dns = CloudflareDns::new(dns_config);
-
-                        // DNSエイリアス（CNAME）の削除
-                        if !server.dns_aliases.is_empty() {
-                            println!("  ↓ DNSエイリアスを削除中...");
-                            for alias in &server.dns_aliases {
-                                match dns.remove_cname_record(alias).await {
-                                    Ok(_) => {
-                                        println!(
-                                            "    {} CNAME削除: {}.{}",
-                                            "✓".green().bold(),
-                                            alias,
-                                            dns.domain()
-                                        );
-                                    }
-                                    Err(e) => {
-                                        println!(
-                                            "    {} CNAME削除エラー ({}): {}",
-                                            "⚠".yellow(),
-                                            alias,
-                                            e
-                                        );
-                                    }
-                                }
-                            }
-                        }
-
-                        // メインのAレコードを削除
-                        let subdomain = &name;
-                        println!("  ↓ DNSレコードを削除中...");
-                        match dns.remove_record(subdomain).await {
-                            Ok(_) => {
-                                println!(
-                                    "  {} DNS削除: {}.{}",
-                                    "✓".green().bold(),
-                                    subdomain,
-                                    dns.domain()
-                                );
-                            }
-                            Err(e) => {
-                                println!("  {} DNS削除エラー: {}", "⚠".yellow(), e);
-                            }
-                        }
-                    }
-
-                    // サーバー削除
-                    println!("  ↓ サーバーを削除中...");
-                    match provider.delete_server(&existing.id, true).await {
-                        Ok(_) => {
-                            println!("  {} サーバー削除完了!", "✓".green().bold());
-                        }
-                        Err(e) => {
-                            println!("  {} サーバー削除エラー: {}", "✗".red().bold(), e);
-                            return Err(e.into());
-                        }
-                    }
-                }
-                Ok(None) => {
-                    println!("  {} サーバー '{}' が見つかりません", "⚠".yellow(), name);
-                }
-                Err(e) => {
-                    println!("  {} 検索エラー: {}", "✗".red().bold(), e);
-                    return Err(e.into());
-                }
-            }
-
-            println!("\n{}", "✓ サーバーの削除処理が完了しました".green().bold());
-        }
-    }
-
-    Ok(())
-}
-
-/// クラウドコマンドを処理
-async fn handle_cloud_command(
-    cmd: CloudCommands,
-    config: &fleetflow_core::Flow,
-) -> anyhow::Result<()> {
-    use fleetflow_cloud::CloudProvider;
-    use fleetflow_cloud_cloudflare::{CloudflareDns, DnsConfig};
-    use fleetflow_cloud_sakura::SakuraCloudProvider;
-
-    match cmd {
-        CloudCommands::Auth => {
-            println!("{}", "クラウドプロバイダーの認証状態を確認中...".blue());
-
-            for (name, provider_config) in &config.providers {
-                println!("\n{} {}:", "Provider:".cyan(), name.bold());
-
-                // 現在はsakura-cloudのみサポート
-                if name == "sakura-cloud" {
-                    let zone = provider_config.zone.as_deref().unwrap_or("tk1a");
-                    let provider = SakuraCloudProvider::new(zone);
-
-                    match provider.check_auth().await {
-                        Ok(status) => {
-                            if status.authenticated {
-                                println!("  {} 認証済み", "✓".green().bold());
-                                if let Some(info) = status.account_info {
-                                    println!("  アカウント: {}", info.cyan());
-                                }
-                            } else {
-                                println!("  {} 未認証", "✗".red().bold());
-                                if let Some(err) = status.error {
-                                    println!("  エラー: {}", err);
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            println!("  {} 認証チェック失敗: {}", "✗".red().bold(), e);
-                        }
-                    }
-                } else {
-                    println!(
-                        "  {} プロバイダー '{}' はサポートされていません",
-                        "!".yellow(),
-                        name
-                    );
-                }
-            }
-
-            if config.providers.is_empty() {
-                println!("{}", "クラウドプロバイダーが設定されていません。".yellow());
-                println!("fleet.kdl に provider ブロックを追加してください。");
-            }
-        }
-        CloudCommands::Status { stage } => {
-            println!("{}", "クラウドリソースの状態を取得中...".blue());
-
-            // ステージ名が指定されていない場合は全サーバーを表示
-            let servers_to_show: Vec<&str> = if let Some(ref stage_name) = stage {
-                if let Some(stage_config) = config.stages.get(stage_name) {
-                    stage_config.servers.iter().map(|s| s.as_str()).collect()
-                } else {
-                    println!(
-                        "{} ステージ '{}' が見つかりません",
-                        "✗".red().bold(),
-                        stage_name
-                    );
-                    return Ok(());
-                }
+            // ステージタイプ判定
+            let is_remote = !stage_config.servers.is_empty();
+            if is_remote {
+                println!("  タイプ: {} (インフラ＋コンテナ)", "リモート".cyan());
+                println!("  サーバー: {:?}", stage_config.servers);
+                // TODO: InfraOrchestrator.ensure_running() を呼び出す
+                println!("  ⚠ リモートステージのインフラ起動は未実装です");
+                println!("  現在は 'fleet cloud server up' を使用してください");
             } else {
-                config.servers.keys().map(|s| s.as_str()).collect()
+                println!("  タイプ: {} (コンテナのみ)", "ローカル".green());
+            }
+
+            // Docker接続
+            println!();
+            println!("{}", "Dockerに接続中...".blue());
+            let docker = init_docker_with_error_handling().await?;
+
+            // ネットワーク作成
+            let network_name = fleetflow_container::get_network_name(&config.name, &stage);
+            println!();
+            println!("{}", format!("🌐 ネットワーク: {}", network_name).blue());
+
+            let network_config = bollard::models::NetworkCreateRequest {
+                name: network_name.clone(),
+                driver: Some("bridge".to_string()),
+                ..Default::default()
             };
-
-            if servers_to_show.is_empty() {
-                println!("{}", "サーバーリソースが設定されていません。".yellow());
-                return Ok(());
-            }
-
-            println!("\n{}", "サーバーリソース:".bold());
-            for server_name in servers_to_show {
-                if let Some(server) = config.servers.get(server_name) {
-                    println!("  {} {}", "•".cyan(), server_name.bold());
-                    println!("    プロバイダー: {}", server.provider.cyan());
-                    if let Some(plan) = &server.plan {
-                        println!("    プラン: {}", plan);
-                    }
-                    if let Some(disk) = server.disk_size {
-                        println!("    ディスク: {}GB", disk);
-                    }
+            match docker.create_network(network_config).await {
+                Ok(_) => println!("  ✓ ネットワーク作成完了"),
+                Err(bollard::errors::Error::DockerResponseServerError {
+                    status_code: 409, ..
+                }) => {
+                    println!("  ✓ ネットワークは既に存在します");
                 }
+                Err(e) => return Err(e.into()),
             }
-        }
-        CloudCommands::Up { stage, yes } => {
+
+            // コンテナ起動
+            println!();
             println!(
                 "{}",
-                format!("ステージ '{}' のクラウドリソースを作成中...", stage).blue()
+                format!("サービス起動中 ({} 個):", stage_config.services.len()).bold()
             );
 
+            for service_name in &stage_config.services {
+                let service = config.services.get(service_name).ok_or_else(|| {
+                    anyhow::anyhow!("サービス '{}' が見つかりません", service_name)
+                })?;
+                let container_name = format!("{}-{}-{}", config.name, stage, service_name);
+
+                println!();
+                println!("  {} {}", "▶".green(), service_name.cyan().bold());
+
+                // イメージ取得
+                let image = service.image.as_ref().ok_or_else(|| {
+                    anyhow::anyhow!("サービス '{}' にイメージが設定されていません", service_name)
+                })?;
+                println!("    イメージ: {}", image);
+
+                // pull処理
+                if pull {
+                    pull_image_always(&docker, image).await?;
+                } else {
+                    // イメージの存在確認とpull
+                    match docker.inspect_image(image).await {
+                        Ok(_) => {}
+                        Err(bollard::errors::Error::DockerResponseServerError {
+                            status_code: 404,
+                            ..
+                        }) => {
+                            pull_image(&docker, image).await?;
+                        }
+                        Err(e) => return Err(e.into()),
+                    }
+                }
+
+                // コンテナ設定を作成
+                let (container_config, create_options) =
+                    fleetflow_container::service_to_container_config(
+                        service_name,
+                        service,
+                        &stage,
+                        &config.name,
+                    );
+
+                // 既存コンテナの削除
+                let _ = docker
+                    .remove_container(
+                        &container_name,
+                        Some(bollard::query_parameters::RemoveContainerOptions {
+                            force: true,
+                            ..Default::default()
+                        }),
+                    )
+                    .await;
+
+                // コンテナ作成
+                docker
+                    .create_container(Some(create_options), container_config)
+                    .await?;
+
+                // コンテナ起動
+                docker
+                    .start_container(
+                        &container_name,
+                        None::<bollard::query_parameters::StartContainerOptions>,
+                    )
+                    .await?;
+
+                println!("    ✓ 起動完了");
+            }
+
+            println!();
+            println!(
+                "{}",
+                format!("✓ ステージ '{}' が起動しました！", stage)
+                    .green()
+                    .bold()
+            );
+        }
+        StageCommands::Down {
+            stage,
+            suspend,
+            destroy,
+            yes,
+        } => {
+            println!(
+                "{}",
+                format!("ステージ '{}' を停止中...", stage).yellow().bold()
+            );
+            print_loaded_config_files(project_root);
+
+            let stage_config = config.stages.get(&stage).ok_or_else(|| {
+                let available: Vec<_> = config.stages.keys().collect();
+                anyhow::anyhow!(
+                    "ステージ '{}' が見つかりません。利用可能: {:?}",
+                    stage,
+                    available
+                )
+            })?;
+
+            let is_remote = !stage_config.servers.is_empty();
+
+            // 確認プロンプト（destroyの場合）
+            if destroy && !yes {
+                println!();
+                println!(
+                    "{}",
+                    "⚠ 警告: --destroy はサーバーを完全に削除します"
+                        .red()
+                        .bold()
+                );
+                println!("  データは復旧できません。実行するには --yes を指定してください。");
+                return Ok(());
+            }
+
+            // Docker接続
+            let docker = init_docker_with_error_handling().await?;
+
+            // コンテナ停止
+            println!();
+            println!(
+                "{}",
+                format!("サービス停止中 ({} 個):", stage_config.services.len()).bold()
+            );
+
+            for service_name in &stage_config.services {
+                let container_name = format!("{}-{}-{}", config.name, stage, service_name);
+                print!("  {} {} ... ", "■".yellow(), service_name);
+
+                match docker
+                    .stop_container(
+                        &container_name,
+                        None::<bollard::query_parameters::StopContainerOptions>,
+                    )
+                    .await
+                {
+                    Ok(_) => println!("{}", "停止".green()),
+                    Err(bollard::errors::Error::DockerResponseServerError {
+                        status_code: 304,
+                        ..
+                    }) => {
+                        println!("{}", "既に停止".dimmed());
+                    }
+                    Err(bollard::errors::Error::DockerResponseServerError {
+                        status_code: 404,
+                        ..
+                    }) => {
+                        println!("{}", "存在しない".dimmed());
+                    }
+                    Err(e) => println!("{}: {}", "エラー".red(), e),
+                }
+            }
+
+            // リモートステージの場合のインフラ操作
+            if is_remote {
+                if suspend {
+                    println!();
+                    println!("{}", "サーバー電源をOFFにしています...".yellow());
+                    // TODO: InfraOrchestrator.power_off() を呼び出す
+                    println!("  ⚠ サーバー電源OFFは未実装です");
+                    println!("  現在は 'fleet cloud server down --suspend' を使用してください");
+                } else if destroy {
+                    println!();
+                    println!("{}", "サーバーを削除しています...".red().bold());
+                    // TODO: InfraOrchestrator.destroy() を呼び出す
+                    println!("  ⚠ サーバー削除は未実装です");
+                    println!("  現在は 'fleet cloud server delete' を使用してください");
+                }
+            }
+
+            println!();
+            if destroy {
+                println!(
+                    "{}",
+                    format!("✓ ステージ '{}' を削除しました", stage)
+                        .red()
+                        .bold()
+                );
+            } else if suspend {
+                println!(
+                    "{}",
+                    format!("✓ ステージ '{}' を停止・サスペンドしました", stage)
+                        .yellow()
+                        .bold()
+                );
+            } else {
+                println!(
+                    "{}",
+                    format!("✓ ステージ '{}' のコンテナを停止しました", stage)
+                        .green()
+                        .bold()
+                );
+            }
+        }
+        StageCommands::Status { stage } => {
+            println!("{}", format!("ステージ '{}' の状態:", stage).blue().bold());
+            print_loaded_config_files(project_root);
+
+            let stage_config = config.stages.get(&stage).ok_or_else(|| {
+                let available: Vec<_> = config.stages.keys().collect();
+                anyhow::anyhow!(
+                    "ステージ '{}' が見つかりません。利用可能: {:?}",
+                    stage,
+                    available
+                )
+            })?;
+
+            let is_remote = !stage_config.servers.is_empty();
+            println!();
+            println!(
+                "タイプ: {}",
+                if is_remote {
+                    "リモート".cyan()
+                } else {
+                    "ローカル".green()
+                }
+            );
+
+            // サーバー情報（リモートの場合）
+            if is_remote {
+                println!();
+                println!("{}", "インフラ:".bold());
+                for server_name in &stage_config.servers {
+                    if let Some(server) = config.servers.get(server_name) {
+                        println!("  {} {}", "•".cyan(), server_name.bold());
+                        println!("    プロバイダー: {}", server.provider);
+                        // TODO: 実際のサーバー状態を取得
+                        println!(
+                            "    状態: {}",
+                            "(確認には 'fleet cloud server status' を使用)".dimmed()
+                        );
+                    }
+                }
+            }
+
+            // コンテナ状態
+            println!();
+            println!("{}", "サービス:".bold());
+
+            let docker = init_docker_with_error_handling().await?;
+
+            for service_name in &stage_config.services {
+                let container_name = format!("{}-{}-{}", config.name, stage, service_name);
+
+                let status = match docker
+                    .inspect_container(
+                        &container_name,
+                        None::<bollard::query_parameters::InspectContainerOptions>,
+                    )
+                    .await
+                {
+                    Ok(info) => {
+                        let state = info.state.as_ref();
+                        let running = state.and_then(|s| s.running).unwrap_or(false);
+                        if running {
+                            format!("{}", "running".green())
+                        } else {
+                            format!("{}", "stopped".yellow())
+                        }
+                    }
+                    Err(_) => format!("{}", "not found".dimmed()),
+                };
+
+                println!("  {} {} - {}", "•".cyan(), service_name, status);
+            }
+        }
+        StageCommands::Logs {
+            stage,
+            service,
+            follow,
+            tail,
+        } => {
             let stage_config = config
                 .stages
                 .get(&stage)
                 .ok_or_else(|| anyhow::anyhow!("ステージ '{}' が見つかりません", stage))?;
 
-            if stage_config.servers.is_empty() {
-                println!(
-                    "{}",
-                    "このステージにはサーバーリソースがありません。".yellow()
-                );
-                return Ok(());
-            }
+            let docker = init_docker_with_error_handling().await?;
 
-            if !yes {
-                println!("\n以下のサーバーを作成します:");
-                for server_name in &stage_config.servers {
-                    if let Some(server) = config.servers.get(server_name) {
-                        println!("  - {} ({})", server_name.cyan(), server.provider);
+            // 対象サービスの決定
+            let target_services: Vec<&String> = if let Some(ref svc) = service {
+                if !stage_config.services.contains(svc) {
+                    return Err(anyhow::anyhow!(
+                        "サービス '{}' はステージ '{}' に存在しません",
+                        svc,
+                        stage
+                    ));
+                }
+                vec![svc]
+            } else {
+                stage_config.services.iter().collect()
+            };
+
+            for service_name in target_services {
+                let container_name = format!("{}-{}-{}", config.name, stage, service_name);
+
+                if !follow {
+                    println!("{}", format!("=== {} ===", service_name).cyan().bold());
+                }
+
+                let options = bollard::query_parameters::LogsOptions {
+                    stdout: true,
+                    stderr: true,
+                    tail: tail.to_string(),
+                    follow,
+                    ..Default::default()
+                };
+
+                use futures_util::StreamExt;
+                let mut logs = docker.logs(&container_name, Some(options));
+
+                while let Some(log_result) = logs.next().await {
+                    match log_result {
+                        Ok(log) => print!("{}", log),
+                        Err(e) => {
+                            eprintln!("ログ取得エラー: {}", e);
+                            break;
+                        }
                     }
                 }
-                println!("\n実行するには --yes オプションを指定してください");
-                return Ok(());
             }
+        }
+        StageCommands::Ps { stage } => {
+            let docker = init_docker_with_error_handling().await?;
 
-            // 各サーバーを作成
-            for server_name in &stage_config.servers {
-                let server = config.servers.get(server_name).ok_or_else(|| {
-                    anyhow::anyhow!("サーバー '{}' の定義が見つかりません", server_name)
-                })?;
+            let stages_to_show: Vec<&String> = if let Some(ref s) = stage {
+                if !config.stages.contains_key(s) {
+                    return Err(anyhow::anyhow!("ステージ '{}' が見つかりません", s));
+                }
+                vec![s]
+            } else {
+                config.stages.keys().collect()
+            };
 
-                println!("\n{} {} を処理中...", "▶".cyan(), server_name.bold());
+            println!("{}", "STAGE\tSERVICE\t\tSTATUS\t\tPORTS".bold());
+            println!("{}", "-----\t-------\t\t------\t\t-----".dimmed());
 
-                // プロバイダー別の処理
-                if server.provider == "sakura-cloud" {
-                    // プロバイダー設定からzoneを取得
-                    let zone = config
-                        .providers
-                        .get("sakura-cloud")
-                        .and_then(|p| p.zone.as_deref())
-                        .unwrap_or("tk1a");
+            for stage_name in stages_to_show {
+                let stage_config = config.stages.get(stage_name).unwrap();
 
-                    let provider = SakuraCloudProvider::new(zone);
+                for service_name in &stage_config.services {
+                    let container_name = format!("{}-{}-{}", config.name, stage_name, service_name);
 
-                    // タグベースの冪等性チェック
-                    println!("  ↓ 既存サーバーを検索中...");
-                    match provider.find_server_by_tag(&config.name, server_name).await {
-                        Ok(Some(existing)) => {
-                            println!("  {} サーバーは既に存在します", "✓".green().bold());
-                            println!("    ID: {}", existing.id.cyan());
-                            println!(
-                                "    状態: {}",
-                                if existing.is_running {
-                                    "起動中".green()
-                                } else {
-                                    "停止中".yellow()
-                                }
-                            );
-                            if let Some(ip) = &existing.ip_address {
-                                println!("    IP: {}", ip.cyan());
+                    let (status, ports) = match docker
+                        .inspect_container(
+                            &container_name,
+                            None::<bollard::query_parameters::InspectContainerOptions>,
+                        )
+                        .await
+                    {
+                        Ok(info) => {
+                            let state = info.state.as_ref();
+                            let running = state.and_then(|s| s.running).unwrap_or(false);
+                            let status = if running { "running" } else { "stopped" };
 
-                                // 既存サーバーでもDNS設定を確認・更新
-                                if let Ok(dns_config) = DnsConfig::from_env() {
-                                    let dns = CloudflareDns::new(dns_config);
-                                    let subdomain = dns.generate_subdomain(server_name, &stage);
-                                    match dns.ensure_record(&subdomain, ip).await {
-                                        Ok(record) => {
-                                            println!(
-                                                "    {} DNS: {}",
-                                                "✓".green().bold(),
-                                                record.name.cyan()
-                                            );
+                            let ports: String = info
+                                .network_settings
+                                .as_ref()
+                                .and_then(|ns| ns.ports.as_ref())
+                                .map(|p| {
+                                    p.iter()
+                                        .filter_map(|(k, v)| {
+                                            v.as_ref().and_then(|bindings| {
+                                                bindings.first().map(|b| {
+                                                    format!(
+                                                        "{}->{}",
+                                                        b.host_port.as_deref().unwrap_or("?"),
+                                                        k
+                                                    )
+                                                })
+                                            })
+                                        })
+                                        .collect::<Vec<_>>()
+                                        .join(", ")
+                                })
+                                .unwrap_or_default();
 
-                                            // DNSエイリアス（CNAME）の設定
-                                            if !server.dns_aliases.is_empty() {
-                                                println!("    ↓ DNSエイリアスを確認・設定中...");
-                                                for alias in &server.dns_aliases {
-                                                    let target = dns.full_domain(&subdomain);
-                                                    match dns
-                                                        .ensure_cname_record(alias, &target)
-                                                        .await
-                                                    {
-                                                        Ok(cname_record) => {
-                                                            println!(
-                                                                "      {} CNAME: {} -> {}",
-                                                                "✓".green().bold(),
-                                                                cname_record.name.cyan(),
-                                                                target.dimmed()
-                                                            );
-                                                        }
-                                                        Err(e) => {
-                                                            println!(
-                                                                "      {} CNAME設定エラー ({}): {}",
-                                                                "⚠".yellow(),
-                                                                alias,
-                                                                e
-                                                            );
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                        Err(e) => {
-                                            println!("    {} DNS設定エラー: {}", "⚠".yellow(), e);
-                                        }
-                                    }
-                                }
-                            }
-                            continue;
+                            (status.to_string(), ports)
                         }
-                        Ok(None) => {
-                            println!("  ℹ 既存サーバーなし、新規作成します");
-                        }
-                        Err(e) => {
-                            println!("  {} サーバー検索エラー: {}", "✗".red().bold(), e);
-                            continue;
-                        }
-                    }
-
-                    // 新規作成
-                    println!("  ↓ サーバーを作成中...");
-                    let create_config = fleetflow_cloud_sakura::CreateServerOptions {
-                        name: server_name.clone(),
-                        plan: server.plan.clone(),
-                        disk_size: server.disk_size.map(|d| d as i32),
-                        os: server.os.clone(),
-                        archive: server.archive.clone(),
-                        ssh_keys: server.ssh_keys.clone(),
-                        startup_scripts: server.startup_script.clone().into_iter().collect(),
-                        init_script_vars: server.init_script_vars.clone(),
-                        tags: vec![
-                            format!("fleetflow:{}:{}", config.name, server_name),
-                            format!("fleetflow:project:{}", config.name),
-                        ],
+                        Err(_) => ("not found".to_string(), String::new()),
                     };
 
-                    match provider.create_server(&create_config).await {
-                        Ok(info) => {
-                            println!("  {} サーバー作成完了!", "✓".green().bold());
-                            println!("    ID: {}", info.id.cyan());
-                            if let Some(ip) = &info.ip_address {
-                                println!("    IP: {}", ip.cyan());
+                    let status_colored = match status.as_str() {
+                        "running" => status.green().to_string(),
+                        "stopped" => status.yellow().to_string(),
+                        _ => status.dimmed().to_string(),
+                    };
 
-                                // DNS設定（環境変数が設定されている場合）
-                                if let Ok(dns_config) = DnsConfig::from_env() {
-                                    let dns = CloudflareDns::new(dns_config);
-                                    let subdomain = dns.generate_subdomain(server_name, &stage);
-                                    println!("  ↓ DNSレコードを設定中...");
-                                    match dns.ensure_record(&subdomain, ip).await {
-                                        Ok(record) => {
-                                            println!(
-                                                "  {} DNS: {}",
-                                                "✓".green().bold(),
-                                                record.name.cyan()
-                                            );
-
-                                            // DNSエイリアス（CNAME）の設定
-                                            if !server.dns_aliases.is_empty() {
-                                                println!("  ↓ DNSエイリアスを設定中...");
-                                                for alias in &server.dns_aliases {
-                                                    // CNAMEのターゲットは server-stage.domain の形式
-                                                    let target = dns.full_domain(&subdomain);
-                                                    match dns
-                                                        .ensure_cname_record(alias, &target)
-                                                        .await
-                                                    {
-                                                        Ok(cname_record) => {
-                                                            println!(
-                                                                "    {} CNAME: {} -> {}",
-                                                                "✓".green().bold(),
-                                                                cname_record.name.cyan(),
-                                                                target.dimmed()
-                                                            );
-                                                        }
-                                                        Err(e) => {
-                                                            println!(
-                                                                "    {} CNAME設定エラー ({}): {}",
-                                                                "⚠".yellow(),
-                                                                alias,
-                                                                e
-                                                            );
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                        Err(e) => {
-                                            println!("  {} DNS設定エラー: {}", "⚠".yellow(), e);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            println!("  {} サーバー作成エラー: {}", "✗".red().bold(), e);
-                        }
-                    }
-                } else {
                     println!(
-                        "  {} プロバイダー '{}' はサポートされていません",
-                        "!".yellow(),
-                        server.provider
+                        "{}\t{}\t\t{}\t\t{}",
+                        stage_name.cyan(),
+                        service_name,
+                        status_colored,
+                        ports
                     );
                 }
             }
-
-            println!(
-                "\n{}",
-                "✓ クラウドリソースの処理が完了しました".green().bold()
-            );
-        }
-        CloudCommands::Down { stage, yes } => {
-            println!(
-                "{}",
-                format!("ステージ '{}' のクラウドリソースを削除中...", stage).blue()
-            );
-
-            let stage_config = config
-                .stages
-                .get(&stage)
-                .ok_or_else(|| anyhow::anyhow!("ステージ '{}' が見つかりません", stage))?;
-
-            if stage_config.servers.is_empty() {
-                println!(
-                    "{}",
-                    "このステージにはサーバーリソースがありません。".yellow()
-                );
-                return Ok(());
-            }
-
-            if !yes {
-                println!("\n{}", "警告: 以下のサーバーを削除します:".red().bold());
-                for server_name in &stage_config.servers {
-                    if let Some(server) = config.servers.get(server_name) {
-                        println!("  - {} ({})", server_name.cyan(), server.provider);
-                    }
-                }
-                println!("\n実行するには --yes オプションを指定してください");
-                return Ok(());
-            }
-
-            // 各サーバーを削除
-            for server_name in &stage_config.servers {
-                let server = config.servers.get(server_name).ok_or_else(|| {
-                    anyhow::anyhow!("サーバー '{}' の定義が見つかりません", server_name)
-                })?;
-
-                println!("\n{} {} を削除中...", "▶".cyan(), server_name.bold());
-
-                // プロバイダー別の処理
-                if server.provider == "sakura-cloud" {
-                    // プロバイダー設定からzoneを取得
-                    let zone = config
-                        .providers
-                        .get("sakura-cloud")
-                        .and_then(|p| p.zone.as_deref())
-                        .unwrap_or("tk1a");
-
-                    let provider = SakuraCloudProvider::new(zone);
-
-                    // タグでサーバーを検索
-                    println!("  ↓ サーバーを検索中...");
-                    match provider.find_server_by_tag(&config.name, server_name).await {
-                        Ok(Some(existing)) => {
-                            println!(
-                                "  ℹ サーバー発見: {} (ID: {})",
-                                server_name,
-                                existing.id.cyan()
-                            );
-
-                            // DNS削除（環境変数が設定されている場合）
-                            if let Ok(dns_config) = DnsConfig::from_env() {
-                                let dns = CloudflareDns::new(dns_config);
-
-                                // DNSエイリアス（CNAME）の削除
-                                if !server.dns_aliases.is_empty() {
-                                    println!("  ↓ DNSエイリアスを削除中...");
-                                    for alias in &server.dns_aliases {
-                                        match dns.remove_cname_record(alias).await {
-                                            Ok(_) => {
-                                                println!(
-                                                    "    {} CNAME削除: {}.{}",
-                                                    "✓".green().bold(),
-                                                    alias,
-                                                    dns.domain()
-                                                );
-                                            }
-                                            Err(e) => {
-                                                println!(
-                                                    "    {} CNAME削除エラー ({}): {}",
-                                                    "⚠".yellow(),
-                                                    alias,
-                                                    e
-                                                );
-                                            }
-                                        }
-                                    }
-                                }
-
-                                // メインのAレコードを削除
-                                let subdomain = dns.generate_subdomain(server_name, &stage);
-                                println!("  ↓ DNSレコードを削除中...");
-                                match dns.remove_record(&subdomain).await {
-                                    Ok(_) => {
-                                        println!(
-                                            "  {} DNS削除: {}.{}",
-                                            "✓".green().bold(),
-                                            subdomain,
-                                            dns.domain()
-                                        );
-                                    }
-                                    Err(e) => {
-                                        println!("  {} DNS削除エラー: {}", "⚠".yellow(), e);
-                                    }
-                                }
-                            }
-
-                            // 削除実行
-                            println!("  ↓ サーバーを削除中（ディスク含む）...");
-                            match provider.delete_server(&existing.id, true).await {
-                                Ok(_) => {
-                                    println!("  {} サーバー削除完了!", "✓".green().bold());
-                                }
-                                Err(e) => {
-                                    println!("  {} サーバー削除エラー: {}", "✗".red().bold(), e);
-                                }
-                            }
-                        }
-                        Ok(None) => {
-                            println!(
-                                "  {} サーバーが見つかりません（既に削除済み？）",
-                                "ℹ".yellow()
-                            );
-                        }
-                        Err(e) => {
-                            println!("  {} サーバー検索エラー: {}", "✗".red().bold(), e);
-                        }
-                    }
-                } else {
-                    println!(
-                        "  {} プロバイダー '{}' はサポートされていません",
-                        "!".yellow(),
-                        server.provider
-                    );
-                }
-            }
-
-            println!(
-                "\n{}",
-                "✓ クラウドリソースの削除処理が完了しました".green().bold()
-            );
-        }
-        CloudCommands::Server(server_cmd) => {
-            handle_server_command(server_cmd, config).await?;
         }
     }
 
@@ -3941,239 +3572,6 @@ fn expand_variables(value: &str, variables: &std::collections::HashMap<String, S
         .to_string();
 
     result
-}
-
-/// セットアップコマンドを処理（冪等な環境構築）
-async fn handle_setup_command(
-    project_root: &std::path::Path,
-    config: &fleetflow_core::Flow,
-    stage_arg: Option<String>,
-    yes: bool,
-    skip_arg: Option<String>,
-) -> anyhow::Result<()> {
-    use crate::setup::{SetupLogger, SetupStep, parse_skip_steps};
-    use std::io::{self, Write};
-
-    println!("{}", "╔══════════════════════════════════════════╗".cyan());
-    println!(
-        "{}",
-        "║        FleetFlow Setup                   ║".cyan().bold()
-    );
-    println!("{}", "╚══════════════════════════════════════════╝".cyan());
-    println!();
-
-    // ステージ名を決定
-    let stage_name = determine_stage_name(stage_arg, config)?;
-    let is_local = stage_name == "local";
-
-    println!("  ステージ: {}", stage_name.cyan().bold());
-    println!(
-        "  モード:   {}",
-        if is_local {
-            "ローカル".green()
-        } else {
-            "リモート".yellow()
-        }
-    );
-
-    // スキップするステップを解析
-    let skip_steps = parse_skip_steps(skip_arg.as_deref());
-    if !skip_steps.is_empty() {
-        println!(
-            "  スキップ: {}",
-            skip_steps
-                .iter()
-                .map(|s| s.id())
-                .collect::<Vec<_>>()
-                .join(", ")
-                .dimmed()
-        );
-    }
-
-    // 確認
-    if !yes {
-        print!("\nセットアップを開始しますか？ [y/N] ");
-        io::stdout().flush()?;
-        let mut input = String::new();
-        io::stdin().read_line(&mut input)?;
-        if !input.trim().eq_ignore_ascii_case("y") {
-            println!("キャンセルしました");
-            return Ok(());
-        }
-    }
-
-    println!();
-
-    // セットアップロガー初期化
-    let mut logger = SetupLogger::new();
-
-    // 実行するステップを決定
-    let steps = if is_local {
-        SetupStep::local_steps()
-    } else {
-        SetupStep::remote_steps()
-    };
-
-    // 各ステップを実行
-    for step in steps {
-        // スキップ指定されている場合
-        if skip_steps.contains(&step) {
-            logger.start_step(step);
-            logger.step_skipped("--skip で指定");
-            continue;
-        }
-
-        match step {
-            SetupStep::LoadCloudConfig => {
-                logger.start_step(step);
-
-                // cloud.kdl の存在確認
-                let cloud_config_path = project_root.join("cloud.kdl");
-                if cloud_config_path.exists() {
-                    logger.log_detail(&format!("cloud.kdl: {}", cloud_config_path.display()));
-                    logger.step_success(Some("cloud.kdl 読み込み完了"));
-                } else {
-                    // サーバー定義がconfig内にあるかチェック
-                    if config.servers.is_empty() {
-                        logger.step_skipped("サーバー定義なし");
-                    } else {
-                        logger
-                            .log_detail(&format!("{}個のサーバー定義を検出", config.servers.len()));
-                        logger.step_success(Some("サーバー設定を読み込み完了"));
-                    }
-                }
-            }
-
-            SetupStep::CheckServer => {
-                logger.start_step(step);
-                // TODO: リモートサーバー確認の実装
-                // 現時点ではスキップ
-                logger.step_skipped("実装予定");
-            }
-
-            SetupStep::CreateServer => {
-                logger.start_step(step);
-                // TODO: リモートサーバー作成の実装
-                // 現時点ではスキップ
-                logger.step_skipped("実装予定");
-            }
-
-            SetupStep::WaitSsh => {
-                logger.start_step(step);
-                // TODO: SSH接続待機の実装
-                logger.step_skipped("実装予定");
-            }
-
-            SetupStep::InstallTools => {
-                logger.start_step(step);
-                // TODO: ツールインストールの実装
-                logger.step_skipped("実装予定");
-            }
-
-            SetupStep::CreateDirectories => {
-                logger.start_step(step);
-
-                // ローカルセットアップの場合はデータディレクトリを作成
-                if is_local {
-                    let data_dir = project_root.join("data");
-                    if data_dir.exists() {
-                        logger.log_detail("data/: 既に存在");
-                    } else {
-                        std::fs::create_dir_all(&data_dir)?;
-                        logger.log_detail("data/: 作成完了");
-                    }
-                    logger.step_success(None);
-                } else {
-                    // リモートの場合はSSH経由でディレクトリ作成
-                    logger.step_skipped("実装予定");
-                }
-            }
-
-            SetupStep::StartContainers => {
-                logger.start_step(step);
-
-                // Docker初期化
-                let docker = init_docker_with_error_handling().await?;
-
-                // コンテナ起動（fleet up相当）
-                let stage_config = match config.stages.get(&stage_name) {
-                    Some(s) => s,
-                    None => {
-                        logger.step_skipped("ステージ設定なし");
-                        continue;
-                    }
-                };
-
-                let container_prefix = format!("{}-{}", config.name, stage_name);
-
-                for service_name in &stage_config.services {
-                    if config.services.contains_key(service_name) {
-                        let container_name = format!("{}-{}", container_prefix, service_name);
-                        logger.log_detail(&format!("{}: 確認中...", service_name));
-
-                        // コンテナが既に存在するかチェック
-                        let existing = docker
-                            .inspect_container(
-                                &container_name,
-                                None::<bollard::query_parameters::InspectContainerOptions>,
-                            )
-                            .await
-                            .ok();
-
-                        if let Some(container) = existing {
-                            if container
-                                .state
-                                .as_ref()
-                                .is_some_and(|s| s.running.unwrap_or(false))
-                            {
-                                logger.log_detail(&format!("{}: 起動中", service_name));
-                            } else {
-                                // 停止中なら起動
-                                docker
-                                    .start_container(
-                                        &container_name,
-                                        None::<bollard::query_parameters::StartContainerOptions>,
-                                    )
-                                    .await?;
-                                logger.log_detail(&format!("{}: 起動完了", service_name));
-                            }
-                        } else {
-                            // コンテナが存在しない場合
-                            logger.log_detail(&format!(
-                                "{}: 未作成（fleet up を実行してください）",
-                                service_name
-                            ));
-                        }
-                    }
-                }
-
-                logger.step_success(Some(&format!(
-                    "{}個のサービスを確認",
-                    stage_config.services.len()
-                )));
-            }
-
-            SetupStep::InitDatabase => {
-                logger.start_step(step);
-                // TODO: DB初期化（マイグレーション適用）
-                logger.step_skipped("実装予定");
-            }
-        }
-    }
-
-    // サマリー出力
-    logger.print_summary(&stage_name);
-
-    if logger.all_success() {
-        println!("\n{} セットアップが完了しました！", "✓".green().bold());
-    } else {
-        println!(
-            "\n{} セットアップ中にエラーが発生しました",
-            "✗".red().bold()
-        );
-    }
-
-    Ok(())
 }
 
 /// シェル用にエスケープ
