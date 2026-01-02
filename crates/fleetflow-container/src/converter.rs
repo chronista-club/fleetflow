@@ -386,6 +386,7 @@ mod tests {
             providers: HashMap::new(),
             servers: HashMap::new(),
             registry: None,
+            variables: HashMap::new(),
         };
 
         let result = get_stage_services(&flow, "local").unwrap();
@@ -403,6 +404,7 @@ mod tests {
             providers: HashMap::new(),
             servers: HashMap::new(),
             registry: None,
+            variables: HashMap::new(),
         };
 
         let result = get_stage_services(&flow, "prod");

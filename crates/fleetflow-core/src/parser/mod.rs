@@ -52,6 +52,7 @@ pub fn parse_kdl_string_with_stage(
     let mut stage_service_overrides: HashMap<String, HashMap<String, Service>> = HashMap::new();
     let mut providers = HashMap::new();
     let mut servers = HashMap::new();
+    let mut variables: HashMap<String, String> = HashMap::new();
     let mut name = default_name;
     let mut registry: Option<String> = None;
 
@@ -95,7 +96,19 @@ pub fn parse_kdl_string_with_stage(
                 // TODO: include機能の実装
             }
             "variables" => {
-                // TODO: 変数定義の実装
+                // プロジェクトレベルの共通変数
+                if let Some(vars) = node.children() {
+                    for var in vars.nodes() {
+                        let key = var.name().value().to_string();
+                        let value = var
+                            .entries()
+                            .first()
+                            .and_then(|e| e.value().as_string())
+                            .unwrap_or("")
+                            .to_string();
+                        variables.insert(key, value);
+                    }
+                }
             }
             "registry" => {
                 // トップレベルのレジストリURL設定
@@ -132,6 +145,7 @@ pub fn parse_kdl_string_with_stage(
         providers,
         servers,
         registry,
+        variables,
     })
 }
 

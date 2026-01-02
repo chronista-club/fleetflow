@@ -54,6 +54,7 @@ mod tests {
             providers: HashMap::new(),
             servers: HashMap::new(),
             registry: None,
+            variables: HashMap::new(),
         };
 
         assert_eq!(flow.name, "my-project");
@@ -78,6 +79,7 @@ mod tests {
             providers: HashMap::new(),
             servers: HashMap::new(),
             registry: None,
+            variables: HashMap::new(),
         };
 
         assert_eq!(flow.services.len(), 1);

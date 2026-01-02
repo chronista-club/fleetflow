@@ -27,4 +27,7 @@ pub struct Flow {
     /// デフォルトのコンテナレジストリURL（例: ghcr.io/owner）
     #[serde(default)]
     pub registry: Option<String>,
+    /// プロジェクト共通の変数（全ステージで使用可能）
+    #[serde(default)]
+    pub variables: HashMap<String, String>,
 }
