@@ -5,10 +5,11 @@
 
 use anyhow::Result;
 use rmcp::{
+    ErrorData as McpError, RoleServer, ServerHandler, ServiceExt,
     handler::server::{tool::ToolCallContext, tool::ToolRouter, wrapper::Parameters},
     model::*,
     service::RequestContext,
-    tool, tool_router, ErrorData as McpError, RoleServer, ServerHandler, ServiceExt,
+    tool, tool_router,
 };
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -93,7 +94,9 @@ impl FleetFlowServer {
     }
 
     /// プロジェクト情報を取得
-    #[tool(description = "カレントディレクトリにある FleetFlow プロジェクト（fleet.kdl 等）を解析し、定義されているサービス名、イメージ名、ステージ名、環境変数などの情報を取得します。")]
+    #[tool(
+        description = "カレントディレクトリにある FleetFlow プロジェクト（fleet.kdl 等）を解析し、定義されているサービス名、イメージ名、ステージ名、環境変数などの情報を取得します。"
+    )]
     async fn fleetflow_inspect_project(&self) -> Result<String, String> {
         let project_root = fleetflow_core::find_project_root()
             .map_err(|e| format!("プロジェクトルートが見つかりません: {}", e))?;
@@ -121,7 +124,9 @@ impl FleetFlowServer {
     }
 
     /// コンテナ一覧を表示
-    #[tool(description = "コンテナの一覧を表示します。プロジェクトに関連するコンテナの稼働状況を確認できます。")]
+    #[tool(
+        description = "コンテナの一覧を表示します。プロジェクトに関連するコンテナの稼働状況を確認できます。"
+    )]
     async fn fleetflow_ps(&self) -> Result<String, String> {
         let docker = bollard::Docker::connect_with_local_defaults()
             .map_err(|e| format!("Docker接続エラー: {}", e))?;
@@ -172,7 +177,9 @@ impl FleetFlowServer {
     }
 
     /// ステージを起動
-    #[tool(description = "指定されたステージのコンテナを起動します。ネットワークの作成や、既に存在するコンテナの再起動も行います。")]
+    #[tool(
+        description = "指定されたステージのコンテナを起動します。ネットワークの作成や、既に存在するコンテナの再起動も行います。"
+    )]
     async fn fleetflow_up(&self, params: Parameters<StageParam>) -> Result<String, String> {
         let stage = &params.0.stage;
 
@@ -189,15 +196,14 @@ impl FleetFlowServer {
                 "ステージ '{}' の全サービスを正常に起動しました。",
                 stage
             )),
-            Err(e) => Err(format!(
-                "ステージ '{}' の起動に失敗しました: {}",
-                stage, e
-            )),
+            Err(e) => Err(format!("ステージ '{}' の起動に失敗しました: {}", stage, e)),
         }
     }
 
     /// ステージを停止
-    #[tool(description = "指定されたステージのコンテナを停止します。remove=true でコンテナとネットワークを完全に削除します。")]
+    #[tool(
+        description = "指定されたステージのコンテナを停止します。remove=true でコンテナとネットワークを完全に削除します。"
+    )]
     async fn fleetflow_down(&self, params: Parameters<DownParam>) -> Result<String, String> {
         let stage = &params.0.stage;
         let remove = params.0.remove;
@@ -228,7 +234,9 @@ impl FleetFlowServer {
     }
 
     /// ログを取得
-    #[tool(description = "指定されたステージのコンテナログを取得します。特定のサービスを指定することも可能です。")]
+    #[tool(
+        description = "指定されたステージのコンテナログを取得します。特定のサービスを指定することも可能です。"
+    )]
     async fn fleetflow_logs(&self, params: Parameters<LogsParam>) -> Result<String, String> {
         use futures_util::StreamExt;
 
@@ -351,21 +359,13 @@ impl FleetFlowServer {
         let config = fleetflow_core::load_project_from_root(&project_root)
             .map_err(|e| format!("設定の読み込みに失敗: {}", e))?;
 
-        let stage_config = config
-            .stages
-            .get(stage)
-            .ok_or_else(|| {
-                format!(
-                    "ステージ '{}' が見つかりません。利用可能: {}",
-                    stage,
-                    config
-                        .stages
-                        .keys()
-                        .cloned()
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                )
-            })?;
+        let stage_config = config.stages.get(stage).ok_or_else(|| {
+            format!(
+                "ステージ '{}' が見つかりません。利用可能: {}",
+                stage,
+                config.stages.keys().cloned().collect::<Vec<_>>().join(", ")
+            )
+        })?;
 
         let docker = bollard::Docker::connect_with_local_defaults()
             .map_err(|e| format!("Docker接続エラー: {}", e))?;

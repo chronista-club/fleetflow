@@ -34,7 +34,12 @@ pub fn find_flow_file() -> Result<PathBuf> {
     }
 
     let current_dir = std::env::current_dir()?;
-    let candidates = ["flow.local.kdl", ".flow.local.kdl", "fleet.kdl", ".fleet.kdl"];
+    let candidates = [
+        "flow.local.kdl",
+        ".flow.local.kdl",
+        "fleet.kdl",
+        ".fleet.kdl",
+    ];
 
     // 2. カレントディレクトリで検索
     for filename in &candidates {
