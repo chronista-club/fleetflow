@@ -3,10 +3,11 @@
 //! Teraを使用してKDLファイルのテンプレート展開を行います。
 
 use crate::error::{FlowError, Result};
+use crate::onepassword;
 use std::collections::HashMap;
 use std::path::Path;
 use tera::{Context, Tera};
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 /// ファイルあたりの推定バイト数（容量事前確保用）
 const ESTIMATED_BYTES_PER_FILE: usize = 500;
@@ -116,9 +117,23 @@ impl TemplateProcessor {
                 // クォートを除去（"value" や 'value' の場合）
                 let value = strip_quotes(value);
 
+                // op:// 参照の場合は1Passwordから解決
+                let resolved_value = if onepassword::is_op_reference(value) {
+                    debug!(key = %key, "Resolving 1Password reference");
+                    match onepassword::resolve_reference(value) {
+                        Ok(secret) => secret,
+                        Err(e) => {
+                            warn!(key = %key, error = %e, "Failed to resolve 1Password reference, using original value");
+                            value.to_string()
+                        }
+                    }
+                } else {
+                    value.to_string()
+                };
+
                 debug!(key = %key, "Adding variable from .env file");
                 self.context
-                    .insert(key, &serde_json::Value::String(value.to_string()));
+                    .insert(key, &serde_json::Value::String(resolved_value));
                 count += 1;
             }
         }
@@ -189,20 +204,110 @@ impl Default for TemplateProcessor {
 /// variables { ... } ブロックを探してHashMapに変換。
 /// 正規表現を使用してブロックを抽出することで、ドキュメント内の他の場所にある
 /// テンプレート変数 {{ ... }} によるパースエラーを回避します。
+///
+/// 注意: この関数はグローバル変数のみを抽出します。
+/// ステージ固有の変数は `extract_variables_with_stage` を使用してください。
 pub fn extract_variables(kdl_content: &str) -> Result<Variables> {
+    extract_variables_with_stage(kdl_content, None)
+}
+
+/// ステージを考慮して変数を抽出
+///
+/// グローバルなvariablesブロックと、指定されたステージのvariablesブロックを抽出します。
+/// ステージ固有の変数はグローバル変数を上書きします。
+///
+/// # Arguments
+/// * `kdl_content` - KDLファイルの内容
+/// * `stage` - 対象のステージ名（Noneの場合はグローバル変数のみ）
+pub fn extract_variables_with_stage(kdl_content: &str, stage: Option<&str>) -> Result<Variables> {
+    let mut all_vars = HashMap::new();
+
+    // 1. グローバルなvariablesブロックを抽出
+    // stageブロック内ではないvariablesを抽出するため、stageブロックを除外してから処理
+    let global_vars = extract_global_variables(kdl_content)?;
+    all_vars.extend(global_vars);
+
+    // 2. 指定されたステージのvariablesブロックを抽出
+    if let Some(stage_name) = stage {
+        let stage_vars = extract_stage_variables(kdl_content, stage_name)?;
+        all_vars.extend(stage_vars);
+    }
+
+    Ok(all_vars)
+}
+
+/// グローバルな変数ブロック（stageブロック外）を抽出
+fn extract_global_variables(kdl_content: &str) -> Result<Variables> {
     use regex::Regex;
 
-    // variables { ... } ブロックを抽出する正規表現
-    // 注意: ネストした中括弧には対応していませんが、variablesブロック内では通常不要です
+    // stageブロックを一時的に除去してからvariablesを抽出
+    // stage "xxx" { ... } パターンをマッチ（ネストした{}に対応するため、バランスを取る）
+    let stage_re = Regex::new(r#"(?s)stage\s+["'][^"']+["']\s*\{"#)
+        .map_err(|e| FlowError::InvalidConfig(format!("正規表現のコンパイルエラー: {}", e)))?;
+
+    // stageブロックの開始位置と終了位置を特定
+    let mut stage_ranges: Vec<(usize, usize)> = Vec::new();
+    for mat in stage_re.find_iter(kdl_content) {
+        let start = mat.start();
+        // stageブロックの終了位置を見つける（波括弧のバランスを取る）
+        if let Some(end) = find_matching_brace(kdl_content, mat.end() - 1) {
+            stage_ranges.push((start, end + 1));
+        }
+    }
+
+    // stageブロックを除去したコンテンツを作成
+    let mut global_content = String::with_capacity(kdl_content.len());
+    let mut last_end = 0;
+    for (start, end) in &stage_ranges {
+        global_content.push_str(&kdl_content[last_end..*start]);
+        last_end = *end;
+    }
+    global_content.push_str(&kdl_content[last_end..]);
+
+    // グローバルコンテンツからvariablesを抽出
+    extract_variables_from_content(&global_content)
+}
+
+/// 指定されたステージのvariablesブロックを抽出
+fn extract_stage_variables(kdl_content: &str, stage_name: &str) -> Result<Variables> {
+    use regex::Regex;
+
+    // stage "stage_name" { ... } パターンをマッチ
+    // ステージ名をエスケープしてパターンを構築
+    let escaped_stage = regex::escape(stage_name);
+    let stage_pattern = format!(r#"(?s)stage\s+["']{escaped_stage}["']\s*\{{"#);
+    let stage_re = Regex::new(&stage_pattern)
+        .map_err(|e| FlowError::InvalidConfig(format!("正規表現のコンパイルエラー: {}", e)))?;
+
+    let mut stage_vars = HashMap::new();
+
+    for mat in stage_re.find_iter(kdl_content) {
+        // stageブロックの終了位置を見つける
+        if let Some(end) = find_matching_brace(kdl_content, mat.end() - 1) {
+            // stageブロックの内容を取得
+            let stage_content = &kdl_content[mat.end()..end];
+            // そのstageブロック内のvariablesを抽出
+            let vars = extract_variables_from_content(stage_content)?;
+            stage_vars.extend(vars);
+        }
+    }
+
+    Ok(stage_vars)
+}
+
+/// コンテンツからvariablesブロックを抽出
+fn extract_variables_from_content(content: &str) -> Result<Variables> {
+    use regex::Regex;
+
     let re = Regex::new(r"(?s)variables\s*\{(?P<content>.*?)\}")
         .map_err(|e| FlowError::InvalidConfig(format!("正規表現のコンパイルエラー: {}", e)))?;
 
     let mut all_vars = HashMap::new();
 
-    for cap in re.captures_iter(kdl_content) {
-        if let Some(content) = cap.name("content") {
+    for cap in re.captures_iter(content) {
+        if let Some(var_content) = cap.name("content") {
             // ブロックの中身だけをダミーのKDLとしてパース
-            let dummy_kdl = format!("extracted {{\n{}\n}}", content.as_str());
+            let dummy_kdl = format!("extracted {{\n{}\n}}", var_content.as_str());
             let doc: kdl::KdlDocument = dummy_kdl.parse().map_err(|e| {
                 FlowError::InvalidConfig(format!("KDL パースエラー (変数抽出ブロック): {}", e))
             })?;
@@ -222,6 +327,49 @@ pub fn extract_variables(kdl_content: &str) -> Result<Variables> {
     }
 
     Ok(all_vars)
+}
+
+/// 対応する閉じ波括弧の位置を見つける
+fn find_matching_brace(content: &str, open_pos: usize) -> Option<usize> {
+    let bytes = content.as_bytes();
+    if open_pos >= bytes.len() || bytes[open_pos] != b'{' {
+        return None;
+    }
+
+    let mut depth = 1;
+    let mut pos = open_pos + 1;
+    let mut in_string = false;
+    let mut escape_next = false;
+
+    while pos < bytes.len() && depth > 0 {
+        let c = bytes[pos];
+
+        if escape_next {
+            escape_next = false;
+            pos += 1;
+            continue;
+        }
+
+        if c == b'\\' {
+            escape_next = true;
+            pos += 1;
+            continue;
+        }
+
+        if c == b'"' {
+            in_string = !in_string;
+        } else if !in_string {
+            if c == b'{' {
+                depth += 1;
+            } else if c == b'}' {
+                depth -= 1;
+            }
+        }
+
+        pos += 1;
+    }
+
+    if depth == 0 { Some(pos - 1) } else { None }
 }
 
 /// クォートを除去するヘルパー関数
@@ -548,5 +696,128 @@ API_KEY=secret-key-123
         assert_eq!(strip_quotes("hello"), "hello");
         assert_eq!(strip_quotes("\"hello"), "\"hello"); // 不完全なクォート
         assert_eq!(strip_quotes(""), "");
+    }
+
+    #[test]
+    fn test_extract_stage_specific_variables() {
+        // Issue #28: ステージ固有の変数が正しく解決されない問題のテスト
+        let kdl = r#"
+variables {
+    GLOBAL_VAR "global_value"
+}
+
+stage "local" {
+    variables {
+        SURREALDB_DATA_VOLUME "./data/surrealdb"
+    }
+}
+
+stage "dev" {
+    variables {
+        SURREALDB_DATA_VOLUME "/opt/creo-memories/data/surrealdb"
+    }
+}
+"#;
+
+        // localステージを指定した場合
+        let local_vars = extract_variables_with_stage(kdl, Some("local")).unwrap();
+        assert_eq!(
+            local_vars.get("SURREALDB_DATA_VOLUME").unwrap(),
+            "./data/surrealdb",
+            "localステージの変数が取得されるべき"
+        );
+        assert_eq!(
+            local_vars.get("GLOBAL_VAR").unwrap(),
+            "global_value",
+            "グローバル変数も取得されるべき"
+        );
+
+        // devステージを指定した場合
+        let dev_vars = extract_variables_with_stage(kdl, Some("dev")).unwrap();
+        assert_eq!(
+            dev_vars.get("SURREALDB_DATA_VOLUME").unwrap(),
+            "/opt/creo-memories/data/surrealdb",
+            "devステージの変数が取得されるべき"
+        );
+        assert_eq!(
+            dev_vars.get("GLOBAL_VAR").unwrap(),
+            "global_value",
+            "グローバル変数も取得されるべき"
+        );
+
+        // ステージ指定なしの場合
+        let global_only = extract_variables_with_stage(kdl, None).unwrap();
+        assert!(
+            !global_only.contains_key("SURREALDB_DATA_VOLUME"),
+            "ステージ指定なしではステージ固有の変数は取得されないべき"
+        );
+        assert_eq!(
+            global_only.get("GLOBAL_VAR").unwrap(),
+            "global_value",
+            "グローバル変数は取得されるべき"
+        );
+    }
+
+    #[test]
+    fn test_extract_global_variables_excludes_stage_variables() {
+        let kdl = r#"
+variables {
+    GLOBAL_VAR "global"
+}
+
+stage "local" {
+    variables {
+        STAGE_VAR "local_value"
+    }
+}
+"#;
+
+        let global_vars = extract_global_variables(kdl).unwrap();
+        assert_eq!(global_vars.get("GLOBAL_VAR").unwrap(), "global");
+        assert!(
+            !global_vars.contains_key("STAGE_VAR"),
+            "stageブロック内の変数はグローバル変数として抽出されないべき"
+        );
+    }
+
+    #[test]
+    fn test_stage_variables_override_global() {
+        let kdl = r#"
+variables {
+    MY_VAR "global_value"
+}
+
+stage "local" {
+    variables {
+        MY_VAR "local_value"
+    }
+}
+"#;
+
+        let vars = extract_variables_with_stage(kdl, Some("local")).unwrap();
+        assert_eq!(
+            vars.get("MY_VAR").unwrap(),
+            "local_value",
+            "ステージ固有の変数がグローバル変数を上書きするべき"
+        );
+    }
+
+    #[test]
+    fn test_find_matching_brace() {
+        // 単純なケース
+        let content = "{ hello }";
+        assert_eq!(find_matching_brace(content, 0), Some(8));
+
+        // ネストしたケース
+        let content = "{ outer { inner } }";
+        assert_eq!(find_matching_brace(content, 0), Some(18));
+
+        // 文字列内の波括弧
+        let content = r#"{ "hello { world }" }"#;
+        assert_eq!(find_matching_brace(content, 0), Some(20));
+
+        // 閉じ括弧がない
+        let content = "{ hello";
+        assert_eq!(find_matching_brace(content, 0), None);
     }
 }

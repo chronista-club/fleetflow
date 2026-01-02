@@ -6,7 +6,7 @@ use crate::discovery::{DiscoveredFiles, discover_files_with_stage, find_project_
 use crate::error::{FlowError, Result};
 use crate::model::Flow;
 use crate::parser::parse_kdl_string_with_stage;
-use crate::template::{TemplateProcessor, Variables, extract_variables};
+use crate::template::{TemplateProcessor, Variables, extract_variables_with_stage};
 use std::path::Path;
 use tracing::{debug, info, instrument};
 
@@ -46,7 +46,7 @@ pub fn load_project_from_root_with_stage(project_root: &Path, stage: Option<&str
 
     // 2. 変数収集とテンプレート準備
     debug!("Step 2: Preparing template processor");
-    let mut processor = prepare_template_processor(&discovered, project_root)?;
+    let mut processor = prepare_template_processor(&discovered, project_root, stage)?;
 
     // 3. テンプレート展開
     debug!("Step 3: Expanding templates");
@@ -77,6 +77,7 @@ pub fn load_project_from_root_with_stage(project_root: &Path, stage: Option<&str
 fn prepare_template_processor(
     discovered: &DiscoveredFiles,
     project_root: &Path,
+    stage: Option<&str>,
 ) -> Result<TemplateProcessor> {
     let mut processor = TemplateProcessor::new();
     let mut all_variables = Variables::new();
@@ -87,13 +88,13 @@ fn prepare_template_processor(
         serde_json::Value::String(project_root.to_string_lossy().to_string()),
     );
 
-    // 1. グローバル変数（fleet.kdl）
+    // 1. グローバル変数（fleet.kdl）とステージ固有変数
     if let Some(root_file) = &discovered.root {
         let content = std::fs::read_to_string(root_file).map_err(|e| FlowError::IoError {
             path: root_file.clone(),
             message: e.to_string(),
         })?;
-        let vars = extract_variables(&content)?;
+        let vars = extract_variables_with_stage(&content, stage)?;
         all_variables.extend(vars);
     }
 
@@ -103,7 +104,7 @@ fn prepare_template_processor(
             path: var_file.clone(),
             message: e.to_string(),
         })?;
-        let vars = extract_variables(&content)?;
+        let vars = extract_variables_with_stage(&content, stage)?;
         all_variables.extend(vars);
     }
 
@@ -293,7 +294,7 @@ pub fn load_project_with_debug(project_root: &Path) -> Result<Flow> {
     }
 
     println!("\n📖 変数収集");
-    let mut processor = prepare_template_processor(&discovered, project_root)?;
+    let mut processor = prepare_template_processor(&discovered, project_root, stage_ref)?;
     println!("  ✓ 完了");
 
     println!("\n📝 テンプレート展開");
@@ -601,6 +602,67 @@ service "api" {
         let config = load_project_from_root(project_root)?;
         let api = &config.services["api"];
         assert_eq!(api.image.as_ref().unwrap(), "ghcr.io/myorg/api:v1.2.3");
+
+        Ok(())
+    }
+
+    /// Issue #28: ステージ固有の変数がvolume定義で正しく解決されること
+    #[test]
+    fn test_stage_specific_variables_in_volumes() -> Result<()> {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let project_root = temp_dir.path();
+
+        // .fleetflow ディレクトリを作成
+        fs::create_dir_all(project_root.join(".fleetflow"))?;
+
+        // .fleetflow/fleet.kdl
+        fs::write(
+            project_root.join(".fleetflow/fleet.kdl"),
+            r#"
+project "test-issue-28"
+
+stage "local" {
+    service "db"
+    variables {
+        DATA_DIR "./data/local"
+    }
+}
+
+stage "dev" {
+    service "db"
+    variables {
+        DATA_DIR "/opt/data/dev"
+    }
+}
+
+service "db" {
+    image "postgres:16"
+    volumes {
+        volume host="{{ DATA_DIR }}/postgres" container="/var/lib/postgresql/data"
+    }
+}
+"#,
+        )?;
+
+        // localステージでロード
+        let local_config = load_project_from_root_with_stage(project_root, Some("local"))?;
+        let local_db = &local_config.services["db"];
+        let local_volume = &local_db.volumes[0];
+        assert_eq!(
+            local_volume.host.to_string_lossy(),
+            "./data/local/postgres",
+            "localステージのDATA_DIR変数が使用されるべき"
+        );
+
+        // devステージでロード
+        let dev_config = load_project_from_root_with_stage(project_root, Some("dev"))?;
+        let dev_db = &dev_config.services["db"];
+        let dev_volume = &dev_db.volumes[0];
+        assert_eq!(
+            dev_volume.host.to_string_lossy(),
+            "/opt/data/dev/postgres",
+            "devステージのDATA_DIR変数が使用されるべき"
+        );
 
         Ok(())
     }
