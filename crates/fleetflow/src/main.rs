@@ -2,7 +2,7 @@ mod tui;
 
 use clap::{Parser, Subcommand};
 use colored::Colorize;
-use fleetflow_build::{BuildResolver, ContextBuilder, ImageBuilder};
+use fleetflow_build::{BuildResolver, ImageBuilder};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -741,17 +741,17 @@ async fn main() -> anyhow::Result<()> {
                     println!("  → Context: {}", context_path.display().to_string().cyan());
                     println!("  → Image: {}", image.cyan());
 
-                    let context_data =
-                        match ContextBuilder::create_context(&context_path, &dockerfile_path) {
-                            Ok(data) => data,
-                            Err(e) => {
-                                return Err(anyhow::anyhow!("コンテキスト作成エラー: {}", e));
-                            }
-                        };
-
                     let builder = ImageBuilder::new(docker.clone());
                     match builder
-                        .build_image(context_data, image, build_args, target.as_deref(), false)
+                        .build_image_from_path(
+                            &context_path,
+                            &dockerfile_path,
+                            image,
+                            build_args,
+                            target.as_deref(),
+                            false,
+                            None,
+                        )
                         .await
                     {
                         Ok(_) => {
@@ -897,26 +897,17 @@ async fn main() -> anyhow::Result<()> {
                             println!("  → Context: {}", context_path.display().to_string().cyan());
                             println!("  → Image: {}", image.cyan());
 
-                            // ビルドコンテキストを作成
-                            let context_data = match ContextBuilder::create_context(
-                                &context_path,
-                                &dockerfile_path,
-                            ) {
-                                Ok(data) => data,
-                                Err(e) => {
-                                    return Err(anyhow::anyhow!("コンテキスト作成エラー: {}", e));
-                                }
-                            };
-
-                            // ビルダーを作成してビルド実行
+                            // ビルダーを作成してビルド実行（docker buildx使用）
                             let builder = ImageBuilder::new(docker.clone());
                             match builder
-                                .build_image(
-                                    context_data,
+                                .build_image_from_path(
+                                    &context_path,
+                                    &dockerfile_path,
                                     image,
                                     build_args,
                                     target.as_deref(),
                                     false,
+                                    None,
                                 )
                                 .await
                             {
@@ -2593,7 +2584,7 @@ async fn handle_build_command(
     platform: Option<&str>,
     no_cache: bool,
 ) -> anyhow::Result<()> {
-    use fleetflow_build::{BuildResolver, ContextBuilder, ImageBuilder, ImagePusher, resolve_tag};
+    use fleetflow_build::{BuildResolver, ImageBuilder, ImagePusher, resolve_tag};
     use std::collections::HashMap;
 
     // ステージの取得
@@ -2783,23 +2774,16 @@ async fn handle_build_command(
                 }
             }
         } else {
-            // 従来のbollard APIでローカルビルド
-            let context_data = match ContextBuilder::create_context(&context_path, &dockerfile_path)
-            {
-                Ok(data) => data,
-                Err(e) => {
-                    eprintln!("  {} コンテキスト作成エラー: {}", "✗".red().bold(), e);
-                    return Err(anyhow::anyhow!("ビルドコンテキストの作成に失敗しました"));
-                }
-            };
-
+            // docker buildxでローカルビルド（BuildKit有効）
             match builder
-                .build_image(
-                    context_data,
+                .build_image_from_path(
+                    &context_path,
+                    &dockerfile_path,
                     &full_image,
                     build_args.clone(),
                     target.as_deref(),
                     no_cache,
+                    None,
                 )
                 .await
             {

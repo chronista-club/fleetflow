@@ -1,14 +1,15 @@
-// Bollard 0.19.4 の非推奨APIを一時的に使用（BOLLARD_API_MAPPING.md参照）
-#![allow(deprecated)]
-
 use crate::error::{BuildError, BuildResult};
 use bollard::Docker;
-use bollard::image::BuildImageOptions;
 use colored::Colorize;
-use futures_util::stream::StreamExt;
 use std::collections::HashMap;
+use std::io::{BufRead, BufReader};
+use std::path::Path;
+use std::process::{Command, Stdio};
 
+/// ImageBuilder - docker buildxを使用してBuildKitでイメージをビルド
 pub struct ImageBuilder {
+    // Docker接続（後方互換性のため保持、実際はCLI経由でビルド）
+    #[allow(dead_code)]
     docker: Docker,
 }
 
@@ -17,7 +18,102 @@ impl ImageBuilder {
         Self { docker }
     }
 
-    /// イメージをビルド
+    /// イメージをビルド（docker buildx使用でBuildKit有効）
+    pub async fn build_image_from_path(
+        &self,
+        context_path: &Path,
+        dockerfile_path: &Path,
+        tag: &str,
+        build_args: HashMap<String, String>,
+        target: Option<&str>,
+        no_cache: bool,
+        platform: Option<&str>,
+    ) -> BuildResult<()> {
+        tracing::info!("Building image: {}", tag);
+
+        let mut cmd = Command::new("docker");
+        cmd.arg("buildx")
+            .arg("build")
+            .arg("-t")
+            .arg(tag)
+            .arg("-f")
+            .arg(dockerfile_path);
+
+        // ビルド引数
+        for (key, value) in &build_args {
+            cmd.arg("--build-arg").arg(format!("{}={}", key, value));
+        }
+
+        // ターゲットステージ
+        if let Some(t) = target {
+            cmd.arg("--target").arg(t);
+        }
+
+        // キャッシュ無効化
+        if no_cache {
+            cmd.arg("--no-cache");
+        }
+
+        // プラットフォーム指定
+        if let Some(p) = platform {
+            cmd.arg("--platform").arg(p);
+        }
+
+        // ローカルにロード（デフォルト）
+        cmd.arg("--load");
+
+        // コンテキストパス
+        cmd.arg(context_path);
+
+        // 出力をリアルタイムで表示
+        cmd.stdout(Stdio::piped());
+        cmd.stderr(Stdio::piped());
+
+        tracing::debug!("Build command: {:?}", cmd);
+        if !build_args.is_empty() {
+            tracing::debug!("Build args: {:?}", build_args);
+        }
+
+        let mut child = cmd.spawn().map_err(|e| {
+            BuildError::BuildFailed(format!("Failed to spawn docker buildx: {}", e))
+        })?;
+
+        // stdoutを読み取り
+        if let Some(stdout) = child.stdout.take() {
+            let reader = BufReader::new(stdout);
+            for line in reader.lines() {
+                if let Ok(line) = line {
+                    println!("{}", line);
+                }
+            }
+        }
+
+        // stderrを読み取り
+        if let Some(stderr) = child.stderr.take() {
+            let reader = BufReader::new(stderr);
+            for line in reader.lines() {
+                if let Ok(line) = line {
+                    eprintln!("{}", line);
+                }
+            }
+        }
+
+        let status = child.wait().map_err(|e| {
+            BuildError::BuildFailed(format!("Failed to wait for docker buildx: {}", e))
+        })?;
+
+        if !status.success() {
+            return Err(BuildError::BuildFailed(format!(
+                "docker buildx build failed with exit code: {:?}",
+                status.code()
+            )));
+        }
+
+        tracing::info!("{}", format!("Successfully built: {}", tag).green());
+        Ok(())
+    }
+
+    /// イメージをビルド（tarコンテキスト用 - 互換性のため残す）
     pub async fn build_image(
         &self,
         context_data: Vec<u8>,
@@ -26,100 +122,51 @@ impl ImageBuilder {
         target: Option<&str>,
         no_cache: bool,
     ) -> BuildResult<()> {
-        tracing::info!("Building image: {}", tag);
+        // tarファイルを一時ディレクトリに展開してビルド
+        let temp_dir = tempfile::tempdir().map_err(|e| {
+            BuildError::BuildFailed(format!("Failed to create temp dir: {}", e))
+        })?;
 
-        // ビルドオプションの設定
-        // build_argsを&str型に変換
-        let build_args_refs: std::collections::HashMap<&str, &str> = build_args
-            .iter()
-            .map(|(k, v)| (k.as_str(), v.as_str()))
-            .collect();
+        // tarを展開
+        use std::io::Cursor;
+        let cursor = Cursor::new(context_data);
+        let mut archive = tar::Archive::new(cursor);
+        archive.unpack(temp_dir.path()).map_err(|e| {
+            BuildError::BuildFailed(format!("Failed to unpack context: {}", e))
+        })?;
 
-        let options = BuildImageOptions {
-            dockerfile: "Dockerfile",
-            t: tag,
-            buildargs: build_args_refs,
-            target: target.unwrap_or(""),
-            nocache: no_cache,
-            rm: true,      // 中間コンテナを削除
-            forcerm: true, // ビルド失敗時も中間コンテナを削除
-            pull: true,    // ベースイメージを常にpull
-            ..Default::default()
-        };
+        let dockerfile_path = temp_dir.path().join("Dockerfile");
 
-        tracing::debug!("Build options: {:?}", options);
-        if !build_args.is_empty() {
-            tracing::debug!("Build args: {:?}", build_args);
-        }
-
-        // ビルドストリームの開始
-        use bytes::Bytes;
-        use http_body_util::{Either, Full};
-        let context_bytes = Bytes::from(context_data);
-        let body = Full::new(context_bytes);
-        let mut stream = self
-            .docker
-            .build_image(options, None, Some(Either::Left(body)));
-
-        // ビルド進捗の表示
-        while let Some(msg) = stream.next().await {
-            match msg {
-                Ok(output) => {
-                    self.handle_build_output(output)?;
-                }
-                Err(e) => {
-                    return Err(BuildError::DockerConnection(e));
-                }
-            }
-        }
-
-        tracing::info!("Successfully built: {}", tag);
-        Ok(())
-    }
-
-    /// ビルド出力の処理
-    fn handle_build_output(&self, output: bollard::models::BuildInfo) -> BuildResult<()> {
-        if let Some(stream) = output.stream {
-            // ビルドステップの出力
-            print!("{}", stream);
-        }
-
-        if let Some(error) = output.error {
-            // エラーが発生した場合
-            return Err(BuildError::BuildFailed(error));
-        }
-
-        if let Some(error_detail) = output.error_detail {
-            // 詳細なエラー情報
-            let error_msg = error_detail
-                .message
-                .unwrap_or_else(|| "Unknown build error".to_string());
-            return Err(BuildError::BuildFailed(error_msg));
-        }
-
-        if let Some(status) = output.status {
-            // ステータスメッセージ（pull, push等）
-            println!("{}", status.cyan());
-        }
-
-        Ok(())
+        self.build_image_from_path(
+            temp_dir.path(),
+            &dockerfile_path,
+            tag,
+            build_args,
+            target,
+            no_cache,
+            None,
+        )
+        .await
     }
 
     /// イメージの存在確認
     pub async fn image_exists(&self, image_tag: &str) -> BuildResult<bool> {
-        match self.docker.inspect_image(image_tag).await {
-            Ok(_) => Ok(true),
-            Err(bollard::errors::Error::DockerResponseServerError {
-                status_code: 404, ..
-            }) => Ok(false),
-            Err(e) => Err(BuildError::DockerConnection(e)),
-        }
+        let output = Command::new("docker")
+            .args(["image", "inspect", image_tag])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .map_err(|e| BuildError::BuildFailed(format!("Failed to check image: {}", e)))?;
+
+        Ok(output.success())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use tempfile::tempdir;
 
     #[tokio::test]
     #[ignore] // Docker接続が必要なため、通常のテストではスキップ
@@ -127,38 +174,28 @@ mod tests {
         let docker = Docker::connect_with_local_defaults().unwrap();
         let builder = ImageBuilder::new(docker);
 
-        // シンプルなDockerfileを含むコンテキストを作成
-        use crate::context::ContextBuilder;
-        use std::fs;
-        use tempfile::tempdir;
-
         let temp_dir = tempdir().unwrap();
         let dockerfile = temp_dir.path().join("Dockerfile");
         fs::write(&dockerfile, "FROM alpine:latest\nCMD echo 'test'").unwrap();
 
-        let context_data = ContextBuilder::create_context(temp_dir.path(), &dockerfile).unwrap();
-
         let result = builder
-            .build_image(
-                context_data,
+            .build_image_from_path(
+                temp_dir.path(),
+                &dockerfile,
                 "fleetflow-test:latest",
                 HashMap::new(),
                 None,
                 false,
+                None,
             )
             .await;
 
         assert!(result.is_ok());
 
         // クリーンアップ
-        builder
-            .docker
-            .remove_image(
-                "fleetflow-test:latest",
-                None::<bollard::query_parameters::RemoveImageOptions>,
-                None,
-            )
-            .await
+        Command::new("docker")
+            .args(["rmi", "fleetflow-test:latest"])
+            .status()
             .ok();
     }
 }
