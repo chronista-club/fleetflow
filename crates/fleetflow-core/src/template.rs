@@ -35,10 +35,27 @@ impl TemplateProcessor {
         self.context.insert(key.into(), &value);
     }
 
-    /// 複数の変数を追加
+    /// 複数の変数を追加（op://参照は1Passwordから解決）
     pub fn add_variables(&mut self, variables: Variables) {
         for (key, value) in variables {
-            self.context.insert(key, &value);
+            // op://参照の場合は1Passwordから解決
+            let resolved_value = if let Some(s) = value.as_str() {
+                if onepassword::is_op_reference(s) {
+                    debug!(key = %key, "Resolving 1Password reference in KDL variables");
+                    match onepassword::resolve_reference(s) {
+                        Ok(secret) => serde_json::Value::String(secret),
+                        Err(e) => {
+                            warn!(key = %key, error = %e, "Failed to resolve 1Password reference, using original value");
+                            value
+                        }
+                    }
+                } else {
+                    value
+                }
+            } else {
+                value
+            };
+            self.context.insert(key, &resolved_value);
         }
     }
 
