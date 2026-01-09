@@ -19,6 +19,7 @@ impl ImageBuilder {
     }
 
     /// イメージをビルド（docker buildx使用でBuildKit有効）
+    #[allow(clippy::too_many_arguments)]
     pub async fn build_image_from_path(
         &self,
         context_path: &Path,
@@ -81,20 +82,16 @@ impl ImageBuilder {
         // stdoutを読み取り
         if let Some(stdout) = child.stdout.take() {
             let reader = BufReader::new(stdout);
-            for line in reader.lines() {
-                if let Ok(line) = line {
-                    println!("{}", line);
-                }
+            for line in reader.lines().map_while(Result::ok) {
+                println!("{}", line);
             }
         }
 
         // stderrを読み取り
         if let Some(stderr) = child.stderr.take() {
             let reader = BufReader::new(stderr);
-            for line in reader.lines() {
-                if let Ok(line) = line {
-                    eprintln!("{}", line);
-                }
+            for line in reader.lines().map_while(Result::ok) {
+                eprintln!("{}", line);
             }
         }
 
@@ -123,17 +120,16 @@ impl ImageBuilder {
         no_cache: bool,
     ) -> BuildResult<()> {
         // tarファイルを一時ディレクトリに展開してビルド
-        let temp_dir = tempfile::tempdir().map_err(|e| {
-            BuildError::BuildFailed(format!("Failed to create temp dir: {}", e))
-        })?;
+        let temp_dir = tempfile::tempdir()
+            .map_err(|e| BuildError::BuildFailed(format!("Failed to create temp dir: {}", e)))?;
 
         // tarを展開
         use std::io::Cursor;
         let cursor = Cursor::new(context_data);
         let mut archive = tar::Archive::new(cursor);
-        archive.unpack(temp_dir.path()).map_err(|e| {
-            BuildError::BuildFailed(format!("Failed to unpack context: {}", e))
-        })?;
+        archive
+            .unpack(temp_dir.path())
+            .map_err(|e| BuildError::BuildFailed(format!("Failed to unpack context: {}", e)))?;
 
         let dockerfile_path = temp_dir.path().join("Dockerfile");
 
