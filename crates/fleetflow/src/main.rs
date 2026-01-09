@@ -3002,8 +3002,10 @@ async fn self_update() -> anyhow::Result<()> {
 
     // self-replaceを使う代わりに、直接コピー
     // (実行中のバイナリは上書きできないため、/usr/local/bin等にインストールされている場合はsudo必要)
+    let mut updated_current = false;
     match std::fs::copy(&new_binary, &current_exe) {
         Ok(_) => {
+            updated_current = true;
             println!();
             println!(
                 "{}",
@@ -3025,6 +3027,47 @@ async fn self_update() -> anyhow::Result<()> {
             );
         }
         Err(e) => return Err(e.into()),
+    }
+
+    // /usr/local/bin/fleet への追加コピーを試みる
+    let usr_local_bin = std::path::Path::new("/usr/local/bin/fleet");
+    let current_exe_canonical = current_exe.canonicalize().ok();
+    let usr_local_canonical = usr_local_bin
+        .exists()
+        .then(|| usr_local_bin.canonicalize().ok())
+        .flatten();
+
+    // 現在のexeが /usr/local/bin/fleet でない場合のみコピーを試みる
+    let is_same_path = match (&current_exe_canonical, &usr_local_canonical) {
+        (Some(a), Some(b)) => a == b,
+        _ => current_exe.ends_with("bin/fleet") && current_exe.starts_with("/usr/local"),
+    };
+
+    if !is_same_path {
+        match std::fs::copy(&new_binary, usr_local_bin) {
+            Ok(_) => {
+                println!(
+                    "{}",
+                    "✓ /usr/local/bin/fleet にもコピーしました".green()
+                );
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
+                // 権限がない場合はヒントを表示
+                if updated_current {
+                    println!(
+                        "{}",
+                        "ℹ /usr/local/bin/fleet にもコピーするには:".dimmed()
+                    );
+                    println!(
+                        "{}",
+                        format!("  sudo cp {} /usr/local/bin/fleet", new_binary.display()).dimmed()
+                    );
+                }
+            }
+            Err(_) => {
+                // その他のエラーは無視（ディレクトリが存在しない等）
+            }
+        }
     }
 
     // クリーンアップ
