@@ -3002,10 +3002,8 @@ async fn self_update() -> anyhow::Result<()> {
 
     // self-replaceを使う代わりに、直接コピー
     // (実行中のバイナリは上書きできないため、/usr/local/bin等にインストールされている場合はsudo必要)
-    let mut updated_current = false;
     match std::fs::copy(&new_binary, &current_exe) {
         Ok(_) => {
-            updated_current = true;
             println!();
             println!(
                 "{}",
@@ -3029,46 +3027,8 @@ async fn self_update() -> anyhow::Result<()> {
         Err(e) => return Err(e.into()),
     }
 
-    // /usr/local/bin/fleet への追加コピーを試みる
-    let usr_local_bin = std::path::Path::new("/usr/local/bin/fleet");
-    let current_exe_canonical = current_exe.canonicalize().ok();
-    let usr_local_canonical = usr_local_bin
-        .exists()
-        .then(|| usr_local_bin.canonicalize().ok())
-        .flatten();
-
-    // 現在のexeが /usr/local/bin/fleet でない場合のみコピーを試みる
-    let is_same_path = match (&current_exe_canonical, &usr_local_canonical) {
-        (Some(a), Some(b)) => a == b,
-        _ => current_exe.ends_with("bin/fleet") && current_exe.starts_with("/usr/local"),
-    };
-
-    if !is_same_path {
-        match std::fs::copy(&new_binary, usr_local_bin) {
-            Ok(_) => {
-                println!(
-                    "{}",
-                    "✓ /usr/local/bin/fleet にもコピーしました".green()
-                );
-            }
-            Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
-                // 権限がない場合はヒントを表示
-                if updated_current {
-                    println!(
-                        "{}",
-                        "ℹ /usr/local/bin/fleet にもコピーするには:".dimmed()
-                    );
-                    println!(
-                        "{}",
-                        format!("  sudo cp {} /usr/local/bin/fleet", new_binary.display()).dimmed()
-                    );
-                }
-            }
-            Err(_) => {
-                // その他のエラーは無視（ディレクトリが存在しない等）
-            }
-        }
-    }
+    // /usr/local/bin/fleet へのシンボリックリンクを作成
+    ensure_usr_local_bin_symlink();
 
     // クリーンアップ
     std::fs::remove_dir_all(&temp_dir).ok();
@@ -3162,6 +3122,88 @@ fn is_newer_version(new_ver: &str, current_ver: &str) -> bool {
     new_parts.len() > current_parts.len()
 }
 
+/// /usr/local/bin/fleet へのシンボリックリンクを作成（~/.cargo/bin/fleet を指す）
+fn ensure_usr_local_bin_symlink() {
+    use std::os::unix::fs::symlink;
+    use std::path::Path;
+
+    let cargo_bin_fleet = dirs::home_dir()
+        .map(|h| h.join(".cargo/bin/fleet"))
+        .filter(|p| p.exists());
+
+    let Some(cargo_bin) = cargo_bin_fleet else {
+        // ~/.cargo/bin/fleet が存在しない場合はスキップ
+        return;
+    };
+
+    let usr_local_bin = Path::new("/usr/local/bin/fleet");
+
+    // 既にシンボリックリンクで正しいリンク先を指している場合はスキップ
+    if usr_local_bin.is_symlink() {
+        if let Ok(target) = std::fs::read_link(usr_local_bin) {
+            if target == cargo_bin {
+                println!(
+                    "{}",
+                    "✓ /usr/local/bin/fleet は既に正しくリンクされています".dimmed()
+                );
+                return;
+            }
+        }
+    }
+
+    // 既存のファイル/シンボリックリンクを削除してから作成
+    if usr_local_bin.exists() || usr_local_bin.is_symlink() {
+        if let Err(e) = std::fs::remove_file(usr_local_bin) {
+            if e.kind() == std::io::ErrorKind::PermissionDenied {
+                println!(
+                    "{}",
+                    "ℹ /usr/local/bin/fleet にシンボリックリンクを作成するには:".dimmed()
+                );
+                println!(
+                    "{}",
+                    format!(
+                        "  sudo ln -sf {} /usr/local/bin/fleet",
+                        cargo_bin.display()
+                    )
+                    .dimmed()
+                );
+            }
+            return;
+        }
+    }
+
+    // シンボリックリンクを作成
+    match symlink(&cargo_bin, usr_local_bin) {
+        Ok(_) => {
+            println!(
+                "{}",
+                format!(
+                    "✓ /usr/local/bin/fleet → {} にシンボリックリンクを作成しました",
+                    cargo_bin.display()
+                )
+                .green()
+            );
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
+            println!(
+                "{}",
+                "ℹ /usr/local/bin/fleet にシンボリックリンクを作成するには:".dimmed()
+            );
+            println!(
+                "{}",
+                format!(
+                    "  sudo ln -sf {} /usr/local/bin/fleet",
+                    cargo_bin.display()
+                )
+                .dimmed()
+            );
+        }
+        Err(_) => {
+            // その他のエラーは無視（ディレクトリが存在しない等）
+        }
+    }
+}
+
 /// cargo install でFleetFlowを更新
 async fn cargo_install_update() -> anyhow::Result<()> {
     use std::process::Command;
@@ -3184,6 +3226,10 @@ async fn cargo_install_update() -> anyhow::Result<()> {
     if status.success() {
         println!();
         println!("{}", "✓ FleetFlow を更新しました！".green().bold());
+
+        // /usr/local/bin/fleet へのシンボリックリンクを作成
+        ensure_usr_local_bin_symlink();
+
         Ok(())
     } else {
         Err(anyhow::anyhow!(
