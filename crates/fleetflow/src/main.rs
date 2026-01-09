@@ -3146,33 +3146,32 @@ fn ensure_usr_local_bin_symlink() {
     let usr_local_bin = Path::new("/usr/local/bin/fleet");
 
     // 既にシンボリックリンクで正しいリンク先を指している場合はスキップ
-    if usr_local_bin.is_symlink() {
-        if let Ok(target) = std::fs::read_link(usr_local_bin) {
-            if target == cargo_bin {
-                println!(
-                    "{}",
-                    "✓ /usr/local/bin/fleet は既に正しくリンクされています".dimmed()
-                );
-                return;
-            }
-        }
+    if usr_local_bin.is_symlink()
+        && let Ok(target) = std::fs::read_link(usr_local_bin)
+        && target == cargo_bin
+    {
+        println!(
+            "{}",
+            "✓ /usr/local/bin/fleet は既に正しくリンクされています".dimmed()
+        );
+        return;
     }
 
     // 既存のファイル/シンボリックリンクを削除してから作成
-    if usr_local_bin.exists() || usr_local_bin.is_symlink() {
-        if let Err(e) = std::fs::remove_file(usr_local_bin) {
-            if e.kind() == std::io::ErrorKind::PermissionDenied {
-                println!(
-                    "{}",
-                    "ℹ /usr/local/bin/fleet にシンボリックリンクを作成するには:".dimmed()
-                );
-                println!(
-                    "{}",
-                    format!("  sudo ln -sf {} /usr/local/bin/fleet", cargo_bin.display()).dimmed()
-                );
-            }
-            return;
+    if (usr_local_bin.exists() || usr_local_bin.is_symlink())
+        && let Err(e) = std::fs::remove_file(usr_local_bin)
+    {
+        if e.kind() == std::io::ErrorKind::PermissionDenied {
+            println!(
+                "{}",
+                "ℹ /usr/local/bin/fleet にシンボリックリンクを作成するには:".dimmed()
+            );
+            println!(
+                "{}",
+                format!("  sudo ln -sf {} /usr/local/bin/fleet", cargo_bin.display()).dimmed()
+            );
         }
+        return;
     }
 
     // シンボリックリンクを作成
