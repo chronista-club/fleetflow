@@ -3168,11 +3168,7 @@ fn ensure_usr_local_bin_symlink() {
                 );
                 println!(
                     "{}",
-                    format!(
-                        "  sudo ln -sf {} /usr/local/bin/fleet",
-                        cargo_bin.display()
-                    )
-                    .dimmed()
+                    format!("  sudo ln -sf {} /usr/local/bin/fleet", cargo_bin.display()).dimmed()
                 );
             }
             return;
@@ -3198,11 +3194,7 @@ fn ensure_usr_local_bin_symlink() {
             );
             println!(
                 "{}",
-                format!(
-                    "  sudo ln -sf {} /usr/local/bin/fleet",
-                    cargo_bin.display()
-                )
-                .dimmed()
+                format!("  sudo ln -sf {} /usr/local/bin/fleet", cargo_bin.display()).dimmed()
             );
         }
         Err(_) => {
