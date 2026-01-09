@@ -3014,6 +3014,7 @@ async fn self_update() -> anyhow::Result<()> {
         }
         Err(e) if e.raw_os_error() == Some(26) || e.raw_os_error() == Some(1) => {
             // Text file busy (26) or Permission denied (1)
+            // クリーンアップせずに終了（ユーザーがsudo cpを実行できるように）
             println!();
             println!("{}", "⚠ 実行中のバイナリを直接置換できません。".yellow());
             println!("以下のコマンドを実行してください:");
@@ -3023,6 +3024,12 @@ async fn self_update() -> anyhow::Result<()> {
                 new_binary.display(),
                 current_exe.display()
             );
+            println!();
+            println!(
+                "{}",
+                "（一時ファイルはコマンド実行後に手動で削除してください）".dimmed()
+            );
+            return Ok(());
         }
         Err(e) => return Err(e.into()),
     }
@@ -3030,7 +3037,7 @@ async fn self_update() -> anyhow::Result<()> {
     // /usr/local/bin/fleet へのシンボリックリンクを作成
     ensure_usr_local_bin_symlink();
 
-    // クリーンアップ
+    // クリーンアップ（成功時のみ）
     std::fs::remove_dir_all(&temp_dir).ok();
 
     Ok(())
