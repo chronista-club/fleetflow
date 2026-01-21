@@ -13,7 +13,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.7.1"
+version = "0.7.2"
 edition = "2024"
 authors = ["Mito <mito@chronista.club>"]
 license = "MIT OR Apache-2.0"
@@ -24,14 +24,14 @@ categories = ["command-line-utilities", "development-tools"]
 
 [workspace.dependencies]
 # Internal crates
-fleetflow-core = { version = "0.7.1", path = "crates/fleetflow-core" }
-fleetflow-container = { version = "0.7.1", path = "crates/fleetflow-container" }
-fleetflow-config = { version = "0.7.1", path = "crates/fleetflow-config" }
-fleetflow-build = { version = "0.7.1", path = "crates/fleetflow-build" }
-fleetflow-cloud = { version = "0.7.1", path = "crates/fleetflow-cloud" }
-fleetflow-cloud-sakura = { version = "0.7.1", path = "crates/fleetflow-cloud-sakura" }
-fleetflow-cloud-cloudflare = { version = "0.7.1", path = "crates/fleetflow-cloud-cloudflare" }
-fleetflow-mcp = { version = "0.7.1", path = "crates/fleetflow-mcp" }
+fleetflow-core = { version = "0.7.2", path = "crates/fleetflow-core" }
+fleetflow-container = { version = "0.7.2", path = "crates/fleetflow-container" }
+fleetflow-config = { version = "0.7.2", path = "crates/fleetflow-config" }
+fleetflow-build = { version = "0.7.2", path = "crates/fleetflow-build" }
+fleetflow-cloud = { version = "0.7.2", path = "crates/fleetflow-cloud" }
+fleetflow-cloud-sakura = { version = "0.7.2", path = "crates/fleetflow-cloud-sakura" }
+fleetflow-cloud-cloudflare = { version = "0.7.2", path = "crates/fleetflow-cloud-cloudflare" }
+fleetflow-mcp = { version = "0.7.2", path = "crates/fleetflow-mcp" }
 
 # CLI
 clap = { version = "4", features = ["derive", "env"] }
