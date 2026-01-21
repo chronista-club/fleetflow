@@ -7,7 +7,7 @@ FleetFlow は MCP (Model Context Protocol) をサポートしており、Gemini 
 FleetFlow がインストールされており、パスが通っていることを確認してください。
 
 ```bash
-flow --version
+fleet version
 ```
 
 ## 2. Gemini CLI での設定
