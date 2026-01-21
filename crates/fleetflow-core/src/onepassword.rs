@@ -493,7 +493,8 @@ mod tests {
             env::set_var("STRIPE_SECRET_FOR_TEST", test_value);
 
             // 環境変数があれば1Password CLIを呼ばずに解決
-            let result = resolve_reference("op://FleetFlowVault/shared/stripe/stripe_secret_for_test");
+            let result =
+                resolve_reference("op://FleetFlowVault/shared/stripe/stripe_secret_for_test");
             assert!(result.is_ok());
             assert_eq!(result.unwrap(), test_value);
 
