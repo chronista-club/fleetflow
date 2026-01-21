@@ -87,14 +87,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Linux x86_64 (musl静的リンク - GLIBC依存なし)
+          # Linux amd64 (musl静的リンク - GLIBC依存なし)
           - os: ubuntu-latest
             target: x86_64-unknown-linux-musl
-            asset_name: fleetflow-linux-x86_64
-          # macOS ARM64 (Apple Silicon)
+            asset_name: fleetflow-linux-amd64
+          # macOS arm64 (Apple Silicon)
           - os: macos-14
             target: aarch64-apple-darwin
-            asset_name: fleetflow-darwin-aarch64
+            asset_name: fleetflow-darwin-arm64
 
     runs-on: ${{ matrix.os }}
 
@@ -143,5 +143,5 @@ jobs:
           echo "## FleetFlow ${{ needs.create-release.outputs.version }} Released!" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### ダウンロード" >> $GITHUB_STEP_SUMMARY
-          echo "- Linux x86_64: \`fleetflow-linux-x86_64.tar.gz\`" >> $GITHUB_STEP_SUMMARY
-          echo "- macOS Apple Silicon: \`fleetflow-darwin-aarch64.tar.gz\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Linux amd64: \`fleetflow-linux-amd64.tar.gz\`" >> $GITHUB_STEP_SUMMARY
+          echo "- macOS arm64: \`fleetflow-darwin-arm64.tar.gz\`" >> $GITHUB_STEP_SUMMARY
