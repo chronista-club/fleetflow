@@ -3002,21 +3002,21 @@ async fn self_update() -> anyhow::Result<()> {
 
     // Linuxでは実行中のバイナリでも「削除→コピー」で置換可能
     // （削除しても実行中プロセスはinode参照を保持するため動作継続）
-    if current_exe.exists() {
-        if let Err(e) = std::fs::remove_file(&current_exe) {
-            // 削除失敗時は権限不足の可能性
-            println!();
-            println!("{}", "⚠ バイナリの更新に失敗しました。".yellow());
-            println!("権限が不足している可能性があります。以下のコマンドを実行してください:");
-            println!();
-            println!(
-                "  sudo cp {} {}",
-                new_binary.display(),
-                current_exe.display()
-            );
-            println!();
-            return Err(e.into());
-        }
+    if current_exe.exists()
+        && let Err(e) = std::fs::remove_file(&current_exe)
+    {
+        // 削除失敗時は権限不足の可能性
+        println!();
+        println!("{}", "⚠ バイナリの更新に失敗しました。".yellow());
+        println!("権限が不足している可能性があります。以下のコマンドを実行してください:");
+        println!();
+        println!(
+            "  sudo cp {} {}",
+            new_binary.display(),
+            current_exe.display()
+        );
+        println!();
+        return Err(e.into());
     }
 
     match std::fs::copy(&new_binary, &current_exe) {
