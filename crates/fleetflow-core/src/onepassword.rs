@@ -44,7 +44,7 @@
 use crate::error::{FlowError, Result};
 use std::collections::HashMap;
 use std::process::Command;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 /// 1Password参照のプレフィックス
 const OP_PREFIX: &str = "op://";
@@ -320,16 +320,16 @@ pub fn resolve_variables(variables: &mut HashMap<String, serde_json::Value>) -> 
     // 各参照を解決
     for (key, reference) in &op_keys {
         // 1. 変数名と同名の環境変数があればそれを使用（最優先）
-        if let Ok(value) = std::env::var(key) {
-            if !value.is_empty() {
-                debug!(
-                    key = %key,
-                    "Resolved from environment variable (variable name match)"
-                );
-                variables.insert(key.clone(), serde_json::Value::String(value));
-                resolved_count += 1;
-                continue;
-            }
+        if let Ok(value) = std::env::var(key)
+            && !value.is_empty()
+        {
+            debug!(
+                key = %key,
+                "Resolved from environment variable (variable name match)"
+            );
+            variables.insert(key.clone(), serde_json::Value::String(value));
+            resolved_count += 1;
+            continue;
         }
 
         // 2. op://パスから推測した環境変数名でも試す
@@ -356,7 +356,7 @@ pub fn resolve_variables(variables: &mut HashMap<String, serde_json::Value>) -> 
                         .map(|v| v.as_str().map(is_op_reference).unwrap_or(false))
                         .unwrap_or(true)
                 })
-                .map(|(key, ref_)| format!("  {} (環境変数 {} を設定してください)", key, key))
+                .map(|(key, _)| format!("  {} (環境変数 {} を設定してください)", key, key))
                 .collect();
 
             if !unresolved.is_empty() {
@@ -371,10 +371,10 @@ pub fn resolve_variables(variables: &mut HashMap<String, serde_json::Value>) -> 
         // 未解決の参照をCLIで解決
         for (key, reference) in op_keys {
             // すでに解決済みかチェック
-            if let Some(value) = variables.get(&key) {
-                if !value.as_str().map(is_op_reference).unwrap_or(true) {
-                    continue;
-                }
+            if let Some(value) = variables.get(&key)
+                && !value.as_str().map(is_op_reference).unwrap_or(true)
+            {
+                continue;
             }
 
             match resolve_via_op_cli(&reference) {
