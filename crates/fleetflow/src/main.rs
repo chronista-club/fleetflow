@@ -1697,7 +1697,7 @@ async fn main() -> anyhow::Result<()> {
 
             // 1. 既存コンテナの停止・削除
             println!();
-            println!("{}", "【Step 1/3】既存コンテナを停止・削除中...".yellow());
+            println!("{}", "【Step 1/4】既存コンテナを停止・削除中...".yellow());
             for service_name in &target_services {
                 let container_name = format!("{}-{}-{}", config.name, stage_name, service_name);
 
@@ -1758,7 +1758,7 @@ async fn main() -> anyhow::Result<()> {
             // 2. イメージのpull（デフォルトで実行、--no-pullでスキップ）
             if !no_pull {
                 println!();
-                println!("{}", "【Step 2/3】最新イメージをダウンロード中...".blue());
+                println!("{}", "【Step 2/4】最新イメージをダウンロード中...".blue());
                 for service_name in &target_services {
                     if let Some(service) = config.services.get(service_name)
                         && let Some(image) = &service.image
@@ -1774,12 +1774,41 @@ async fn main() -> anyhow::Result<()> {
                 }
             } else {
                 println!();
-                println!("【Step 2/3】イメージpullをスキップ（--no-pull指定）");
+                println!("【Step 2/4】イメージpullをスキップ（--no-pull指定）");
             }
 
-            // 3. コンテナの作成・起動
+            // 3. ネットワーク作成（存在しない場合のみ）
+            let network_name = fleetflow_container::get_network_name(&config.name, &stage_name);
             println!();
-            println!("{}", "【Step 3/3】コンテナを作成・起動中...".green());
+            println!(
+                "{}",
+                format!("【Step 3/4】ネットワーク準備中: {}", network_name).blue()
+            );
+
+            let network_config = bollard::models::NetworkCreateRequest {
+                name: network_name.clone(),
+                driver: Some("bridge".to_string()),
+                ..Default::default()
+            };
+
+            match docker.create_network(network_config).await {
+                Ok(_) => {
+                    println!("  ✓ ネットワーク作成完了");
+                }
+                Err(bollard::errors::Error::DockerResponseServerError {
+                    status_code: 409, ..
+                }) => {
+                    println!("  ✓ ネットワークは既に存在します");
+                }
+                Err(e) => {
+                    println!("  ✗ ネットワーク作成エラー: {}", e);
+                    return Err(e.into());
+                }
+            }
+
+            // 4. コンテナの作成・起動
+            println!();
+            println!("{}", "【Step 4/4】コンテナを作成・起動中...".green());
 
             // 依存関係順にソート（簡易版：depends_onがないものを先に）
             let mut ordered_services: Vec<String> = Vec::new();
