@@ -3000,8 +3000,25 @@ async fn self_update() -> anyhow::Result<()> {
         std::fs::set_permissions(&new_binary, perms)?;
     }
 
-    // self-replaceを使う代わりに、直接コピー
-    // (実行中のバイナリは上書きできないため、/usr/local/bin等にインストールされている場合はsudo必要)
+    // Linuxでは実行中のバイナリでも「削除→コピー」で置換可能
+    // （削除しても実行中プロセスはinode参照を保持するため動作継続）
+    if current_exe.exists() {
+        if let Err(e) = std::fs::remove_file(&current_exe) {
+            // 削除失敗時は権限不足の可能性
+            println!();
+            println!("{}", "⚠ バイナリの更新に失敗しました。".yellow());
+            println!("権限が不足している可能性があります。以下のコマンドを実行してください:");
+            println!();
+            println!(
+                "  sudo cp {} {}",
+                new_binary.display(),
+                current_exe.display()
+            );
+            println!();
+            return Err(e.into());
+        }
+    }
+
     match std::fs::copy(&new_binary, &current_exe) {
         Ok(_) => {
             println!();
@@ -3012,26 +3029,16 @@ async fn self_update() -> anyhow::Result<()> {
                     .bold()
             );
         }
-        Err(e) if e.raw_os_error() == Some(26) || e.raw_os_error() == Some(1) => {
-            // Text file busy (26) or Permission denied (1)
-            // クリーンアップせずに終了（ユーザーがsudo cpを実行できるように）
+        Err(e) => {
             println!();
-            println!("{}", "⚠ 実行中のバイナリを直接置換できません。".yellow());
-            println!("以下のコマンドを実行してください:");
-            println!();
+            println!("{}", "⚠ バイナリのコピーに失敗しました。".yellow());
             println!(
                 "  sudo cp {} {}",
                 new_binary.display(),
                 current_exe.display()
             );
-            println!();
-            println!(
-                "{}",
-                "（一時ファイルはコマンド実行後に手動で削除してください）".dimmed()
-            );
-            return Ok(());
+            return Err(e.into());
         }
-        Err(e) => return Err(e.into()),
     }
 
     // /usr/local/bin/fleet へのシンボリックリンクを作成
