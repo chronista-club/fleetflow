@@ -2262,10 +2262,10 @@ async fn main() -> anyhow::Result<()> {
 
             // 終了コードの取得
             let inspect = docker.inspect_exec(&message.id).await?;
-            if let Some(exit_code) = inspect.exit_code {
-                if exit_code != 0 {
-                    std::process::exit(exit_code as i32);
-                }
+            if let Some(exit_code) = inspect.exit_code
+                && exit_code != 0
+            {
+                std::process::exit(exit_code as i32);
             }
         }
     }
