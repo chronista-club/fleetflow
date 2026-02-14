@@ -274,7 +274,13 @@ enum Commands {
         /// ステージ名 (local, dev, stg, prod)
         stage: Option<String>,
         /// ステージ名 (-s/--stage フラグ、FLEET_STAGE 環境変数)
-        #[arg(short = 's', long = "stage", env = "FLEET_STAGE", conflicts_with = "stage", hide = true)]
+        #[arg(
+            short = 's',
+            long = "stage",
+            env = "FLEET_STAGE",
+            conflicts_with = "stage",
+            hide = true
+        )]
         stage_flag: Option<String>,
         /// 起動前に最新イメージをpullする
         #[arg(short, long)]
@@ -285,7 +291,13 @@ enum Commands {
         /// ステージ名 (local, dev, stg, prod)
         stage: Option<String>,
         /// ステージ名 (-s/--stage フラグ、FLEET_STAGE 環境変数)
-        #[arg(short = 's', long = "stage", env = "FLEET_STAGE", conflicts_with = "stage", hide = true)]
+        #[arg(
+            short = 's',
+            long = "stage",
+            env = "FLEET_STAGE",
+            conflicts_with = "stage",
+            hide = true
+        )]
         stage_flag: Option<String>,
         /// コンテナを削除する（デフォルトは停止のみ）
         #[arg(short, long)]
@@ -296,7 +308,13 @@ enum Commands {
         /// ステージ名 (local, dev, stg, prod)
         stage: Option<String>,
         /// ステージ名 (-s/--stage フラグ、FLEET_STAGE 環境変数)
-        #[arg(short = 's', long = "stage", env = "FLEET_STAGE", conflicts_with = "stage", hide = true)]
+        #[arg(
+            short = 's',
+            long = "stage",
+            env = "FLEET_STAGE",
+            conflicts_with = "stage",
+            hide = true
+        )]
         stage_flag: Option<String>,
         /// サービス名（指定しない場合は全サービス）
         #[arg(short = 'n', long)]
@@ -313,7 +331,13 @@ enum Commands {
         /// ステージ名 (local, dev, stg, prod)
         stage: Option<String>,
         /// ステージ名 (-s/--stage フラグ、FLEET_STAGE 環境変数)
-        #[arg(short = 's', long = "stage", env = "FLEET_STAGE", conflicts_with = "stage", hide = true)]
+        #[arg(
+            short = 's',
+            long = "stage",
+            env = "FLEET_STAGE",
+            conflicts_with = "stage",
+            hide = true
+        )]
         stage_flag: Option<String>,
         /// 停止中のコンテナも表示
         #[arg(short, long)]
@@ -324,7 +348,13 @@ enum Commands {
         /// ステージ名 (local, dev, stg, prod)
         stage: Option<String>,
         /// ステージ名 (-s/--stage フラグ、FLEET_STAGE 環境変数)
-        #[arg(short = 's', long = "stage", env = "FLEET_STAGE", conflicts_with = "stage", hide = true)]
+        #[arg(
+            short = 's',
+            long = "stage",
+            env = "FLEET_STAGE",
+            conflicts_with = "stage",
+            hide = true
+        )]
         stage_flag: Option<String>,
         /// サービス名
         #[arg(short = 'n', long)]
@@ -365,7 +395,13 @@ enum Commands {
         /// ステージ名 (local, dev, stg, prod)
         stage: Option<String>,
         /// ステージ名 (-s/--stage フラグ、FLEET_STAGE 環境変数)
-        #[arg(short = 's', long = "stage", env = "FLEET_STAGE", conflicts_with = "stage", hide = true)]
+        #[arg(
+            short = 's',
+            long = "stage",
+            env = "FLEET_STAGE",
+            conflicts_with = "stage",
+            hide = true
+        )]
         stage_flag: Option<String>,
     },
     /// バージョン情報を表示
@@ -379,7 +415,13 @@ enum Commands {
         /// ステージ名 (local, dev, stg, prod)
         stage: Option<String>,
         /// ステージ名 (-s/--stage フラグ、FLEET_STAGE 環境変数)
-        #[arg(short = 's', long = "stage", env = "FLEET_STAGE", conflicts_with = "stage", hide = true)]
+        #[arg(
+            short = 's',
+            long = "stage",
+            env = "FLEET_STAGE",
+            conflicts_with = "stage",
+            hide = true
+        )]
         stage_flag: Option<String>,
         /// デプロイ対象のサービス（省略時は全サービス）
         #[arg(short = 'n', long)]
@@ -396,7 +438,13 @@ enum Commands {
         /// ステージ名 (local, dev, stg, prod)
         stage: Option<String>,
         /// ステージ名 (-s/--stage フラグ、FLEET_STAGE 環境変数)
-        #[arg(short = 's', long = "stage", env = "FLEET_STAGE", conflicts_with = "stage", hide = true)]
+        #[arg(
+            short = 's',
+            long = "stage",
+            env = "FLEET_STAGE",
+            conflicts_with = "stage",
+            hide = true
+        )]
         stage_flag: Option<String>,
         /// ビルド対象のサービス（省略時は全サービス）
         #[arg(short = 'n', long)]
@@ -582,17 +630,33 @@ async fn main() -> anyhow::Result<()> {
     // コマンドからステージを取得、または FLEET_STAGE 環境変数から取得
     let stage_from_env = std::env::var("FLEET_STAGE").ok();
     let stage_name_hint: Option<&str> = match &cli.command {
-        Commands::Up { stage, stage_flag, .. } => stage.as_deref().or(stage_flag.as_deref()),
-        Commands::Down { stage, stage_flag, .. } => stage.as_deref().or(stage_flag.as_deref()),
-        Commands::Logs { stage, stage_flag, .. } => stage.as_deref().or(stage_flag.as_deref()),
-        Commands::Ps { stage, stage_flag, .. } => stage.as_deref().or(stage_flag.as_deref()),
-        Commands::Exec { stage, stage_flag, .. } => stage.as_deref().or(stage_flag.as_deref()),
+        Commands::Up {
+            stage, stage_flag, ..
+        } => stage.as_deref().or(stage_flag.as_deref()),
+        Commands::Down {
+            stage, stage_flag, ..
+        } => stage.as_deref().or(stage_flag.as_deref()),
+        Commands::Logs {
+            stage, stage_flag, ..
+        } => stage.as_deref().or(stage_flag.as_deref()),
+        Commands::Ps {
+            stage, stage_flag, ..
+        } => stage.as_deref().or(stage_flag.as_deref()),
+        Commands::Exec {
+            stage, stage_flag, ..
+        } => stage.as_deref().or(stage_flag.as_deref()),
         Commands::Restart { stage, .. } => stage.as_deref(),
         Commands::Stop { stage, .. } => stage.as_deref(),
         Commands::Start { stage, .. } => stage.as_deref(),
-        Commands::Validate { stage, stage_flag, .. } => stage.as_deref().or(stage_flag.as_deref()),
-        Commands::Deploy { stage, stage_flag, .. } => stage.as_deref().or(stage_flag.as_deref()),
-        Commands::Build { stage, stage_flag, .. } => stage.as_deref().or(stage_flag.as_deref()),
+        Commands::Validate {
+            stage, stage_flag, ..
+        } => stage.as_deref().or(stage_flag.as_deref()),
+        Commands::Deploy {
+            stage, stage_flag, ..
+        } => stage.as_deref().or(stage_flag.as_deref()),
+        Commands::Build {
+            stage, stage_flag, ..
+        } => stage.as_deref().or(stage_flag.as_deref()),
         Commands::Stage(stage_cmd) => match stage_cmd {
             StageCommands::Up { stage, .. } => Some(stage.as_str()),
             StageCommands::Down { stage, .. } => Some(stage.as_str()),
@@ -616,7 +680,11 @@ async fn main() -> anyhow::Result<()> {
 
     // ここから既存のコマンド処理
     match cli.command {
-        Commands::Up { stage, stage_flag, pull } => {
+        Commands::Up {
+            stage,
+            stage_flag,
+            pull,
+        } => {
             let stage = stage.or(stage_flag);
             // 最初にバージョンチェック
             check_and_update_if_needed().await?;
@@ -1012,7 +1080,11 @@ async fn main() -> anyhow::Result<()> {
             println!();
             println!("{}", "✓ すべてのサービスが起動しました！".green().bold());
         }
-        Commands::Down { stage, stage_flag, remove } => {
+        Commands::Down {
+            stage,
+            stage_flag,
+            remove,
+        } => {
             let stage = stage.or(stage_flag);
             println!("{}", "ステージを停止中...".yellow());
             print_loaded_config_files(&project_root);
@@ -1166,7 +1238,11 @@ async fn main() -> anyhow::Result<()> {
                 );
             }
         }
-        Commands::Ps { stage, stage_flag, all } => {
+        Commands::Ps {
+            stage,
+            stage_flag,
+            all,
+        } => {
             let stage = stage.or(stage_flag);
             println!("{}", "コンテナ一覧を取得中...".blue());
             print_loaded_config_files(&project_root);
@@ -1967,7 +2043,10 @@ async fn main() -> anyhow::Result<()> {
                     .bold()
             );
         }
-        Commands::Validate { stage: _, stage_flag: _ } => {
+        Commands::Validate {
+            stage: _,
+            stage_flag: _,
+        } => {
             println!("{}", "設定を検証中...".blue());
 
             // プロジェクトルートを検出
@@ -2103,7 +2182,12 @@ async fn main() -> anyhow::Result<()> {
                 return Err(anyhow::anyhow!(
                     "サービス '{}' が見つかりません\n利用可能なサービス: {}",
                     service,
-                    config.services.keys().cloned().collect::<Vec<_>>().join(", ")
+                    config
+                        .services
+                        .keys()
+                        .cloned()
+                        .collect::<Vec<_>>()
+                        .join(", ")
                 ));
             }
 
