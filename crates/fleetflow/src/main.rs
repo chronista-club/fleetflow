@@ -319,6 +319,20 @@ enum Commands {
         #[arg(short, long)]
         all: bool,
     },
+    /// サービスコンテナ内でコマンドを実行
+    Exec {
+        /// ステージ名 (local, dev, stg, prod)
+        stage: Option<String>,
+        /// ステージ名 (-s/--stage フラグ、FLEET_STAGE 環境変数)
+        #[arg(short = 's', long = "stage", env = "FLEET_STAGE", conflicts_with = "stage", hide = true)]
+        stage_flag: Option<String>,
+        /// サービス名
+        #[arg(short = 'n', long)]
+        service: String,
+        /// 実行するコマンド（-- 以降）。省略時は /bin/sh
+        #[arg(last = true)]
+        command: Vec<String>,
+    },
     /// サービスを再起動
     Restart {
         /// サービス名
@@ -572,6 +586,7 @@ async fn main() -> anyhow::Result<()> {
         Commands::Down { stage, stage_flag, .. } => stage.as_deref().or(stage_flag.as_deref()),
         Commands::Logs { stage, stage_flag, .. } => stage.as_deref().or(stage_flag.as_deref()),
         Commands::Ps { stage, stage_flag, .. } => stage.as_deref().or(stage_flag.as_deref()),
+        Commands::Exec { stage, stage_flag, .. } => stage.as_deref().or(stage_flag.as_deref()),
         Commands::Restart { stage, .. } => stage.as_deref(),
         Commands::Stop { stage, .. } => stage.as_deref(),
         Commands::Start { stage, .. } => stage.as_deref(),
@@ -2073,6 +2088,101 @@ async fn main() -> anyhow::Result<()> {
             pull,
         } => {
             handle_play_command(&project_root, &playbook, yes, pull).await?;
+        }
+        Commands::Exec {
+            stage,
+            stage_flag,
+            service,
+            command,
+        } => {
+            let stage = stage.or(stage_flag);
+            let stage_name = determine_stage_name(stage, &config)?;
+
+            // サービスの存在確認
+            if !config.services.contains_key(&service) {
+                return Err(anyhow::anyhow!(
+                    "サービス '{}' が見つかりません\n利用可能なサービス: {}",
+                    service,
+                    config.services.keys().cloned().collect::<Vec<_>>().join(", ")
+                ));
+            }
+
+            // コンテナ名
+            let container_name = format!("{}-{}-{}", config.name, stage_name, service);
+
+            // コマンドが省略された場合は /bin/sh
+            let cmd: Vec<String> = if command.is_empty() {
+                vec!["/bin/sh".to_string()]
+            } else {
+                command
+            };
+
+            println!(
+                "{}",
+                format!("コンテナ '{}' でコマンドを実行中...", container_name).green()
+            );
+            println!("コマンド: {}", cmd.join(" ").cyan());
+            println!();
+
+            // Docker接続
+            let docker = init_docker_with_error_handling().await?;
+
+            // exec作成
+            use bollard::exec::{CreateExecOptions, StartExecOptions, StartExecResults};
+            let exec_config = CreateExecOptions {
+                cmd: Some(cmd),
+                attach_stdout: Some(true),
+                attach_stderr: Some(true),
+                ..Default::default()
+            };
+
+            let message = docker.create_exec(&container_name, exec_config).await?;
+
+            // exec開始・出力処理
+            let start_config = StartExecOptions {
+                ..Default::default()
+            };
+            match docker.start_exec(&message.id, Some(start_config)).await? {
+                StartExecResults::Attached { mut output, .. } => {
+                    use bollard::container::LogOutput;
+                    use futures_util::stream::StreamExt;
+
+                    while let Some(msg) = output.next().await {
+                        match msg {
+                            Ok(log_output) => match log_output {
+                                LogOutput::StdOut { message } => {
+                                    let text = String::from_utf8_lossy(&message);
+                                    print!("{}", text);
+                                }
+                                LogOutput::StdErr { message } => {
+                                    let text = String::from_utf8_lossy(&message);
+                                    eprint!("{}", text);
+                                }
+                                LogOutput::Console { message } => {
+                                    let text = String::from_utf8_lossy(&message);
+                                    print!("{}", text);
+                                }
+                                LogOutput::StdIn { .. } => {}
+                            },
+                            Err(e) => {
+                                eprintln!("{}", format!("exec エラー: {}", e).red());
+                                break;
+                            }
+                        }
+                    }
+                }
+                StartExecResults::Detached => {
+                    println!("{}", "コマンドをデタッチモードで実行しました".green());
+                }
+            }
+
+            // 終了コードの取得
+            let inspect = docker.inspect_exec(&message.id).await?;
+            if let Some(exit_code) = inspect.exit_code {
+                if exit_code != 0 {
+                    std::process::exit(exit_code as i32);
+                }
+            }
         }
     }
 
