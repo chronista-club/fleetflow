@@ -121,3 +121,16 @@ fn test_deploy_conflict_positional_and_flag() {
         .failure()
         .stderr(predicate::str::contains("cannot be used with"));
 }
+
+/// execコマンドのヘルプが正しく表示されることを確認
+#[test]
+fn test_exec_help() {
+    let mut cmd = Command::cargo_bin("fleet").unwrap();
+    cmd.arg("exec")
+        .arg("--help")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("[STAGE]"))
+        .stdout(predicate::str::contains("--service"))
+        .stdout(predicate::str::contains("[COMMAND]"));
+}
