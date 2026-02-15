@@ -8,6 +8,7 @@ pub async fn handle(
     stage: Option<String>,
     service: Option<String>,
     no_pull: bool,
+    no_prune: bool,
     yes: bool,
 ) -> anyhow::Result<()> {
     println!("{}", "デプロイを開始します...".blue().bold());
@@ -78,7 +79,7 @@ pub async fn handle(
 
     // 1. 既存コンテナの停止・削除
     println!();
-    println!("{}", "【Step 1/4】既存コンテナを停止・削除中...".yellow());
+    println!("{}", "【Step 1/5】既存コンテナを停止・削除中...".yellow());
     for service_name in &target_services {
         let container_name = format!("{}-{}-{}", config.name, stage_name, service_name);
 
@@ -136,7 +137,7 @@ pub async fn handle(
     // 2. イメージのpull（デフォルトで実行、--no-pullでスキップ）
     if !no_pull {
         println!();
-        println!("{}", "【Step 2/4】最新イメージをダウンロード中...".blue());
+        println!("{}", "【Step 2/5】最新イメージをダウンロード中...".blue());
         for service_name in &target_services {
             if let Some(svc) = config.services.get(service_name)
                 && let Some(image) = &svc.image
@@ -152,7 +153,7 @@ pub async fn handle(
         }
     } else {
         println!();
-        println!("【Step 2/4】イメージpullをスキップ（--no-pull指定）");
+        println!("【Step 2/5】イメージpullをスキップ（--no-pull指定）");
     }
 
     // 3. ネットワーク作成（存在しない場合のみ）
@@ -160,7 +161,7 @@ pub async fn handle(
     println!();
     println!(
         "{}",
-        format!("【Step 3/4】ネットワーク準備中: {}", network_name).blue()
+        format!("【Step 3/5】ネットワーク準備中: {}", network_name).blue()
     );
 
     let network_config = bollard::models::NetworkCreateRequest {
@@ -186,7 +187,7 @@ pub async fn handle(
 
     // 4. コンテナの作成・起動
     println!();
-    println!("{}", "【Step 4/4】コンテナを作成・起動中...".green());
+    println!("{}", "【Step 4/5】コンテナを作成・起動中...".green());
 
     // 依存関係順にソート（簡易版：depends_onがないものを先に）
     let mut ordered_services: Vec<String> = Vec::new();
@@ -301,6 +302,67 @@ pub async fn handle(
             Err(e) => {
                 println!("  ✗ 起動エラー: {}", e);
                 return Err(e.into());
+            }
+        }
+    }
+
+    // 5. 不要イメージ・ビルドキャッシュの削除
+    if !no_prune {
+        println!();
+        println!(
+            "{}",
+            "【Step 5/5】不要イメージ・ビルドキャッシュを削除中...".yellow()
+        );
+
+        // 1週間以上古い未使用イメージを削除
+        let mut image_filters = std::collections::HashMap::new();
+        image_filters.insert("until".to_string(), vec!["168h".to_string()]);
+        image_filters.insert("dangling".to_string(), vec!["true".to_string()]);
+
+        let prune_opts = bollard::query_parameters::PruneImagesOptions {
+            filters: Some(image_filters),
+        };
+
+        match docker_conn.prune_images(Some(prune_opts)).await {
+            Ok(result) => {
+                let deleted_count = result.images_deleted.as_ref().map(|v| v.len()).unwrap_or(0);
+                let reclaimed = result.space_reclaimed.unwrap_or(0);
+                if deleted_count > 0 || reclaimed > 0 {
+                    let reclaimed_mb = reclaimed as f64 / 1_048_576.0;
+                    println!(
+                        "  ✓ 不要イメージを削除 ({} 個, {:.1}MB 解放)",
+                        deleted_count, reclaimed_mb
+                    );
+                } else {
+                    println!("  ✓ 削除対象のイメージはありません");
+                }
+            }
+            Err(e) => {
+                println!("  ⚠ イメージ削除でエラー: {}", e);
+            }
+        }
+
+        // ビルドキャッシュの削除
+        let mut build_filters = std::collections::HashMap::new();
+        build_filters.insert("until".to_string(), vec!["168h".to_string()]);
+
+        let build_prune_opts = bollard::query_parameters::PruneBuildOptions {
+            filters: Some(build_filters),
+            ..Default::default()
+        };
+
+        match docker_conn.prune_build(Some(build_prune_opts)).await {
+            Ok(result) => {
+                let reclaimed = result.space_reclaimed.unwrap_or(0);
+                if reclaimed > 0 {
+                    let reclaimed_mb = reclaimed as f64 / 1_048_576.0;
+                    println!("  ✓ ビルドキャッシュを削除 ({:.1}MB 解放)", reclaimed_mb);
+                } else {
+                    println!("  ✓ 削除対象のビルドキャッシュはありません");
+                }
+            }
+            Err(e) => {
+                println!("  ⚠ ビルドキャッシュ削除でエラー: {}", e);
             }
         }
     }

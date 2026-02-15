@@ -180,6 +180,9 @@ enum Commands {
         /// イメージのpullをスキップ（デフォルトは常にpull）
         #[arg(long)]
         no_pull: bool,
+        /// デプロイ後の不要イメージ・ビルドキャッシュ削除をスキップ
+        #[arg(long)]
+        no_prune: bool,
         /// 確認なしで実行
         #[arg(short, long)]
         yes: bool,
@@ -505,10 +508,20 @@ async fn main() -> anyhow::Result<()> {
             stage_flag,
             service,
             no_pull,
+            no_prune,
             yes,
         } => {
             let stage = stage.or(stage_flag);
-            commands::deploy::handle(&config, &project_root, stage, service, no_pull, yes).await?;
+            commands::deploy::handle(
+                &config,
+                &project_root,
+                stage,
+                service,
+                no_pull,
+                no_prune,
+                yes,
+            )
+            .await?;
         }
         Commands::Validate {
             stage: _,
