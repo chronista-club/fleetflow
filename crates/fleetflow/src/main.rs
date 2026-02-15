@@ -676,7 +676,35 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-    let config = fleetflow_core::load_project_from_root_with_stage(&project_root, stage_name_hint)?;
+    let config = match fleetflow_core::load_project_from_root_with_stage(
+        &project_root,
+        stage_name_hint,
+    ) {
+        Ok(config) => config,
+        Err(ref e)
+            if stage_name_hint.is_none()
+                && matches!(
+                    e,
+                    fleetflow_core::FlowError::TemplateError { .. }
+                        | fleetflow_core::FlowError::TemplateRenderError(_)
+                ) =>
+        {
+            eprintln!(
+                "{} ステージが指定されていません。変数を含む設定ファイルの読み込みにはステージの指定が必要です。",
+                "Error:".red().bold()
+            );
+            eprintln!();
+            eprintln!(
+                "{}",
+                "ヒント: 以下のいずれかの方法でステージを指定してください:".yellow()
+            );
+            eprintln!("  fleet <command> <stage>              例: fleet ps prod");
+            eprintln!("  fleet <command> -s <stage>           例: fleet ps -s prod");
+            eprintln!("  FLEET_STAGE=<stage> fleet <command>  例: FLEET_STAGE=prod fleet ps");
+            std::process::exit(1);
+        }
+        Err(e) => return Err(e.into()),
+    };
 
     // ここから既存のコマンド処理
     match cli.command {
