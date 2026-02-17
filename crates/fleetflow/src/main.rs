@@ -235,6 +235,29 @@ enum Commands {
         #[arg(long)]
         pull: bool,
     },
+    /// Fleet Registryを管理（複数fleetとサーバーの統合管理）
+    #[command(subcommand)]
+    Registry(RegistryCommands),
+}
+
+/// Fleet Registryのサブコマンド
+#[derive(Subcommand)]
+enum RegistryCommands {
+    /// 全fleetとサーバーの一覧を表示
+    List,
+    /// 各fleet × serverの稼働状態を表示
+    Status,
+    /// Registry定義に従ってデプロイ
+    Deploy {
+        /// デプロイ対象のfleet名
+        fleet: String,
+        /// ステージ名
+        #[arg(short = 's', long)]
+        stage: Option<String>,
+        /// 確認なしで実行
+        #[arg(short, long)]
+        yes: bool,
+    },
 }
 
 /// ステージ管理のサブコマンド
@@ -334,6 +357,24 @@ async fn main() -> anyhow::Result<()> {
         return self_update::self_update().await;
     }
 
+    // Registryコマンドは独自のファイル発見ロジックを使用
+    if let Commands::Registry(ref registry_cmd) = cli.command {
+        let (registry, root) = commands::registry::load_registry()?;
+        match registry_cmd {
+            RegistryCommands::List => {
+                commands::registry::handle_list(&registry);
+            }
+            RegistryCommands::Status => {
+                commands::registry::handle_status(&registry);
+            }
+            RegistryCommands::Deploy { fleet, stage, yes } => {
+                commands::registry::handle_deploy(&registry, &root, fleet, stage.as_deref(), *yes)
+                    .await?;
+            }
+        }
+        return Ok(());
+    }
+
     // プロジェクトルートを検索
     let project_root = match fleetflow_core::find_project_root() {
         Ok(root) => root,
@@ -417,6 +458,7 @@ async fn main() -> anyhow::Result<()> {
             StageCommands::Logs { stage, .. } => Some(stage.as_str()),
             StageCommands::Ps { stage } => stage.as_deref(),
         },
+        Commands::Registry(_) => None,
         _ => stage_from_env.as_deref(),
     };
 
@@ -581,6 +623,9 @@ async fn main() -> anyhow::Result<()> {
         } => {
             let stage = stage.or(stage_flag);
             commands::exec::handle(&config, stage, service, command).await?;
+        }
+        Commands::Registry(_) => {
+            unreachable!("Registry is handled before config loading");
         }
     }
 

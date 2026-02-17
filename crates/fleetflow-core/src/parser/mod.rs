@@ -10,9 +10,12 @@ mod stage;
 mod volume;
 
 // 内部で使用するパース関数
-use cloud::{parse_provider, parse_server};
+use cloud::parse_provider;
 use service::parse_service;
 use stage::parse_stage;
+
+// 外部クレートから再利用可能なパース関数
+pub use cloud::parse_server;
 
 use crate::error::Result;
 use crate::model::{Flow, Service};
