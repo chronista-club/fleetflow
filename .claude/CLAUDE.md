@@ -51,6 +51,7 @@ fleetflow/
 │   ├── fleetflow-core/             # KDLパーサー・データモデル
 │   │   ├── src/model/              # データ構造（モジュール分割）
 │   │   └── src/parser/             # パーサー（モジュール分割）
+│   ├── fleetflow-registry/         # Fleet Registry（複数fleet統合管理）
 │   ├── fleetflow-config/           # 設定管理
 │   ├── fleetflow-container/        # コンテナ操作
 │   ├── fleetflow-build/            # Dockerビルド機能

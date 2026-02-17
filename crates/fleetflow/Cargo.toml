@@ -25,6 +25,7 @@ fleetflow-cloud.workspace = true
 fleetflow-cloud-sakura.workspace = true
 fleetflow-cloud-cloudflare.workspace = true
 fleetflow-mcp.workspace = true
+fleetflow-registry.workspace = true
 
 # External dependencies
 clap.workspace = true

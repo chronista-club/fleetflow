@@ -10,6 +10,7 @@ members = [
   "crates/fleetflow-cloud-sakura",
   "crates/fleetflow-cloud-cloudflare",
   "crates/fleetflow-mcp",
+  "crates/fleetflow-registry",
 ]
 
 [workspace.package]
@@ -32,6 +33,7 @@ fleetflow-cloud = { version = "0.7.6", path = "crates/fleetflow-cloud" }
 fleetflow-cloud-sakura = { version = "0.7.6", path = "crates/fleetflow-cloud-sakura" }
 fleetflow-cloud-cloudflare = { version = "0.7.6", path = "crates/fleetflow-cloud-cloudflare" }
 fleetflow-mcp = { version = "0.7.6", path = "crates/fleetflow-mcp" }
+fleetflow-registry = { version = "0.7.6", path = "crates/fleetflow-registry" }
 
 # CLI
 clap = { version = "4", features = ["derive", "env"] }

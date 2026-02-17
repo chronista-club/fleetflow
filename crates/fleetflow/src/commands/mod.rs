@@ -3,6 +3,7 @@ pub mod down;
 pub mod exec;
 pub mod logs;
 pub mod ps;
+pub mod registry;
 pub mod restart;
 pub mod stage;
 pub mod start;
