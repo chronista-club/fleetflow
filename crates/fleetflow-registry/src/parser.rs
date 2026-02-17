@@ -124,15 +124,12 @@ fn parse_route(node: &kdl::KdlNode) -> Result<DeploymentRoute> {
         }
     }
 
-    let fleet = fleet.ok_or_else(|| {
-        RegistryError::InvalidConfig("route に fleet が必要です".to_string())
-    })?;
-    let stage = stage.ok_or_else(|| {
-        RegistryError::InvalidConfig("route に stage が必要です".to_string())
-    })?;
-    let server = server.ok_or_else(|| {
-        RegistryError::InvalidConfig("route に server が必要です".to_string())
-    })?;
+    let fleet = fleet
+        .ok_or_else(|| RegistryError::InvalidConfig("route に fleet が必要です".to_string()))?;
+    let stage = stage
+        .ok_or_else(|| RegistryError::InvalidConfig("route に stage が必要です".to_string()))?;
+    let server = server
+        .ok_or_else(|| RegistryError::InvalidConfig("route に server が必要です".to_string()))?;
 
     Ok(DeploymentRoute {
         fleet,

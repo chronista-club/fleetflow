@@ -368,14 +368,8 @@ async fn main() -> anyhow::Result<()> {
                 commands::registry::handle_status(&registry);
             }
             RegistryCommands::Deploy { fleet, stage, yes } => {
-                commands::registry::handle_deploy(
-                    &registry,
-                    &root,
-                    fleet,
-                    stage.as_deref(),
-                    *yes,
-                )
-                .await?;
+                commands::registry::handle_deploy(&registry, &root, fleet, stage.as_deref(), *yes)
+                    .await?;
             }
         }
         return Ok(());

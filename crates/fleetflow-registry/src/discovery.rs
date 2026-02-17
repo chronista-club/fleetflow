@@ -109,9 +109,6 @@ mod tests {
     fn test_registry_root() {
         let path = PathBuf::from("/home/user/chronista-fleet/fleet-registry.kdl");
         let root = registry_root(&path);
-        assert_eq!(
-            root,
-            Some(Path::new("/home/user/chronista-fleet"))
-        );
+        assert_eq!(root, Some(Path::new("/home/user/chronista-fleet")));
     }
 }

@@ -1,7 +1,7 @@
 //! fleet registry コマンドハンドラ
 
 use colored::Colorize;
-use fleetflow_registry::{find_registry, parse_registry_file, registry_root, Registry};
+use fleetflow_registry::{Registry, find_registry, parse_registry_file, registry_root};
 
 /// fleet registry list — 全fleetとサーバーの一覧
 pub fn handle_list(registry: &Registry) {
@@ -199,8 +199,8 @@ pub async fn handle_deploy(
 
 /// Registry をロードするヘルパー
 pub fn load_registry() -> anyhow::Result<(Registry, std::path::PathBuf)> {
-    let registry_path = find_registry()
-        .ok_or_else(|| anyhow::anyhow!("fleet-registry.kdl が見つかりません"))?;
+    let registry_path =
+        find_registry().ok_or_else(|| anyhow::anyhow!("fleet-registry.kdl が見つかりません"))?;
 
     let root = registry_root(&registry_path)
         .ok_or_else(|| anyhow::anyhow!("Registry ルートの解決に失敗"))?
