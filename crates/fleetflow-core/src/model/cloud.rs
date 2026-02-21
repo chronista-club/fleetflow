@@ -58,6 +58,13 @@ pub struct ServerResource {
     /// 例: "/opt/myapp" - CI/CDやmiseタスクでデプロイ先を参照
     pub deploy_path: Option<String>,
 
+    /// SSH接続先（IPアドレスまたはホスト名）
+    /// 例: "153.xxx.xxx.xxx" - fleet registry deploy でSSH経由のリモートデプロイに使用
+    pub ssh_host: Option<String>,
+
+    /// SSHユーザー名（デフォルト: "root"）
+    pub ssh_user: Option<String>,
+
     /// 追加設定
     pub config: HashMap<String, String>,
 }

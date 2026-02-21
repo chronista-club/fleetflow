@@ -178,6 +178,20 @@ pub fn parse_server(node: &KdlNode) -> Result<(String, ServerResource)> {
                         .and_then(|e| e.value().as_string())
                         .map(|s| s.to_string());
                 }
+                "ssh_host" | "ssh-host" => {
+                    server.ssh_host = child
+                        .entries()
+                        .first()
+                        .and_then(|e| e.value().as_string())
+                        .map(|s| s.to_string());
+                }
+                "ssh_user" | "ssh-user" => {
+                    server.ssh_user = child
+                        .entries()
+                        .first()
+                        .and_then(|e| e.value().as_string())
+                        .map(|s| s.to_string());
+                }
                 // 追加設定はconfigに保存
                 other => {
                     if let Some(value) = child.entries().first().and_then(|e| e.value().as_string())
@@ -355,6 +369,43 @@ mod tests {
         assert_eq!(server.ssh_keys, vec!["my-key"]);
         assert_eq!(server.dns_aliases, vec!["app", "api"]);
         assert_eq!(server.deploy_path, Some("/opt/myapp".to_string()));
+    }
+
+    #[test]
+    fn test_parse_server_with_ssh_info() {
+        let kdl = r#"
+            server "creo-vps" {
+                provider "sakura-cloud"
+                plan "4core-8gb"
+                ssh-host "153.120.168.42"
+                ssh-user "root"
+                deploy-path "/opt/apps"
+            }
+        "#;
+        let doc: kdl::KdlDocument = kdl.parse().unwrap();
+        let node = doc.nodes().first().unwrap();
+
+        let (name, server) = parse_server(node).unwrap();
+        assert_eq!(name, "creo-vps");
+        assert_eq!(server.ssh_host, Some("153.120.168.42".to_string()));
+        assert_eq!(server.ssh_user, Some("root".to_string()));
+        assert_eq!(server.deploy_path, Some("/opt/apps".to_string()));
+    }
+
+    #[test]
+    fn test_parse_server_without_ssh_info() {
+        let kdl = r#"
+            server "creo-vps" {
+                provider "sakura-cloud"
+                plan "4core-8gb"
+            }
+        "#;
+        let doc: kdl::KdlDocument = kdl.parse().unwrap();
+        let node = doc.nodes().first().unwrap();
+
+        let (_, server) = parse_server(node).unwrap();
+        assert!(server.ssh_host.is_none());
+        assert!(server.ssh_user.is_none());
     }
 
     #[test]

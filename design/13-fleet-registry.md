@@ -72,6 +72,8 @@ classDiagram
         +plan: Option~String~
         +ssh_keys: Vec~String~
         +deploy_path: Option~String~
+        +ssh_host: Option~String~
+        +ssh_user: Option~String~
         +config: HashMap~String, String~
     }
     class DeploymentRoute {
@@ -258,6 +260,53 @@ pub enum RegistryError {
 }
 ```
 
+## Phase 2: SSH リモートデプロイ
+
+### ServerResource 拡張
+
+`ssh_host` と `ssh_user` を `ServerResource` に追加し、Registry の deploy ハンドラからSSH接続情報を直接参照可能にする。
+
+```rust
+pub struct ServerResource {
+    // ... 既存フィールド ...
+    pub ssh_host: Option<String>,  // SSH接続先
+    pub ssh_user: Option<String>,  // SSHユーザー（デフォルト: "root"）
+}
+```
+
+### SSHデプロイフロー
+
+```mermaid
+sequenceDiagram
+    participant CLI as fleet CLI
+    participant Reg as Registry
+    participant SSH as SSH Process
+
+    CLI->>Reg: resolve_route(fleet, stage)
+    Reg-->>CLI: DeploymentRoute + ServerResource
+    CLI->>CLI: ssh_host 必須チェック
+    CLI->>CLI: デプロイ計画表示
+    alt --yes なし
+        CLI-->>CLI: 計画表示のみで終了
+    else --yes あり
+        CLI->>SSH: ssh {user}@{host} "cd {path}/{fleet} && fleet deploy -s {stage} --yes"
+        SSH-->>CLI: リアルタイム出力（stdout/stderr透過）
+        CLI->>CLI: exit code チェック
+        alt 成功
+            CLI-->>CLI: デプロイ完了表示
+        else 失敗
+            CLI-->>CLI: エラーで中断（bail!）
+        end
+    end
+```
+
+### 設計判断
+
+- **`.status()` を使用**: `.output()` ではなく `.status()` でSSHコマンドを実行し、stdout/stderr をリアルタイムに表示
+- **`--yes` による安全性**: デフォルトでは計画表示のみ。`--yes` が明示的に指定された場合のみ実行
+- **デフォルトユーザー "root"**: `ssh_user` 未指定時は "root" をデフォルトとする（VPS環境の慣例）
+- **リモートコマンド構築**: `cd {deploy_path}/{fleet_name} && fleet deploy -s {stage} --yes` でリモート側の既存 `fleet deploy` を活用
+
 ## テスト戦略
 
 ### ユニットテスト
@@ -284,6 +333,11 @@ pub enum RegistryError {
 - [ ] spec/design ドキュメント同期確認
 
 ## 変更履歴
+
+### 2026-02-21: Phase 2 — SSH リモートデプロイ
+
+- **理由**: deploy ハンドラを情報表示からSSH実行に進化
+- **影響**: ServerResource 拡張、registry.rs handle_deploy 書き換え
 
 ### 2026-02-17: 初版作成
 

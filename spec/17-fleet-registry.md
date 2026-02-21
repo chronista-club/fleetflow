@@ -156,11 +156,47 @@ Fleet Registry: chronista-fleet
 
 #### `fleet registry deploy <fleet>`
 
-Registry 定義に従って指定 fleet をデプロイ:
+Registry 定義に従って指定 fleet をSSH経由でリモートデプロイ:
 
 1. Registry から対象 fleet のデプロイルートを解決
-2. 対象 fleet のディレクトリに移動
-3. 既存の deploy フローを実行（SSH経由）
+2. ルートに紐づく server の `ssh-host` / `ssh-user` を取得
+3. `deploy-path` と fleet名から リモートディレクトリを構築
+4. デプロイ計画を表示
+5. `--yes` 指定時のみ SSH 経由で `fleet deploy -s <stage> --yes` を実行
+
+**SSH接続に必要なサーバー設定**:
+
+```kdl
+server "vps-01" {
+    provider "sakura-cloud"
+    ssh-host "153.xxx.xxx.xxx"   // SSH接続先（必須）
+    ssh-user "root"              // SSHユーザー（省略時: "root"）
+    deploy-path "/opt/apps"      // デプロイ先パス（必須）
+}
+```
+
+**実行例**:
+
+```bash
+# 計画表示のみ（dry-run）
+fleet registry deploy creo
+
+# 実際にデプロイ実行
+fleet registry deploy creo --yes
+
+# ステージ指定
+fleet registry deploy creo -s live --yes
+```
+
+**実行フロー**:
+
+```
+fleet registry deploy creo --yes
+  → route解決: creo:live → vps-01
+  → SSH: root@153.xxx.xxx.xxx
+  → cd /opt/apps/creo && fleet deploy -s live --yes
+  → リアルタイム出力表示
+```
 
 ### 非機能仕様
 
@@ -169,6 +205,11 @@ Registry 定義に従って指定 fleet をデプロイ:
 - **拡張性**: Phase 2 の `fleet serve` / `fleet agent` への自然な移行パス
 
 ## 変更履歴
+
+### 2026-02-21: Phase 2 — SSH リモートデプロイ
+
+- **理由**: `fleet registry deploy` を実際にSSH経由でリモート実行可能にする
+- **影響**: ServerResource に `ssh_host` / `ssh_user` 追加、deploy ハンドラ書き換え
 
 ### 2026-02-17: 初版作成
 
