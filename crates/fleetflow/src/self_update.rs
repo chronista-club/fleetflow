@@ -196,7 +196,13 @@ pub async fn self_update() -> anyhow::Result<()> {
 }
 
 /// 起動時にバージョンチェックを行い、更新があれば通知・更新
+/// CI/CD環境（CI環境変数が設定されている場合）ではスキップする
 pub async fn check_and_update_if_needed() -> anyhow::Result<()> {
+    // CI/CD環境では対話的プロンプトを出せないのでスキップ
+    if std::env::var("CI").is_ok() || std::env::var("FLEETFLOW_NO_UPDATE_CHECK").is_ok() {
+        return Ok(());
+    }
+
     let current_version = env!("CARGO_PKG_VERSION");
 
     // GitHub APIから最新リリース情報を取得（タイムアウト短め）

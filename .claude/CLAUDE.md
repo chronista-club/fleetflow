@@ -57,21 +57,14 @@ fleetflow/
 │   ├── fleetflow-build/            # Dockerビルド機能
 │   ├── fleetflow-cloud/            # クラウドインフラ抽象化
 │   ├── fleetflow-cloud-sakura/     # さくらクラウド連携
-│   └── fleetflow-cloud-cloudflare/ # Cloudflare連携
+│   ├── fleetflow-cloud-cloudflare/ # Cloudflare連携
+│   └── fleetflow-mcp/             # MCPサーバー
 ├── spec/                           # 仕様書（What & Why）
-│   ├── 01-core-concepts.md
-│   ├── 02-kdl-parser.md
-│   ├── 03-cli-commands.md
-│   ├── 04-auto-import.md
-│   ├── 05-template-variables.md
-│   ├── 06-orbstack-integration.md
-│   ├── 07-docker-build.md
-│   └── 08-cloud-infrastructure.md
+│   ├── 01-core-concepts.md         # ... 17-fleet-registry.md まで
+│   └── （番号付きフラット構造）
 ├── design/                         # 設計書（How）
-│   ├── 01-kdl-parser.md
-│   ├── 02-orbstack-integration.md
-│   ├── 03-docker-build.md
-│   └── 04-cloud-infrastructure.md
+│   ├── 01-kdl-parser.md            # ... 13-fleet-registry.md まで
+│   └── （番号付きフラット構造）
 ├── guides/                         # 利用ガイド（Usage）
 │   ├── 01-orbstack-integration.md
 │   └── 02-docker-build.md
@@ -166,20 +159,34 @@ guides/            # Usage（使い方・ベストプラクティス）
 
 ```bash
 # 基本操作
-fleet up <stage>       # ステージを起動
-fleet down <stage>     # ステージを停止
-fleet restart <stage>  # ステージを再起動
-fleet ps               # コンテナ一覧
-fleet logs             # ログ表示
+fleet up <stage>           # ステージを起動
+fleet down <stage>         # ステージを停止
+fleet restart <service>    # 個別サービス再起動
+fleet start <service>      # 個別サービス起動
+fleet stop <service>       # 個別サービス停止
+fleet ps                   # コンテナ一覧
+fleet logs                 # ログ表示
+fleet exec <service>       # コンテナ内でコマンド実行
 
-# セットアップ・ビルド・デプロイ
-fleet setup <stage>    # ステージのインフラを構築（冪等）
-fleet build <stage>    # Dockerイメージをビルド
-fleet deploy <stage>   # デプロイ（CI/CD向け）
+# ビルド・デプロイ
+fleet build <stage>        # Dockerイメージをビルド
+fleet deploy <stage>       # デプロイ（CI/CD向け）
+
+# Fleet Registry（複数fleet統合管理）
+fleet registry list        # fleet/サーバー一覧
+fleet registry status      # 稼働状態表示
+fleet registry deploy <fleet>  # SSH経由リモートデプロイ
+
+# ステージ管理
+fleet stage up <stage>     # ステージ起動（サブコマンド形式）
+fleet stage down <stage>   # ステージ停止
+fleet stage status <stage> # ステージ状態表示
 
 # その他
-fleet validate         # 設定ファイルを検証
-fleet mcp              # MCPサーバーを起動
+fleet validate             # 設定ファイルを検証
+fleet mcp                  # MCPサーバーを起動
+fleet play <playbook>      # Playbook実行（リモートサーバー）
+fleet self-update          # 最新版に更新
 ```
 
 ### 環境変数プレフィックス
@@ -367,10 +374,13 @@ service "web" {
 - [x] Cloudflare連携スケルトン（fleetflow-cloud-cloudflare）
 - [ ] CLI統合
 
-### Phase 4: 拡張機能（次のステップ）
-- [ ] 環境変数の参照
-- [ ] 変数定義と展開
-- [ ] 環境継承（include-from）
+### Phase 4: 拡張機能
+- [x] 変数定義と展開（variables/テンプレート）
+- [x] includeディレクティブ（ファイル分割・再利用）
+- [x] MCP サーバー（fleetflow-mcp）
+- [x] Fleet Registry（複数fleet統合管理）
+- [x] SSH リモートデプロイ
+- [x] Playbook機能
 - [ ] ヘルスチェック機能
 
 ## Bollard（Docker API）
