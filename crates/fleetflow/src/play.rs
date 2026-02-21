@@ -159,7 +159,10 @@ pub async fn handle_play_command(
     // Dockerネットワークを作成（既存なら無視）
     let network_name = playbook_name;
     println!("  🔗 ネットワーク '{}' を作成中...", network_name.cyan());
-    let create_network_cmd = format!("docker network create {} 2>/dev/null || true", network_name);
+    let create_network_cmd = format!(
+        "docker network create {} 2>/dev/null || true",
+        shell_escape(network_name)
+    );
     let _ = Command::new("ssh")
         .arg(target)
         .arg(&create_network_cmd)
@@ -183,9 +186,10 @@ pub async fn handle_play_command(
             );
 
             // 既存コンテナを停止・削除
+            let escaped_name = shell_escape(&service.name);
             let stop_cmd = format!(
                 "docker stop {} 2>/dev/null || true && docker rm {} 2>/dev/null || true",
-                service.name, service.name
+                escaped_name, escaped_name
             );
             let ssh_stop = Command::new("ssh").arg(target).arg(&stop_cmd).status();
 
@@ -196,7 +200,7 @@ pub async fn handle_play_command(
             // pullが指定されている場合はイメージをpull
             if pull {
                 println!("    ↓ イメージをpull中...");
-                let pull_cmd = format!("docker pull {}", service.image);
+                let pull_cmd = format!("docker pull {}", shell_escape(&service.image));
                 let ssh_pull = Command::new("ssh").arg(target).arg(&pull_cmd).status()?;
                 if !ssh_pull.success() {
                     println!("    ⚠ イメージpullでエラー（続行します）");
@@ -206,7 +210,8 @@ pub async fn handle_play_command(
             // docker run コマンドを構築
             let mut docker_cmd = format!(
                 "docker run -d --name {} --network {}",
-                service.name, network_name
+                shell_escape(&service.name),
+                shell_escape(network_name)
             );
 
             // ポートマッピング
@@ -217,19 +222,25 @@ pub async fn handle_play_command(
             // 環境変数（変数展開付き）
             for (key, value) in &service.env {
                 let expanded_value = expand_variables(value, &variables);
-                docker_cmd.push_str(&format!(" -e {}={}", key, shell_escape(&expanded_value)));
+                docker_cmd.push_str(&format!(
+                    " -e {}={}",
+                    shell_escape(key),
+                    shell_escape(&expanded_value)
+                ));
             }
 
             // ボリューム
             for vol in &service.volumes {
-                docker_cmd.push_str(&format!(" -v {}:{}", vol.host, vol.container));
-                if vol.read_only {
-                    docker_cmd.push_str(":ro");
-                }
+                let vol_spec = if vol.read_only {
+                    format!("{}:{}:ro", vol.host, vol.container)
+                } else {
+                    format!("{}:{}", vol.host, vol.container)
+                };
+                docker_cmd.push_str(&format!(" -v {}", shell_escape(&vol_spec)));
             }
 
             // イメージとコマンド
-            docker_cmd.push_str(&format!(" {}", service.image));
+            docker_cmd.push_str(&format!(" {}", shell_escape(&service.image)));
             if let Some(cmd) = &service.command {
                 docker_cmd.push_str(&format!(" {}", cmd));
             }

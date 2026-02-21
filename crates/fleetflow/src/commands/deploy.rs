@@ -258,7 +258,7 @@ pub async fn handle(
                 println!("  ✓ コンテナを作成しました");
             }
             Err(e) => {
-                println!("  ✗ コンテナ作成エラー: {}", e);
+                eprintln!("  ✗ コンテナ作成エラー: {}", e);
                 return Err(e.into());
             }
         }
@@ -300,7 +300,7 @@ pub async fn handle(
                 println!("  ✓ 起動完了");
             }
             Err(e) => {
-                println!("  ✗ 起動エラー: {}", e);
+                eprintln!("  ✗ 起動エラー: {}", e);
                 return Err(e.into());
             }
         }

@@ -3,6 +3,54 @@ use crate::self_update;
 use colored::Colorize;
 use std::collections::HashMap;
 
+/// サービスのローカルビルドを実行する共通関数
+async fn build_service_image(
+    docker_conn: &bollard::Docker,
+    project_root: &std::path::Path,
+    service_name: &str,
+    service: &fleetflow_core::Service,
+    image: &str,
+) -> anyhow::Result<()> {
+    println!("  🔨 build設定があるためローカルビルドを実行...");
+
+    let resolver = fleetflow_build::BuildResolver::new(project_root.to_path_buf());
+
+    let dockerfile_path = resolver
+        .resolve_dockerfile(service_name, service)?
+        .ok_or_else(|| {
+            anyhow::anyhow!("Dockerfileが見つかりません: サービス '{}'", service_name)
+        })?;
+
+    let context_path = resolver.resolve_context(service)?;
+
+    let variables: HashMap<String, String> = std::env::vars().collect();
+    let build_args = resolver.resolve_build_args(service, &variables);
+    let target = service.build.as_ref().and_then(|b| b.target.clone());
+
+    println!(
+        "  → Dockerfile: {}",
+        dockerfile_path.display().to_string().cyan()
+    );
+    println!("  → Context: {}", context_path.display().to_string().cyan());
+    println!("  → Image: {}", image.cyan());
+
+    let builder = fleetflow_build::ImageBuilder::new(docker_conn.clone());
+    builder
+        .build_image_from_path(
+            &context_path,
+            &dockerfile_path,
+            image,
+            build_args,
+            target.as_deref(),
+            false,
+            None,
+        )
+        .await?;
+
+    println!("  {} ビルド完了", "✓".green());
+    Ok(())
+}
+
 pub async fn handle(
     config: &fleetflow_core::Flow,
     project_root: &std::path::Path,
@@ -13,33 +61,17 @@ pub async fn handle(
     self_update::check_and_update_if_needed().await?;
 
     // ステージ名の決定（デフォルトステージをサポート）
-    let available_stages: Vec<_> = config.stages.keys().map(|s| s.as_str()).collect();
-    println!(
-        "  DEBUG: Available stages in config: {:?}",
-        available_stages
-    );
-
-    let stage_name = if let Some(s) = stage {
-        s
-    } else if config.stages.contains_key("default") {
-        "default".to_string()
-    } else if config.stages.len() == 1 {
-        config.stages.keys().next().unwrap().clone()
-    } else {
-        return Err(anyhow::anyhow!(
-            "ステージ名を指定してください: fleet <command> <stage> または FLEET_STAGE=<stage>\n利用可能なステージ: {}",
-            available_stages.join(", ")
-        ));
-    };
+    let stage_name = crate::utils::determine_stage_name(stage, config)?;
 
     println!("ステージ: {}", stage_name.cyan());
 
     // ステージの取得
     let stage_config = config.stages.get(&stage_name).ok_or_else(|| {
+        let available: Vec<_> = config.stages.keys().map(|s| s.as_str()).collect();
         anyhow::anyhow!(
             "ステージ '{}' が見つかりません。利用可能: {}",
             stage_name,
-            available_stages.join(", ")
+            available.join(", ")
         )
     })?;
 
@@ -79,7 +111,6 @@ pub async fn handle(
         }
         Err(e) => {
             eprintln!("  ⚠ ネットワーク作成エラー: {}", e);
-            // ネットワーク作成に失敗しても続行（既存のブリッジネットワークを使用）
         }
     }
 
@@ -90,7 +121,6 @@ pub async fn handle(
             .get(service_name)
             .ok_or_else(|| anyhow::anyhow!("サービス '{}' の定義が見つかりません", service_name))?;
 
-        // imageが設定されているか確認
         if service.image.is_none() {
             return Err(anyhow::anyhow!(
                 "サービス '{}' に image が指定されていません",
@@ -120,62 +150,7 @@ pub async fn handle(
                 .as_ref()
                 .ok_or_else(|| anyhow::anyhow!("イメージ名が指定されていません"))?;
 
-            println!("  🔨 build設定があるためローカルビルドを実行...");
-
-            let resolver = fleetflow_build::BuildResolver::new(project_root.to_path_buf());
-
-            let dockerfile_path = match resolver.resolve_dockerfile(service_name, service) {
-                Ok(Some(path)) => path,
-                Ok(None) => {
-                    return Err(anyhow::anyhow!(
-                        "Dockerfileが見つかりません: サービス '{}'",
-                        service_name
-                    ));
-                }
-                Err(e) => {
-                    return Err(anyhow::anyhow!("Dockerfile解決エラー: {}", e));
-                }
-            };
-
-            let context_path = match resolver.resolve_context(service) {
-                Ok(path) => path,
-                Err(e) => {
-                    return Err(anyhow::anyhow!("コンテキスト解決エラー: {}", e));
-                }
-            };
-
-            let variables: HashMap<String, String> = std::env::vars().collect();
-            let build_args = resolver.resolve_build_args(service, &variables);
-            let target = service.build.as_ref().and_then(|b| b.target.clone());
-
-            println!(
-                "  → Dockerfile: {}",
-                dockerfile_path.display().to_string().cyan()
-            );
-            println!("  → Context: {}", context_path.display().to_string().cyan());
-            println!("  → Image: {}", image.cyan());
-
-            let builder = fleetflow_build::ImageBuilder::new(docker_conn.clone());
-            match builder
-                .build_image_from_path(
-                    &context_path,
-                    &dockerfile_path,
-                    image,
-                    build_args,
-                    target.as_deref(),
-                    false,
-                    None,
-                )
-                .await
-            {
-                Ok(_) => {
-                    println!("  {} ビルド完了", "✓".green());
-                }
-                Err(e) => {
-                    eprintln!("  ✗ ビルドエラー: {}", e);
-                    return Err(anyhow::anyhow!("イメージのビルドに失敗しました"));
-                }
-            }
+            build_service_image(&docker_conn, project_root, service_name, service, image).await?;
         }
 
         // --pull フラグが指定されていて、build設定がない場合は最新イメージをpull
@@ -197,19 +172,14 @@ pub async fn handle(
                 println!("  ✓ コンテナ作成: {}", response.id);
 
                 // コンテナ起動
-                match docker_conn
+                docker_conn
                     .start_container(
                         &response.id,
                         None::<bollard::query_parameters::StartContainerOptions>,
                     )
                     .await
-                {
-                    Ok(_) => println!("  ✓ 起動完了"),
-                    Err(e) => {
-                        eprintln!("  ✗ 起動エラー: {}", e);
-                        return Err(anyhow::anyhow!("コンテナ起動に失敗しました"));
-                    }
-                }
+                    .map_err(|e| anyhow::anyhow!("コンテナ起動に失敗: {}", e))?;
+                println!("  ✓ 起動完了");
             }
             Err(bollard::errors::Error::DockerResponseServerError {
                 status_code: 409, ..
@@ -234,23 +204,17 @@ pub async fn handle(
                     }) => {
                         // 既に起動中のコンテナは再起動
                         println!("  ℹ コンテナは既に起動中、再起動します...");
-                        match docker_conn
+                        docker_conn
                             .restart_container(
                                 container_name,
                                 None::<bollard::query_parameters::RestartContainerOptions>,
                             )
                             .await
-                        {
-                            Ok(_) => println!("  ✓ 再起動完了"),
-                            Err(e) => {
-                                eprintln!("  ✗ 再起動エラー: {}", e);
-                                return Err(anyhow::anyhow!("コンテナ再起動に失敗しました"));
-                            }
-                        }
+                            .map_err(|e| anyhow::anyhow!("コンテナ再起動に失敗: {}", e))?;
+                        println!("  ✓ 再起動完了");
                     }
                     Err(e) => {
-                        eprintln!("  ✗ 起動エラー: {}", e);
-                        return Err(anyhow::anyhow!("コンテナ起動に失敗しました"));
+                        return Err(anyhow::anyhow!("コンテナ起動に失敗: {}", e));
                     }
                 }
             }
@@ -264,98 +228,30 @@ pub async fn handle(
                     .as_ref()
                     .ok_or_else(|| anyhow::anyhow!("イメージ名が指定されていません"))?;
 
-                // build設定があればローカルビルドを優先、なければpull
                 if service.build.is_some() {
                     println!("  ℹ イメージが見つかりません: {}", image.cyan());
-                    println!("  🔨 build設定があるためローカルビルドを実行...");
-
-                    let resolver = fleetflow_build::BuildResolver::new(project_root.to_path_buf());
-
-                    let dockerfile_path = match resolver.resolve_dockerfile(service_name, service) {
-                        Ok(Some(path)) => path,
-                        Ok(None) => {
-                            return Err(anyhow::anyhow!(
-                                "Dockerfileが見つかりません: サービス '{}'",
-                                service_name
-                            ));
-                        }
-                        Err(e) => {
-                            return Err(anyhow::anyhow!("Dockerfile解決エラー: {}", e));
-                        }
-                    };
-
-                    let context_path = match resolver.resolve_context(service) {
-                        Ok(path) => path,
-                        Err(e) => {
-                            return Err(anyhow::anyhow!("コンテキスト解決エラー: {}", e));
-                        }
-                    };
-
-                    let variables: HashMap<String, String> = std::env::vars().collect();
-                    let build_args = resolver.resolve_build_args(service, &variables);
-                    let target = service.build.as_ref().and_then(|b| b.target.clone());
-
-                    println!(
-                        "  → Dockerfile: {}",
-                        dockerfile_path.display().to_string().cyan()
-                    );
-                    println!("  → Context: {}", context_path.display().to_string().cyan());
-                    println!("  → Image: {}", image.cyan());
-
-                    let builder = fleetflow_build::ImageBuilder::new(docker_conn.clone());
-                    match builder
-                        .build_image_from_path(
-                            &context_path,
-                            &dockerfile_path,
-                            image,
-                            build_args,
-                            target.as_deref(),
-                            false,
-                            None,
-                        )
-                        .await
-                    {
-                        Ok(_) => {
-                            println!("  {} ビルド完了", "✓".green());
-                        }
-                        Err(e) => {
-                            eprintln!("  ✗ ビルドエラー: {}", e);
-                            return Err(anyhow::anyhow!("イメージのビルドに失敗しました"));
-                        }
-                    }
+                    build_service_image(&docker_conn, project_root, service_name, service, image)
+                        .await?;
                 } else {
-                    // build設定がない場合はpull
                     docker::pull_image(&docker_conn, image).await?;
                 }
 
-                // pull成功後、再度コンテナ作成を試行
-                match docker_conn
+                // pull/build成功後、再度コンテナ作成を試行
+                let response = docker_conn
                     .create_container(Some(create_options.clone()), container_config.clone())
                     .await
-                {
-                    Ok(response) => {
-                        println!("  ✓ コンテナ作成: {}", response.id);
+                    .map_err(|e| anyhow::anyhow!("コンテナ作成に失敗: {}", e))?;
 
-                        // コンテナ起動
-                        match docker_conn
-                            .start_container(
-                                &response.id,
-                                None::<bollard::query_parameters::StartContainerOptions>,
-                            )
-                            .await
-                        {
-                            Ok(_) => println!("  ✓ 起動完了"),
-                            Err(e) => {
-                                eprintln!("  ✗ 起動エラー: {}", e);
-                                return Err(anyhow::anyhow!("コンテナ起動に失敗しました"));
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        eprintln!("  ✗ コンテナ作成エラー: {}", e);
-                        return Err(anyhow::anyhow!("コンテナ作成に失敗しました"));
-                    }
-                }
+                println!("  ✓ コンテナ作成: {}", response.id);
+
+                docker_conn
+                    .start_container(
+                        &response.id,
+                        None::<bollard::query_parameters::StartContainerOptions>,
+                    )
+                    .await
+                    .map_err(|e| anyhow::anyhow!("コンテナ起動に失敗: {}", e))?;
+                println!("  ✓ 起動完了");
             }
             Err(e) => {
                 let err_str = e.to_string();
