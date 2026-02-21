@@ -193,10 +193,7 @@ pub async fn handle_deploy(
         })?;
 
         let remote_dir = format!("{}/{}", deploy_path, fleet_name);
-        let remote_cmd = format!(
-            "cd {} && fleet deploy -s {} --yes",
-            remote_dir, route.stage
-        );
+        let remote_cmd = format!("cd {} && fleet deploy -s {} --yes", remote_dir, route.stage);
 
         println!(
             "  {} {}:{} → {} ({})",
@@ -213,31 +210,29 @@ pub async fn handle_deploy(
 
     // --yes がなければ計画表示のみで終了
     if !yes {
-        println!(
-            "  {}",
-            "→ 実行するには --yes を付けてください".yellow()
-        );
+        println!("  {}", "→ 実行するには --yes を付けてください".yellow());
         return Ok(());
     }
 
     // SSH経由でデプロイ実行
     for route in &target_routes {
-        let server = registry.servers.get(&route.server).ok_or_else(|| {
-            anyhow::anyhow!("Server '{}' が見つかりません", route.server)
-        })?;
+        let server = registry
+            .servers
+            .get(&route.server)
+            .ok_or_else(|| anyhow::anyhow!("Server '{}' が見つかりません", route.server))?;
         let ssh_host = server.ssh_host.as_deref().ok_or_else(|| {
             anyhow::anyhow!("Server '{}' に ssh-host が設定されていません", route.server)
         })?;
         let ssh_user = server.ssh_user.as_deref().unwrap_or("root");
         let ssh_target = format!("{}@{}", ssh_user, ssh_host);
         let deploy_path = server.deploy_path.as_deref().ok_or_else(|| {
-            anyhow::anyhow!("Server '{}' に deploy-path が設定されていません", route.server)
+            anyhow::anyhow!(
+                "Server '{}' に deploy-path が設定されていません",
+                route.server
+            )
         })?;
         let remote_dir = format!("{}/{}", deploy_path, fleet_name);
-        let remote_cmd = format!(
-            "cd {} && fleet deploy -s {} --yes",
-            remote_dir, route.stage
-        );
+        let remote_cmd = format!("cd {} && fleet deploy -s {} --yes", remote_dir, route.stage);
 
         println!(
             "{}",

@@ -885,10 +885,7 @@ fn test_parse_with_multiple_variables() {
     assert_eq!(api.image, Some("ghcr.io/myorg/api:2.0.0".to_string()));
 
     let worker = &flow.services["worker"];
-    assert_eq!(
-        worker.image,
-        Some("ghcr.io/myorg/worker:1.5.0".to_string())
-    );
+    assert_eq!(worker.image, Some("ghcr.io/myorg/worker:1.5.0".to_string()));
 }
 
 #[test]

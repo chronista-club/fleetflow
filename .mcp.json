@@ -1,40 +1,8 @@
 {
   "mcpServers": {
-    "creo-memories": {
-      "type": "http",
-      "url": "https://mcp.creo-memories.in"
-    },
-    "surrealdbmcp": {
-      "command": "docker",
-      "args": [
-        "run",
-        "--rm",
-        "-i",
-        "--pull",
-        "always",
-        "surrealdb/surrealmcp:latest",
-        "start"
-      ]
-    },
-    "serena": {
-      "type": "stdio",
-      "command": "uvx",
-      "args": [
-        "--from",
-        "serena-agent",
-        "serena-mcp-server",
-        "--context",
-        "ide-assistant",
-        "--project",
-        "$(pwd)",
-        "--enable-web-dashboard",
-        "false"
-      ],
-      "env": {}
-    },
     "fleetflow": {
       "type": "stdio",
-      "command": "/Users/makoto/repos/fleetflow/target/release/flow",
+      "command": "fleet",
       "args": ["mcp"],
       "env": {}
     }

@@ -108,16 +108,14 @@ fn read_kdl_with_includes(
                     })? {
                         let entry_path = entry
                             .map_err(|e| FlowError::InvalidConfig(format!("Glob error: {}", e)))?;
-                        let included =
-                            read_kdl_with_includes(&entry_path, current_dir, visited)?;
+                        let included = read_kdl_with_includes(&entry_path, current_dir, visited)?;
                         result.push_str(&included);
                         result.push('\n');
                     }
                 } else {
                     // 単一ファイル
                     let include_file = current_dir.join(include_path);
-                    let included =
-                        read_kdl_with_includes(&include_file, current_dir, visited)?;
+                    let included = read_kdl_with_includes(&include_file, current_dir, visited)?;
                     result.push_str(&included);
                     result.push('\n');
                 }
