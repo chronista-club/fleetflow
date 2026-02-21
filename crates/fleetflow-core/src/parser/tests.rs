@@ -837,3 +837,188 @@ fn test_volume_unison_kdl_roundtrip() {
     assert_eq!(deserialized.container, original.container);
     assert_eq!(deserialized.read_only, original.read_only);
 }
+
+// ============================================================================
+// 変数展開テスト
+// ============================================================================
+
+#[test]
+fn test_parse_with_variables() {
+    let kdl = r#"
+        variables {
+            registry "ghcr.io/myorg"
+            version "1.0.0"
+        }
+
+        service "api" {
+            image "{{ registry }}/api:{{ version }}"
+        }
+    "#;
+
+    let flow = parse_kdl_string(kdl, "test".to_string()).unwrap();
+    let service = &flow.services["api"];
+    assert_eq!(service.image, Some("ghcr.io/myorg/api:1.0.0".to_string()));
+}
+
+#[test]
+fn test_parse_with_multiple_variables() {
+    let kdl = r#"
+        variables {
+            registry "ghcr.io/myorg"
+            api_version "2.0.0"
+            worker_version "1.5.0"
+        }
+
+        service "api" {
+            image "{{ registry }}/api:{{ api_version }}"
+        }
+
+        service "worker" {
+            image "{{ registry }}/worker:{{ worker_version }}"
+        }
+    "#;
+
+    let flow = parse_kdl_string(kdl, "test".to_string()).unwrap();
+    assert_eq!(flow.services.len(), 2);
+
+    let api = &flow.services["api"];
+    assert_eq!(api.image, Some("ghcr.io/myorg/api:2.0.0".to_string()));
+
+    let worker = &flow.services["worker"];
+    assert_eq!(
+        worker.image,
+        Some("ghcr.io/myorg/worker:1.5.0".to_string())
+    );
+}
+
+#[test]
+fn test_parse_without_variables() {
+    let kdl = r#"
+        service "api" {
+            image "myapp:1.0.0"
+        }
+    "#;
+
+    let flow = parse_kdl_string(kdl, "test".to_string()).unwrap();
+    let service = &flow.services["api"];
+    assert_eq!(service.image, Some("myapp:1.0.0".to_string()));
+}
+
+// ============================================================================
+// include テスト
+// ============================================================================
+
+#[test]
+fn test_include_single_file() {
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let base_path = temp_dir.path();
+
+    std::fs::write(
+        base_path.join("redis.kdl"),
+        r#"service "redis" { version "7" }"#,
+    )
+    .unwrap();
+
+    let main_kdl = r#"
+include "redis.kdl"
+
+service "postgres" {
+    version "16"
+}
+"#;
+    std::fs::write(base_path.join("main.kdl"), main_kdl).unwrap();
+
+    let flow = parse_kdl_file(base_path.join("main.kdl")).unwrap();
+
+    assert_eq!(flow.services.len(), 2);
+    assert!(flow.services.contains_key("redis"));
+    assert!(flow.services.contains_key("postgres"));
+    assert_eq!(flow.services["redis"].version, Some("7".to_string()));
+    assert_eq!(flow.services["postgres"].version, Some("16".to_string()));
+}
+
+#[test]
+fn test_include_glob_pattern() {
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let base_path = temp_dir.path();
+
+    std::fs::create_dir(base_path.join("services")).unwrap();
+
+    std::fs::write(
+        base_path.join("services/redis.kdl"),
+        r#"service "redis" { version "7" }"#,
+    )
+    .unwrap();
+
+    std::fs::write(
+        base_path.join("services/postgres.kdl"),
+        r#"service "postgres" { version "16" }"#,
+    )
+    .unwrap();
+
+    let main_kdl = r#"
+include "services/*.kdl"
+
+service "api" {
+    version "1.0"
+}
+"#;
+    std::fs::write(base_path.join("main.kdl"), main_kdl).unwrap();
+
+    let flow = parse_kdl_file(base_path.join("main.kdl")).unwrap();
+
+    assert_eq!(flow.services.len(), 3);
+    assert!(flow.services.contains_key("redis"));
+    assert!(flow.services.contains_key("postgres"));
+    assert!(flow.services.contains_key("api"));
+}
+
+#[test]
+fn test_include_circular_reference() {
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let base_path = temp_dir.path();
+
+    std::fs::write(base_path.join("a.kdl"), r#"include "b.kdl""#).unwrap();
+    std::fs::write(base_path.join("b.kdl"), r#"include "a.kdl""#).unwrap();
+
+    let result = parse_kdl_file(base_path.join("a.kdl"));
+    assert!(result.is_err());
+
+    let err = result.unwrap_err().to_string();
+    assert!(
+        err.contains("Circular include"),
+        "エラーメッセージに循環参照が示されるべき: {}",
+        err
+    );
+}
+
+#[test]
+fn test_include_nested() {
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let base_path = temp_dir.path();
+
+    std::fs::write(
+        base_path.join("level2.kdl"),
+        r#"service "redis" { version "7" }"#,
+    )
+    .unwrap();
+
+    std::fs::write(
+        base_path.join("level1.kdl"),
+        "include \"level2.kdl\"\nservice \"postgres\" { version \"16\" }",
+    )
+    .unwrap();
+
+    std::fs::write(
+        base_path.join("main.kdl"),
+        "include \"level1.kdl\"\nservice \"api\" { version \"1.0\" }",
+    )
+    .unwrap();
+
+    let flow = parse_kdl_file(base_path.join("main.kdl")).unwrap();
+
+    assert_eq!(flow.services.len(), 3);
+    assert!(flow.services.contains_key("redis"));
+    assert!(flow.services.contains_key("postgres"));
+    assert!(flow.services.contains_key("api"));
+}
