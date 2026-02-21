@@ -2,6 +2,7 @@
 
 use colored::Colorize;
 use fleetflow_registry::{Registry, find_registry, parse_registry_file, registry_root};
+use std::process::Command;
 
 /// fleet registry list — 全fleetとサーバーの一覧
 pub fn handle_list(registry: &Registry) {
@@ -108,13 +109,13 @@ pub fn handle_status(registry: &Registry) {
     );
 }
 
-/// fleet registry deploy <fleet> — Registry定義に従ってデプロイ
+/// fleet registry deploy <fleet> — Registry定義に従ってSSH経由でデプロイ
 pub async fn handle_deploy(
     registry: &Registry,
     registry_root_path: &std::path::Path,
     fleet_name: &str,
     stage: Option<&str>,
-    _yes: bool,
+    yes: bool,
 ) -> anyhow::Result<()> {
     // 対象fleetの情報を取得
     let fleet_entry = registry
@@ -168,11 +169,34 @@ pub async fn handle_deploy(
     );
     println!();
 
+    // デプロイ計画を表示
     for route in &target_routes {
         let server = registry
             .servers
             .get(&route.server)
             .ok_or_else(|| anyhow::anyhow!("Server '{}' が見つかりません", route.server))?;
+
+        let ssh_host = server.ssh_host.as_deref().ok_or_else(|| {
+            anyhow::anyhow!(
+                "Server '{}' に ssh-host が設定されていません。fleet-registry.kdl に ssh-host を追加してください",
+                route.server
+            )
+        })?;
+        let ssh_user = server.ssh_user.as_deref().unwrap_or("root");
+        let ssh_target = format!("{}@{}", ssh_user, ssh_host);
+
+        let deploy_path = server.deploy_path.as_deref().ok_or_else(|| {
+            anyhow::anyhow!(
+                "Server '{}' に deploy-path が設定されていません",
+                route.server
+            )
+        })?;
+
+        let remote_dir = format!("{}/{}", deploy_path, fleet_name);
+        let remote_cmd = format!(
+            "cd {} && fleet deploy -s {} --yes",
+            remote_dir, route.stage
+        );
 
         println!(
             "  {} {}:{} → {} ({})",
@@ -182,18 +206,72 @@ pub async fn handle_deploy(
             route.server.yellow(),
             server.provider.dimmed()
         );
+        println!("  {} {}", "SSH:".dimmed(), ssh_target);
+        println!("  {} {}", "CMD:".dimmed(), remote_cmd);
+        println!();
+    }
 
-        // Phase 1: デプロイ情報の表示のみ。実際のSSH接続はPhase 2で実装
-        if let Some(deploy_path) = &server.deploy_path {
-            println!("  {} {}", "Deploy path:".dimmed(), deploy_path);
-        }
+    // --yes がなければ計画表示のみで終了
+    if !yes {
         println!(
             "  {}",
-            "→ 実際のデプロイ実行は Phase 2 で実装予定（SSH接続 + fleet deploy）".dimmed()
+            "→ 実行するには --yes を付けてください".yellow()
+        );
+        return Ok(());
+    }
+
+    // SSH経由でデプロイ実行
+    for route in &target_routes {
+        let server = registry.servers.get(&route.server).unwrap();
+        let ssh_host = server.ssh_host.as_deref().unwrap();
+        let ssh_user = server.ssh_user.as_deref().unwrap_or("root");
+        let ssh_target = format!("{}@{}", ssh_user, ssh_host);
+        let deploy_path = server.deploy_path.as_deref().unwrap();
+        let remote_dir = format!("{}/{}", deploy_path, fleet_name);
+        let remote_cmd = format!(
+            "cd {} && fleet deploy -s {} --yes",
+            remote_dir, route.stage
+        );
+
+        println!(
+            "{}",
+            format!(
+                "▶ {}:{} → {} にデプロイ中...",
+                route.fleet, route.stage, route.server
+            )
+            .cyan()
+            .bold()
+        );
+        println!("  $ ssh {} \"{}\"", ssh_target, remote_cmd);
+        println!();
+
+        let status = Command::new("ssh")
+            .arg(&ssh_target)
+            .arg(&remote_cmd)
+            .status()?;
+
+        if !status.success() {
+            anyhow::bail!(
+                "デプロイ失敗: {}:{} → {} (exit code: {})",
+                route.fleet,
+                route.stage,
+                route.server,
+                status.code().unwrap_or(-1)
+            );
+        }
+
+        println!();
+        println!(
+            "  {} {}:{} → {} デプロイ完了",
+            "✓".green().bold(),
+            route.fleet.green(),
+            route.stage,
+            route.server.yellow()
         );
         println!();
     }
 
+    println!("{}", "全ルートのデプロイが完了しました".green().bold());
     Ok(())
 }
 

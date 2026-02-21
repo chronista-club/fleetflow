@@ -269,6 +269,36 @@ deployment {
     }
 
     #[test]
+    fn test_parse_registry_with_ssh_info() {
+        let kdl = r#"
+registry "test-fleet"
+
+fleet "creo" {
+    path "fleets/creo"
+    description "Creo Memories"
+}
+
+server "vps-01" {
+    provider "sakura-cloud"
+    plan "4core-8gb"
+    ssh-key "deployment"
+    ssh-host "153.120.168.42"
+    ssh-user "root"
+    deploy-path "/opt/apps"
+}
+
+deployment {
+    route fleet="creo" stage="live" server="vps-01"
+}
+"#;
+        let registry = parse_registry(kdl).unwrap();
+        let vps = registry.servers.get("vps-01").unwrap();
+        assert_eq!(vps.ssh_host.as_deref(), Some("153.120.168.42"));
+        assert_eq!(vps.ssh_user.as_deref(), Some("root"));
+        assert_eq!(vps.deploy_path.as_deref(), Some("/opt/apps"));
+    }
+
+    #[test]
     fn test_parse_registry_no_routes() {
         let kdl = r#"
 registry "test"
