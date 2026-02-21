@@ -21,6 +21,7 @@ anyhow.workspace = true
 tera.workspace = true
 tracing.workspace = true
 regex = "1.10"
+glob.workspace = true
 
 [dev-dependencies]
 tempfile = "3.8"

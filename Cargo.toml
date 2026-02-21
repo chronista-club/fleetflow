@@ -81,6 +81,7 @@ schemars = "1"
 
 # Utils
 chrono = "0.4"
+glob = "0.3"
 
 # Build utilities
 tar = "0.4"
