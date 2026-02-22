@@ -27,46 +27,111 @@ FleetFlow は、KDL (KDL Document Language) をベースにした革新的な環
 curl -sSf https://raw.githubusercontent.com/chronista-club/fleetflow/main/install.sh | sh
 ```
 
+> **注意**: インストール後、Claude Code との連携設定で `fleet mcp` コマンドを使用します:
+> ```bash
+> claude mcp add fleetflow -- fleet mcp
+> ```
+
 ### 2. 設定ファイルの作成
 
 `.fleetflow/fleet.kdl` を作成します（設定例は下記参照）。
 
-### 3. 環境のセットアップと起動
+### 3. 起動
 
 ```bash
-# 環境をセットアップ（初回）
-fleet setup local
-
-# 起動
+# ステージを起動
 fleet up local
 ```
+
+設定ファイルが存在しない状態でコマンドを実行すると、対話的な初期化ウィザードが起動します。
 
 ---
 
 ## CLI コマンド
 
+### ステージのライフサイクル
+
 ```bash
-# セットアップ（冪等）
-fleet setup <stage>    # ステージのインフラを構築
+# ステージを起動（ステージ省略時はデフォルトステージを使用）
+fleet up [stage]              # コンテナを起動
+fleet up local --pull         # 起動前に最新イメージをpull
+fleet down [stage]            # コンテナを停止
+fleet down local --remove     # 停止 + コンテナ削除
+```
 
-# ライフサイクル
-fleet up <stage>       # ステージを起動
-fleet down <stage>     # ステージを停止
-fleet restart <stage>  # ステージを再起動
-fleet deploy <stage>   # デプロイ（CI/CD向け）
+### 個別サービスの操作
 
-# 状態確認
-fleet ps               # コンテナ一覧
-fleet logs             # ログ表示
+```bash
+fleet start <service>         # サービスを起動
+fleet stop <service>          # サービスを停止
+fleet restart <service>       # サービスを再起動
+fleet exec -n <service> -- <command>  # コンテナ内でコマンド実行（省略時: /bin/sh）
+```
 
-# ビルド
-fleet build <stage>    # Dockerイメージをビルド
+`--stage` / `-s` オプションまたは `FLEET_STAGE` 環境変数でステージ指定が可能:
 
-# AI連携
-fleet mcp              # MCPサーバーを起動
+```bash
+fleet start db --stage local
+fleet exec -n app -s local -- npm run migrate
+FLEET_STAGE=local fleet restart app
+```
 
-# 検証
-fleet validate         # 設定ファイルを検証
+### 状態確認
+
+```bash
+fleet ps [stage]              # コンテナ一覧（全ステージ or 指定ステージ）
+fleet logs [stage]            # ログ表示
+fleet logs local -n app       # 特定サービスのログ
+fleet logs local --follow     # リアルタイム追跡
+```
+
+### ビルド・デプロイ
+
+```bash
+fleet build [stage]                 # Dockerイメージをビルド
+fleet build local -n app            # 特定サービスのみビルド
+fleet build local --push --registry ghcr.io/owner  # ビルド＋レジストリにプッシュ
+fleet deploy [stage]                # デプロイ（CI/CD向け: 強制停止→最新イメージ→再起動）
+fleet deploy local --yes            # 確認なしで実行
+```
+
+### ステージ管理（stage サブコマンド）
+
+`stage` サブコマンドはインフラとコンテナを統一的に操作します:
+
+```bash
+fleet stage up <stage>        # ステージを起動（インフラ＋コンテナ）
+fleet stage down <stage>      # ステージを停止
+fleet stage down <stage> --suspend   # サーバー電源をOFF（リモート）
+fleet stage down <stage> --destroy --yes  # サーバーを削除（課金完全停止）
+fleet stage status <stage>    # ステージの状態を表示
+fleet stage logs <stage>      # ステージのログを表示
+fleet stage ps [stage]        # コンテナ一覧
+```
+
+### Playbook（リモートサーバー操作）
+
+```bash
+fleet play <playbook>         # Playbookを実行
+fleet play deploy-app --yes   # 確認なしで実行
+```
+
+### Fleet Registry（複数プロジェクト統合管理）
+
+```bash
+fleet registry list           # 全fleetとサーバーの一覧
+fleet registry status         # 各fleet x serverの稼働状態
+fleet registry deploy <fleet> # Registry定義に従ってSSH経由でデプロイ
+fleet registry deploy <fleet> -s live --yes  # ステージ指定＋確認なし
+```
+
+### 検証・AI連携・その他
+
+```bash
+fleet validate                # 設定ファイルを検証
+fleet mcp                     # MCPサーバーを起動（AI エージェント連携）
+fleet version                 # バージョン情報を表示
+fleet self-update             # FleetFlow自体を最新版に更新
 ```
 
 ---
@@ -76,39 +141,64 @@ fleet validate         # 設定ファイルを検証
 ### fleet.kdl
 
 ```kdl
-project "my-app"
-
 // ステージ定義
 stage "local" {
+    service "postgres"
+    service "redis"
     service "app"
-    service "db"
+    variables {
+        APP_ENV "development"
+        DEBUG "true"
+    }
 }
 
-stage "dev" {
-    server "my-dev-server"
-    service "app"
-    service "db"
+stage "live" {
+    service "postgres"
+    service "redis"
+    variables {
+        APP_ENV "production"
+        DEBUG "false"
+    }
 }
 
 // サービス定義
-service "app" {
-    image "node:22-alpine"
+service "postgres" {
+    version "16"
     ports {
-        port host=3000 container=3000
+        port host=11432 container=5432
     }
-    env {
-        NODE_ENV "{{ NODE_ENV }}"
+    environment {
+        POSTGRES_USER "flowuser"
+        POSTGRES_PASSWORD "flowpass"
+        POSTGRES_DB "flowdb"
+    }
+    volumes {
+        volume "./data/postgres" "/var/lib/postgresql/data"
     }
 }
 
-service "db" {
-    image "postgres:16"
+service "redis" {
+    version "7"
     ports {
-        port host=5432 container=5432
+        port host=11379 container=6379
     }
     volumes {
-        volume host="{{ PROJECT_ROOT }}/data/postgres" container="/var/lib/postgresql/data"
+        volume "./data/redis" "/data"
     }
+}
+
+service "app" {
+    image "myapp"
+    version "latest"
+    ports {
+        port host=11080 container=8080
+    }
+    environment {
+        DATABASE_URL "postgresql://flowuser:flowpass@postgres:5432/flowdb"
+        REDIS_URL "redis://redis:6379"
+        APP_ENV "development"
+    }
+    depends_on "postgres" "redis"
 }
 ```
 
@@ -130,15 +220,20 @@ service "db" {
 ```
 fleetflow/
 ├── crates/
-│   ├── fleetflow/              # CLI エントリーポイント (bin: fleet)
-│   ├── fleetflow-core/         # KDL パーサー・データモデル
-│   ├── fleetflow-container/    # コンテナ操作
-│   ├── fleetflow-build/        # Docker ビルド
-│   ├── fleetflow-cloud/        # クラウドインフラ抽象化
-│   └── fleetflow-mcp/          # AI エージェント連携 (MCP)
-├── spec/                       # 仕様書 (What & Why)
-├── design/                     # 設計書 (How)
-└── guides/                     # 利用ガイド (Usage)
+│   ├── fleetflow/                 # CLI エントリーポイント (bin: fleet)
+│   ├── fleetflow-core/            # KDL パーサー・データモデル
+│   ├── fleetflow-config/          # 設定ファイル管理
+│   ├── fleetflow-container/       # コンテナ操作
+│   ├── fleetflow-build/           # Docker ビルド
+│   ├── fleetflow-cloud/           # クラウドインフラ抽象化
+│   ├── fleetflow-cloud-sakura/    # さくらのクラウド プロバイダー
+│   ├── fleetflow-cloud-cloudflare/# Cloudflare プロバイダー
+│   ├── fleetflow-mcp/             # AI エージェント連携 (MCP)
+│   └── fleetflow-registry/        # 複数fleet統合管理
+├── examples/                      # 設定ファイルのサンプル
+├── spec/                          # 仕様書 (What & Why)
+├── design/                        # 設計書 (How)
+└── guides/                        # 利用ガイド (Usage)
 ```
 
 ## ライセンス
