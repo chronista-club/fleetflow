@@ -52,37 +52,10 @@ jobs:
       - name: ビルド
         run: mise run build
 
-  create-release:
-    name: リリースを作成
-    needs: ci-check
-    runs-on: ubuntu-latest
-    outputs:
-      upload_url: ${{ steps.create_release.outputs.upload_url }}
-      version: ${{ steps.get_version.outputs.version }}
-    steps:
-      - name: バージョン取得
-        id: get_version
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "version=${{ github.event.inputs.tag }}" >> $GITHUB_OUTPUT
-          else
-            echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-          fi
-
-      - name: リリース作成
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ steps.get_version.outputs.version }}
-          release_name: FleetFlow ${{ steps.get_version.outputs.version }}
-          draft: false
-          prerelease: false
-
+  # バイナリビルド＆リリースアップロード
   build-release:
-    name: ビルド (${{ matrix.os }} - ${{ matrix.target }})
-    needs: create-release
+    name: ビルド (${{ matrix.target }})
+    needs: ci-check
     strategy:
       fail-fast: false
       matrix:
@@ -101,6 +74,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: バージョン取得
+        id: get_version
+        run: |
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            echo "version=${INPUT_TAG}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+
       - name: musl ツールチェインインストール (Linux)
         if: contains(matrix.target, 'musl')
         run: sudo apt-get update && sudo apt-get install -y musl-tools
@@ -117,31 +101,43 @@ jobs:
       - name: ビルド
         run: cargo build --release --target ${{ matrix.target }}
 
-      - name: バイナリを圧縮 (Unix)
+      - name: バイナリを圧縮
         run: |
           cd target/${{ matrix.target }}/release
           tar czf ${{ matrix.asset_name }}.tar.gz ${{ env.BINARY_NAME }}
 
-      - name: アップロード
-        uses: actions/upload-release-asset@v1
+      - name: リリースにアップロード
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.get_version.outputs.version }}
+          name: FleetFlow ${{ steps.get_version.outputs.version }}
+          files: target/${{ matrix.target }}/release/${{ matrix.asset_name }}.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./target/${{ matrix.target }}/release/${{ matrix.asset_name }}.tar.gz
-          asset_name: ${{ matrix.asset_name }}.tar.gz
-          asset_content_type: application/gzip
 
   # リリース後のサマリー
   release-summary:
     name: リリースサマリー
-    needs: [create-release, build-release]
+    needs: build-release
     runs-on: ubuntu-latest
     steps:
+      - name: バージョン取得
+        id: get_version
+        run: |
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            echo "version=${INPUT_TAG}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+
       - name: サマリー出力
         run: |
-          echo "## FleetFlow ${{ needs.create-release.outputs.version }} Released!" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### ダウンロード" >> $GITHUB_STEP_SUMMARY
-          echo "- Linux amd64: \`fleetflow-linux-amd64.tar.gz\`" >> $GITHUB_STEP_SUMMARY
-          echo "- macOS arm64: \`fleetflow-darwin-arm64.tar.gz\`" >> $GITHUB_STEP_SUMMARY
+          echo "## FleetFlow ${VERSION} Released!" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### ダウンロード" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Linux amd64: \`fleetflow-linux-amd64.tar.gz\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- macOS arm64: \`fleetflow-darwin-arm64.tar.gz\`" >> "$GITHUB_STEP_SUMMARY"
+        env:
+          VERSION: ${{ steps.get_version.outputs.version }}
