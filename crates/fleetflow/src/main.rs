@@ -174,9 +174,9 @@ enum Commands {
             hide = true
         )]
         stage_flag: Option<String>,
-        /// デプロイ対象のサービス（省略時は全サービス）
+        /// デプロイ対象のサービス（複数指定可: -n svc1 -n svc2）
         #[arg(short = 'n', long)]
-        service: Option<String>,
+        service: Vec<String>,
         /// イメージのpullをスキップ（デフォルトは常にpull）
         #[arg(long)]
         no_pull: bool,
