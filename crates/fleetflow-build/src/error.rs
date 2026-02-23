@@ -69,16 +69,20 @@ impl BuildError {
                 )
             }
             BuildError::AuthFailed { registry, message } => {
-                format!(
+                let mut msg = format!(
                     "レジストリへの認証に失敗しました: {}\n\
                      \n\
                      エラー: {}\n\
                      \n\
                      解決方法:\n\
-                     • docker login {} を実行してください\n\
-                     • CIの場合は適切な認証設定を確認してください",
+                     • docker login {} を実行してください",
                     registry, message, registry
-                )
+                );
+                if registry == "ghcr.io" {
+                    msg.push_str("\n• または GHCR_TOKEN / GITHUB_TOKEN 環境変数を設定してください");
+                }
+                msg.push_str("\n• CIの場合は適切な認証設定を確認してください");
+                msg
             }
             BuildError::NoRegistry { image } => {
                 format!(

@@ -1,51 +1,6 @@
 use colored::Colorize;
 use futures_util::stream::StreamExt;
 
-/// Docker config.json からレジストリの認証情報を取得
-pub fn get_docker_credentials(registry: &str) -> Option<bollard::auth::DockerCredentials> {
-    // ~/.docker/config.json を読み込み
-    let home = std::env::var("HOME").ok()?;
-    let config_path = format!("{}/.docker/config.json", home);
-    let config_content = std::fs::read_to_string(&config_path).ok()?;
-    let config: serde_json::Value = serde_json::from_str(&config_content).ok()?;
-
-    // auths セクションからレジストリの認証情報を取得
-    let auths = config.get("auths")?.as_object()?;
-    let auth_entry = auths.get(registry)?;
-    let auth_b64 = auth_entry.get("auth")?.as_str()?;
-
-    // Base64 デコード (username:password 形式)
-    use base64::Engine;
-    let decoded = base64::engine::general_purpose::STANDARD
-        .decode(auth_b64)
-        .ok()?;
-    let auth_str = String::from_utf8(decoded).ok()?;
-    let (username, password) = auth_str.split_once(':')?;
-
-    Some(bollard::auth::DockerCredentials {
-        username: Some(username.to_string()),
-        password: Some(password.to_string()),
-        serveraddress: Some(registry.to_string()),
-        ..Default::default()
-    })
-}
-
-/// イメージ名からレジストリを抽出
-pub fn extract_registry(image: &str) -> Option<&str> {
-    // ghcr.io/owner/repo:tag のような形式
-    // docker.io/library/nginx:latest のような形式
-    // 最初の / の前がレジストリ
-    if image.contains('/') {
-        let parts: Vec<&str> = image.split('/').collect();
-        let first = parts[0];
-        // レジストリは . または : を含む（例: ghcr.io, localhost:5000）
-        if first.contains('.') || first.contains(':') {
-            return Some(first);
-        }
-    }
-    None
-}
-
 /// イメージ名とタグを分離
 /// 例: "redis:7-alpine" -> ("redis", "7-alpine")
 ///     "postgres" -> ("postgres", "latest")
@@ -64,8 +19,11 @@ pub async fn pull_image(docker: &bollard::Docker, image: &str) -> anyhow::Result
     println!("  ℹ イメージが見つかりません: {}", image.cyan());
     println!("  ↓ イメージをダウンロード中...");
 
-    // レジストリから認証情報を取得（あれば）
-    let credentials = extract_registry(image).and_then(get_docker_credentials);
+    // RegistryAuth で認証情報を取得（config.json → 環境変数のフォールバック）
+    let auth = fleetflow_build::RegistryAuth::new();
+    let credentials = auth
+        .get_credentials(image)
+        .map_err(|e| anyhow::anyhow!("認証情報の取得に失敗: {}", e))?;
 
     #[allow(deprecated)]
     let options = bollard::image::CreateImageOptions {
@@ -121,8 +79,11 @@ pub async fn pull_image_always(docker: &bollard::Docker, image: &str) -> anyhow:
 
     println!("  ↓ 最新イメージをプル中: {}", image.cyan());
 
-    // レジストリから認証情報を取得（あれば）
-    let credentials = extract_registry(image).and_then(get_docker_credentials);
+    // RegistryAuth で認証情報を取得（config.json → 環境変数のフォールバック）
+    let auth = fleetflow_build::RegistryAuth::new();
+    let credentials = auth
+        .get_credentials(image)
+        .map_err(|e| anyhow::anyhow!("認証情報の取得に失敗: {}", e))?;
 
     #[allow(deprecated)]
     let options = bollard::image::CreateImageOptions {
