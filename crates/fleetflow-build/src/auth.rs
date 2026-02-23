@@ -84,29 +84,34 @@ impl RegistryAuth {
     pub fn get_credentials(&self, image: &str) -> BuildResult<Option<DockerCredentials>> {
         let registry = self.extract_registry(image);
 
-        // config.json が存在しない場合は認証なしで続行
-        if !self.config_path.exists() {
-            tracing::debug!("Docker config.json not found at {:?}", self.config_path);
-            return Ok(None);
-        }
+        // config.json が存在する場合は auths / credsStore を試行
+        if self.config_path.exists() {
+            let config = self.load_docker_config()?;
 
-        let config = self.load_docker_config()?;
-
-        // 1. auths セクションを確認
-        if let Some(auth_entry) = config.auths.get(&registry)
-            && let Some(auth_b64) = &auth_entry.auth
-            && let Some(creds) = self.decode_auth(auth_b64, &registry)?
-        {
-            tracing::debug!("Found credentials in auths for {}", registry);
-            return Ok(Some(creds));
-        }
-
-        // 2. credential helper を確認
-        if let Some(helper) = &config.creds_store {
-            tracing::debug!("Trying credential helper: {}", helper);
-            if let Ok(Some(creds)) = self.get_from_helper(helper, &registry) {
+            // 1. auths セクションを確認
+            if let Some(auth_entry) = config.auths.get(&registry)
+                && let Some(auth_b64) = &auth_entry.auth
+                && let Some(creds) = self.decode_auth(auth_b64, &registry)?
+            {
+                tracing::debug!("Found credentials in auths for {}", registry);
                 return Ok(Some(creds));
             }
+
+            // 2. credential helper を確認
+            if let Some(helper) = &config.creds_store {
+                tracing::debug!("Trying credential helper: {}", helper);
+                if let Ok(Some(creds)) = self.get_from_helper(helper, &registry) {
+                    return Ok(Some(creds));
+                }
+            }
+        } else {
+            tracing::debug!("Docker config.json not found at {:?}", self.config_path);
+        }
+
+        // 3. 環境変数フォールバック
+        if let Some(creds) = self.get_from_env(&registry) {
+            tracing::debug!("Found credentials from environment for {}", registry);
+            return Ok(Some(creds));
         }
 
         tracing::debug!("No credentials found for {}", registry);
@@ -182,6 +187,27 @@ impl RegistryAuth {
             }))
         } else {
             Ok(None)
+        }
+    }
+
+    /// 環境変数から認証情報を取得（レジストリ固有）
+    fn get_from_env(&self, registry: &str) -> Option<DockerCredentials> {
+        match registry {
+            "ghcr.io" => {
+                let token = std::env::var("GHCR_TOKEN")
+                    .or_else(|_| std::env::var("GITHUB_TOKEN"))
+                    .ok()?;
+                if token.is_empty() {
+                    return None;
+                }
+                Some(DockerCredentials {
+                    username: Some("fleetflow".to_string()),
+                    password: Some(token),
+                    serveraddress: Some(registry.to_string()),
+                    ..Default::default()
+                })
+            }
+            _ => None,
         }
     }
 
@@ -277,6 +303,80 @@ mod tests {
             auth.extract_registry("localhost:5000/myapp"),
             "localhost:5000"
         );
+    }
+
+    #[test]
+    fn test_get_from_env_ghcr_with_ghcr_token() {
+        let auth = RegistryAuth::new();
+        // SAFETY: テストはデフォルトで単一スレッド実行（--test-threads=1推奨）
+        unsafe {
+            std::env::set_var("GHCR_TOKEN", "ghp_test_token_123");
+            std::env::remove_var("GITHUB_TOKEN");
+        }
+
+        let result = auth.get_from_env("ghcr.io");
+        assert!(result.is_some());
+        let creds = result.unwrap();
+        assert_eq!(creds.username, Some("fleetflow".to_string()));
+        assert_eq!(creds.password, Some("ghp_test_token_123".to_string()));
+        assert_eq!(creds.serveraddress, Some("ghcr.io".to_string()));
+
+        unsafe { std::env::remove_var("GHCR_TOKEN") };
+    }
+
+    #[test]
+    fn test_get_from_env_ghcr_with_github_token_fallback() {
+        let auth = RegistryAuth::new();
+        unsafe {
+            std::env::remove_var("GHCR_TOKEN");
+            std::env::set_var("GITHUB_TOKEN", "gho_github_token_456");
+        }
+
+        let result = auth.get_from_env("ghcr.io");
+        assert!(result.is_some());
+        let creds = result.unwrap();
+        assert_eq!(creds.password, Some("gho_github_token_456".to_string()));
+
+        unsafe { std::env::remove_var("GITHUB_TOKEN") };
+    }
+
+    #[test]
+    fn test_get_from_env_no_token() {
+        let auth = RegistryAuth::new();
+        unsafe {
+            std::env::remove_var("GHCR_TOKEN");
+            std::env::remove_var("GITHUB_TOKEN");
+        }
+
+        let result = auth.get_from_env("ghcr.io");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_get_from_env_empty_token() {
+        let auth = RegistryAuth::new();
+        unsafe {
+            std::env::set_var("GHCR_TOKEN", "");
+            std::env::remove_var("GITHUB_TOKEN");
+        }
+
+        let result = auth.get_from_env("ghcr.io");
+        assert!(result.is_none());
+
+        unsafe { std::env::remove_var("GHCR_TOKEN") };
+    }
+
+    #[test]
+    fn test_get_from_env_non_ghcr_registry() {
+        let auth = RegistryAuth::new();
+        unsafe { std::env::set_var("GHCR_TOKEN", "some_token") };
+
+        let result = auth.get_from_env("docker.io");
+        assert!(result.is_none());
+        let result = auth.get_from_env("gcr.io");
+        assert!(result.is_none());
+
+        unsafe { std::env::remove_var("GHCR_TOKEN") };
     }
 
     #[test]
