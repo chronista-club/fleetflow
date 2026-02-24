@@ -74,7 +74,7 @@ pub async fn handle_build_command(
     project_root: &std::path::Path,
     config: &fleetflow_core::Flow,
     stage_name: &str,
-    service_filter: Option<&str>,
+    service_filters: &[String],
     push: bool,
     cli_tag: Option<&str>,
     registry: Option<&str>,
@@ -109,23 +109,25 @@ pub async fn handle_build_command(
     }
 
     // ビルド対象のサービスを決定
-    let target_services: Vec<&String> = if let Some(filter) = service_filter {
-        // 特定のサービスのみ
-        if !stage_config.services.contains(&filter.to_string()) {
-            return Err(anyhow::anyhow!(
-                "サービス '{}' はステージ '{}' に含まれていません",
-                filter,
-                stage_name
-            ));
+    let target_services: Vec<&String> = if service_filters.is_empty() {
+        // 全サービス
+        stage_config.services.iter().collect()
+    } else {
+        // 指定されたサービスのみ
+        for filter in service_filters {
+            if !stage_config.services.contains(filter) {
+                return Err(anyhow::anyhow!(
+                    "サービス '{}' はステージ '{}' に含まれていません",
+                    filter,
+                    stage_name
+                ));
+            }
         }
         stage_config
             .services
             .iter()
-            .filter(|s| *s == filter)
+            .filter(|s| service_filters.contains(s))
             .collect()
-    } else {
-        // 全サービス
-        stage_config.services.iter().collect()
     };
 
     // ビルド可能なサービスをフィルタ（build設定があるもののみ）
