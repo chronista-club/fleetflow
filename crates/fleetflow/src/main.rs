@@ -174,9 +174,9 @@ enum Commands {
             hide = true
         )]
         stage_flag: Option<String>,
-        /// デプロイ対象のサービス（省略時は全サービス）
+        /// デプロイ対象のサービス（複数指定可、省略時は全サービス）
         #[arg(short = 'n', long)]
-        service: Option<String>,
+        service: Vec<String>,
         /// イメージのpullをスキップ（デフォルトは常にpull）
         #[arg(long)]
         no_pull: bool,
@@ -200,9 +200,9 @@ enum Commands {
             hide = true
         )]
         stage_flag: Option<String>,
-        /// ビルド対象のサービス（省略時は全サービス）
+        /// ビルド対象のサービス（複数指定可、省略時は全サービス）
         #[arg(short = 'n', long)]
-        service: Option<String>,
+        service: Vec<String>,
         /// ビルド後にレジストリにプッシュ
         #[arg(long)]
         push: bool,
@@ -558,7 +558,7 @@ async fn main() -> anyhow::Result<()> {
                 &config,
                 &project_root,
                 stage,
-                service,
+                &service,
                 no_pull,
                 no_prune,
                 yes,
@@ -587,7 +587,7 @@ async fn main() -> anyhow::Result<()> {
                 &project_root,
                 &config,
                 &stage_name,
-                service.as_deref(),
+                &service,
                 push,
                 tag.as_deref(),
                 registry.as_deref(),
