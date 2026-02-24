@@ -6,7 +6,7 @@ pub async fn handle(
     config: &fleetflow_core::Flow,
     project_root: &std::path::Path,
     stage: Option<String>,
-    service: Option<String>,
+    services: Vec<String>,
     no_pull: bool,
     no_prune: bool,
     yes: bool,
@@ -24,24 +24,26 @@ pub async fn handle(
         .get(&stage_name)
         .ok_or_else(|| anyhow::anyhow!("ステージ '{}' が見つかりません", stage_name))?;
 
-    // デプロイ対象のサービスを決定（--serviceオプションがあればフィルタ）
-    let target_services: Vec<String> = if let Some(ref target) = service {
+    // デプロイ対象のサービスを決定（-n オプションがあればフィルタ）
+    let target_services: Vec<String> = if !services.is_empty() {
         // 指定されたサービスがステージに存在するか確認
-        if !stage_config.services.contains(target) {
-            return Err(anyhow::anyhow!(
-                "サービス '{}' はステージ '{}' に存在しません。\n利用可能なサービス: {}",
-                target,
-                stage_name,
-                stage_config.services.join(", ")
-            ));
+        for target in &services {
+            if !stage_config.services.contains(target) {
+                return Err(anyhow::anyhow!(
+                    "サービス '{}' はステージ '{}' に存在しません。\n利用可能なサービス: {}",
+                    target,
+                    stage_name,
+                    stage_config.services.join(", ")
+                ));
+            }
         }
-        vec![target.clone()]
+        services
     } else {
         stage_config.services.clone()
     };
 
     println!();
-    if service.is_some() {
+    if !target_services.is_empty() && target_services.len() < stage_config.services.len() {
         println!(
             "{}",
             format!("デプロイ対象サービス (指定: {} 個):", target_services.len()).bold()
