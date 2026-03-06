@@ -128,42 +128,26 @@ mod tests {
     fn test_expand_variables_env_pattern() {
         let variables = HashMap::new();
 
-        // SAFETY: テスト環境での環境変数設定
-        unsafe {
-            std::env::set_var("TEST_EXPAND_VAR", "test_value");
-        }
-
-        // {{ env.XXX }} パターンの展開
-        assert_eq!(
-            expand_variables("Value: {{ env.TEST_EXPAND_VAR }}", &variables),
-            "Value: test_value"
-        );
-
-        // クリーンアップ
-        unsafe {
-            std::env::remove_var("TEST_EXPAND_VAR");
-        }
+        temp_env::with_var("TEST_EXPAND_VAR", Some("test_value"), || {
+            // {{ env.XXX }} パターンの展開
+            assert_eq!(
+                expand_variables("Value: {{ env.TEST_EXPAND_VAR }}", &variables),
+                "Value: test_value"
+            );
+        });
     }
 
     #[test]
     fn test_expand_variables_builtin_fallback() {
         let variables = HashMap::new();
 
-        // SAFETY: テスト環境での環境変数設定
-        unsafe {
-            std::env::set_var("FLEET_STAGE_TEST", "production");
-        }
-
-        // {{ VAR_NAME }} パターンが環境変数にフォールバック
-        assert_eq!(
-            expand_variables("Stage: {{ FLEET_STAGE_TEST }}", &variables),
-            "Stage: production"
-        );
-
-        // クリーンアップ
-        unsafe {
-            std::env::remove_var("FLEET_STAGE_TEST");
-        }
+        temp_env::with_var("FLEET_STAGE_TEST", Some("production"), || {
+            // {{ VAR_NAME }} パターンが環境変数にフォールバック
+            assert_eq!(
+                expand_variables("Stage: {{ FLEET_STAGE_TEST }}", &variables),
+                "Stage: production"
+            );
+        });
     }
 
     #[test]
@@ -171,18 +155,10 @@ mod tests {
         let mut variables = HashMap::new();
         variables.insert("MY_VAR".to_string(), "from_hashmap".to_string());
 
-        // SAFETY: テスト環境での環境変数設定
-        unsafe {
-            std::env::set_var("MY_VAR", "from_env");
-        }
-
-        // HashMapの値が優先される
-        assert_eq!(expand_variables("{{ MY_VAR }}", &variables), "from_hashmap");
-
-        // クリーンアップ
-        unsafe {
-            std::env::remove_var("MY_VAR");
-        }
+        temp_env::with_var("MY_VAR", Some("from_env"), || {
+            // HashMapの値が優先される
+            assert_eq!(expand_variables("{{ MY_VAR }}", &variables), "from_hashmap");
+        });
     }
 
     #[test]
@@ -199,22 +175,14 @@ mod tests {
         let mut variables = HashMap::new();
         variables.insert("PROJECT".to_string(), "myproject".to_string());
 
-        // SAFETY: テスト環境での環境変数設定
-        unsafe {
-            std::env::set_var("TEST_STAGE", "dev");
-        }
-
-        // 混合パターン
-        let result = expand_variables(
-            "{{ PROJECT }}-{{ TEST_STAGE }}-{{ env.TEST_STAGE }}",
-            &variables,
-        );
-        assert_eq!(result, "myproject-dev-dev");
-
-        // クリーンアップ
-        unsafe {
-            std::env::remove_var("TEST_STAGE");
-        }
+        temp_env::with_var("TEST_STAGE", Some("dev"), || {
+            // 混合パターン
+            let result = expand_variables(
+                "{{ PROJECT }}-{{ TEST_STAGE }}-{{ env.TEST_STAGE }}",
+                &variables,
+            );
+            assert_eq!(result, "myproject-dev-dev");
+        });
     }
 
     #[test]
