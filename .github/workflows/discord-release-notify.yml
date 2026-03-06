@@ -44,25 +44,22 @@ jobs:
             BODY="${RELEASE_BODY}"
           fi
 
-          # Discordの制限（2048文字）に収める & JSONエスケープ
-          BODY_ESCAPED=$(echo "$BODY" | head -c 1800 | jq -Rs '.')
-          # 前後のクォートを削除
-          BODY_ESCAPED=${BODY_ESCAPED:1:-1}
+          # Discordの制限（2048文字）に収める
+          BODY_TRUNCATED=$(echo "$BODY" | head -c 1800)
+
+          # jq で安全に JSON を組み立てる
+          PAYLOAD=$(jq -n \
+            --arg tag "$TAG_NAME" \
+            --arg name "$RELEASE_NAME" \
+            --arg url "$HTML_URL" \
+            --arg body "$BODY_TRUNCATED" \
+            --arg color "3447003" \
+            --arg timestamp "$PUBLISHED_AT" \
+            '{embeds: [{title: "🚀 \($tag) - \($name)", url: $url, color: ($color | tonumber), description: $body, footer: {text: "FleetFlow"}, timestamp: $timestamp}]}')
 
           # リリースノートスレッドに投稿
           RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -H "Content-Type: application/json" \
-            -d "{
-              \"embeds\": [{
-                \"title\": \"🚀 ${TAG_NAME} - ${RELEASE_NAME}\",
-                \"url\": \"${HTML_URL}\",
-                \"color\": 3447003,
-                \"description\": \"${BODY_ESCAPED}\",
-                \"footer\": {
-                  \"text\": \"FleetFlow\"
-                },
-                \"timestamp\": \"${PUBLISHED_AT}\"
-              }]
-            }" \
+            -d "$PAYLOAD" \
             "$DISCORD_WEBHOOK?thread_id=1449862839043883018")
 
           echo "Discord Response: $RESPONSE"

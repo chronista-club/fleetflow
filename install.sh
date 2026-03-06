@@ -19,6 +19,12 @@ success() { printf "${GREEN}%b${NC}\n" "$1"; }
 warn() { printf "${YELLOW}%b${NC}\n" "$1"; }
 error() { printf "${RED}%b${NC}\n" "$1"; }
 
+# クリーンアップ
+cleanup() {
+    rm -f "$TMPDIR/fleetflow-download.tar.gz" "$TMPDIR/fleetflow-download.tar.gz.sha256"
+}
+trap cleanup EXIT
+
 printf "${BLUE}===========================================${NC}\n"
 printf "${BLUE}   FleetFlow Setup Wizard (MCP Enabled)    ${NC}\n"
 printf "${BLUE}===========================================${NC}\n"
@@ -47,10 +53,11 @@ printf "\n"
 info "[1/3] FleetFlow 本体をインストールしています..."
 
 # 最新バージョンの取得
-LATEST_VERSION=$(curl -s https://api.github.com/repos/chronista-club/fleetflow/releases/latest | grep tag_name | cut -d'"' -f4 || echo "v0.3.1")
+LATEST_VERSION=$(curl -sf https://api.github.com/repos/chronista-club/fleetflow/releases/latest | grep tag_name | cut -d'"' -f4) || true
 
 if [ -z "$LATEST_VERSION" ] || [ "$LATEST_VERSION" = "null" ]; then
-    LATEST_VERSION="v0.3.1"
+    error "エラー: 最新バージョンの取得に失敗しました。ネットワーク接続を確認してください。"
+    exit 1
 fi
 
 printf "  → バージョン: ${GREEN}%s${NC}\n" "$LATEST_VERSION"
@@ -60,7 +67,35 @@ URL="https://github.com/chronista-club/fleetflow/releases/download/${LATEST_VERS
 
 if curl --output /dev/null --silent --head --fail "$URL"; then
     info "  → ダウンロード中..."
-    curl -L "$URL" | tar -xz -C "$INSTALL_DIR"
+    TMPFILE="${TMPDIR:-/tmp}/fleetflow-download.tar.gz"
+    curl -sfL "$URL" -o "$TMPFILE"
+
+    # SHA256 チェックサム検証
+    SHA256_URL="${URL}.sha256"
+    SHA256FILE="${TMPFILE}.sha256"
+    if curl -sfL "$SHA256_URL" -o "$SHA256FILE" 2>/dev/null; then
+        info "  → チェックサム検証中..."
+        EXPECTED_HASH=$(awk '{print $1}' "$SHA256FILE")
+        if command -v sha256sum &> /dev/null; then
+            ACTUAL_HASH=$(sha256sum "$TMPFILE" | awk '{print $1}')
+        elif command -v shasum &> /dev/null; then
+            ACTUAL_HASH=$(shasum -a 256 "$TMPFILE" | awk '{print $1}')
+        else
+            warn "  警告: sha256sum/shasum が見つかりません。チェックサム検証をスキップします。"
+            ACTUAL_HASH="$EXPECTED_HASH"
+        fi
+        if [ "$ACTUAL_HASH" != "$EXPECTED_HASH" ]; then
+            error "エラー: チェックサムが一致しません。ダウンロードが破損している可能性があります。"
+            error "  期待値: $EXPECTED_HASH"
+            error "  実際値: $ACTUAL_HASH"
+            exit 1
+        fi
+        success "  ✓ チェックサム検証に成功しました。"
+    else
+        warn "  警告: .sha256 ファイルが見つかりません。チェックサム検証をスキップします。"
+    fi
+
+    tar -xzf "$TMPFILE" -C "$INSTALL_DIR"
     chmod +x "$INSTALL_DIR/fleetflow"
 else
     warn "  注意: プリビルドバイナリが見つかりませんでした ($URL)"
@@ -91,7 +126,7 @@ GEMINI_CONFIG_DIR="./.gemini"
 if [ -d "$GEMINI_CONFIG_DIR" ]; then
     SETTINGS_FILE="$GEMINI_CONFIG_DIR/settings.json"
     info "  → Gemini CLI を検出しました。設定を更新中..."
-    
+
     cat > "$SETTINGS_FILE" <<EOF
 {
   "mcpServers": {
