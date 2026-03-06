@@ -72,7 +72,8 @@ impl ImageBuilder {
 
         tracing::debug!("Build command: {:?}", cmd);
         if !build_args.is_empty() {
-            tracing::debug!("Build args: {:?}", build_args);
+            let keys: Vec<&String> = build_args.keys().collect();
+            tracing::debug!("Build arg keys: {:?}", keys);
         }
 
         let mut child = cmd.spawn().map_err(|e| {

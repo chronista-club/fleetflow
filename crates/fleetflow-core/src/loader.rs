@@ -127,7 +127,7 @@ fn prepare_template_processor(
     processor.add_env_variables();
 
     // 7. 収集した変数を追加（最も優先度が高い）
-    debug!(vars = ?all_variables, "Adding all collected variables to processor");
+    debug!(var_count = all_variables.len(), var_keys = ?all_variables.keys().collect::<Vec<_>>(), "Adding collected variables to processor");
     processor.add_variables(all_variables);
 
     Ok(processor)

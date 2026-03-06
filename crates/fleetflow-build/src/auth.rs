@@ -217,6 +217,19 @@ impl RegistryAuth {
         helper: &str,
         registry: &str,
     ) -> BuildResult<Option<DockerCredentials>> {
+        const ALLOWED_HELPERS: &[&str] = &[
+            "osxkeychain",
+            "desktop",
+            "secretservice",
+            "pass",
+            "wincred",
+            "ecr-login",
+        ];
+        if !ALLOWED_HELPERS.contains(&helper) {
+            tracing::warn!("Unknown credential helper '{}', skipping", helper);
+            return Ok(None);
+        }
+
         let helper_cmd = format!("docker-credential-{}", helper);
 
         let mut child = Command::new(&helper_cmd)
