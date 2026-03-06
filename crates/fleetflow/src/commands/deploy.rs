@@ -71,7 +71,7 @@ pub async fn handle(
             "警告: 既存のコンテナを停止・削除して再作成します。".yellow()
         );
         println!("実行するには --yes オプションを指定してください");
-        return Ok(());
+        std::process::exit(2);
     }
 
     // Docker接続

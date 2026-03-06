@@ -16,19 +16,8 @@ pub async fn handle(
     // Docker接続
     let docker_conn = docker::init_docker_with_error_handling().await?;
 
-    // ステージ名を先に取得
-    let stage_name = if let Some(ref _service_name) = service {
-        // サービス指定の場合でもステージ名が必要
-        stage.as_ref().ok_or_else(|| {
-            anyhow::anyhow!("Logsコマンドにはステージ名の指定が必要です（-s/--stage）")
-        })?
-    } else if let Some(ref s) = stage {
-        s
-    } else {
-        return Err(anyhow::anyhow!(
-            "ステージ名を指定してください（-s/--stage）"
-        ));
-    };
+    // ステージ名の決定（他コマンドと同じロジックを使用）
+    let stage_name = utils::determine_stage_name(stage, config)?;
 
     println!("ステージ: {}", stage_name.cyan());
 
@@ -38,7 +27,7 @@ pub async fn handle(
     } else {
         let stage_config = config
             .stages
-            .get(stage_name)
+            .get(&stage_name)
             .ok_or_else(|| anyhow::anyhow!("ステージ '{}' が見つかりません", stage_name))?;
 
         stage_config.services.clone()
