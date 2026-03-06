@@ -81,8 +81,8 @@ if curl --output /dev/null --silent --head --fail "$URL"; then
         elif command -v shasum &> /dev/null; then
             ACTUAL_HASH=$(shasum -a 256 "$TMPFILE" | awk '{print $1}')
         else
-            warn "  警告: sha256sum/shasum が見つかりません。チェックサム検証をスキップします。"
-            ACTUAL_HASH="$EXPECTED_HASH"
+            error "エラー: sha256sum/shasum が見つかりません。チェックサム検証ができません。"
+            exit 1
         fi
         if [ "$ACTUAL_HASH" != "$EXPECTED_HASH" ]; then
             error "エラー: チェックサムが一致しません。ダウンロードが破損している可能性があります。"

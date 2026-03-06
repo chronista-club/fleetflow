@@ -188,7 +188,7 @@ pub async fn handle(
                         .bold()
                 );
                 println!("  データは復旧できません。実行するには --yes を指定してください。");
-                return Ok(());
+                std::process::exit(2);
             }
 
             // Docker接続

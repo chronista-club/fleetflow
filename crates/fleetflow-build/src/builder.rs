@@ -70,7 +70,7 @@ impl ImageBuilder {
         cmd.stdout(Stdio::piped());
         cmd.stderr(Stdio::piped());
 
-        tracing::debug!("Build command: {:?}", cmd);
+        tracing::debug!("Build command: docker buildx build (platform: {:?})", platform);
         if !build_args.is_empty() {
             let keys: Vec<&String> = build_args.keys().collect();
             tracing::debug!("Build arg keys: {:?}", keys);

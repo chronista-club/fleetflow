@@ -21,12 +21,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           RELEASE=$(gh api repos/${{ github.repository }}/releases/tags/${{ inputs.tag }})
-          echo "tag_name=$(echo $RELEASE | jq -r .tag_name)" >> $GITHUB_OUTPUT
-          echo "name=$(echo $RELEASE | jq -r .name)" >> $GITHUB_OUTPUT
-          echo "html_url=$(echo $RELEASE | jq -r .html_url)" >> $GITHUB_OUTPUT
-          echo "published_at=$(echo $RELEASE | jq -r .published_at)" >> $GITHUB_OUTPUT
+          echo "tag_name=$(echo "$RELEASE" | jq -r .tag_name)" >> $GITHUB_OUTPUT
+          echo "name=$(echo "$RELEASE" | jq -r .name)" >> $GITHUB_OUTPUT
+          echo "html_url=$(echo "$RELEASE" | jq -r .html_url)" >> $GITHUB_OUTPUT
+          echo "published_at=$(echo "$RELEASE" | jq -r .published_at)" >> $GITHUB_OUTPUT
           # bodyはマルチラインなのでファイル経由で渡す
-          echo $RELEASE | jq -r '.body // ""' > /tmp/release_body.txt
+          echo "$RELEASE" | jq -r '.body // ""' > /tmp/release_body.txt
 
       - name: Send Discord Notification
         env:

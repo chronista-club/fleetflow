@@ -217,16 +217,17 @@ impl RegistryAuth {
         helper: &str,
         registry: &str,
     ) -> BuildResult<Option<DockerCredentials>> {
-        const ALLOWED_HELPERS: &[&str] = &[
-            "osxkeychain",
-            "desktop",
-            "secretservice",
-            "pass",
-            "wincred",
-            "ecr-login",
-        ];
-        if !ALLOWED_HELPERS.contains(&helper) {
-            tracing::warn!("Unknown credential helper '{}', skipping", helper);
+        // セキュリティ: パストラバーサルや危険な文字を含むヘルパー名を拒否
+        if helper.contains('/')
+            || helper.contains('\\')
+            || helper.contains('.')
+            || helper.contains(' ')
+            || helper.is_empty()
+        {
+            tracing::warn!(
+                "Credential helper '{}' contains invalid characters, skipping",
+                helper
+            );
             return Ok(None);
         }
 

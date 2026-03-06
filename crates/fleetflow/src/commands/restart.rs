@@ -41,7 +41,7 @@ pub async fn handle(
         Err(bollard::errors::Error::DockerResponseServerError {
             status_code: 404, ..
         }) => {
-            println!("  ℹ コンテナは実行されていません");
+            println!("  ℹ コンテナが存在しません");
         }
         Err(bollard::errors::Error::DockerResponseServerError {
             status_code: 304, ..

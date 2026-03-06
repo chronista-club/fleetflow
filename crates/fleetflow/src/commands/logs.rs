@@ -22,14 +22,22 @@ pub async fn handle(
     println!("ステージ: {}", stage_name.cyan());
 
     // 対象サービスの決定
-    let target_services = if let Some(service_name) = service {
-        vec![service_name]
-    } else {
-        let stage_config = config
-            .stages
-            .get(&stage_name)
-            .ok_or_else(|| anyhow::anyhow!("ステージ '{}' が見つかりません", stage_name))?;
+    let stage_config = config
+        .stages
+        .get(&stage_name)
+        .ok_or_else(|| anyhow::anyhow!("ステージ '{}' が見つかりません", stage_name))?;
 
+    let target_services = if let Some(ref service_name) = service {
+        if !stage_config.services.contains(service_name) {
+            return Err(anyhow::anyhow!(
+                "サービス '{}' はステージ '{}' に存在しません。\n利用可能なサービス: {}",
+                service_name,
+                stage_name,
+                stage_config.services.join(", ")
+            ));
+        }
+        vec![service_name.clone()]
+    } else {
         stage_config.services.clone()
     };
 
