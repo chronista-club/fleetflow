@@ -370,13 +370,10 @@ mod tests {
     #[test]
     fn test_get_from_env_empty_token() {
         let auth = RegistryAuth::new();
-        temp_env::with_vars(
-            [("GHCR_TOKEN", Some("")), ("GITHUB_TOKEN", None)],
-            || {
-                let result = auth.get_from_env("ghcr.io");
-                assert!(result.is_none());
-            },
-        );
+        temp_env::with_vars([("GHCR_TOKEN", Some("")), ("GITHUB_TOKEN", None)], || {
+            let result = auth.get_from_env("ghcr.io");
+            assert!(result.is_none());
+        });
     }
 
     #[test]
