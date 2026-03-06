@@ -90,6 +90,7 @@ indicatif = "0.17"
 
 # Testing
 tempfile = "3"
+temp-env = "0.3"
 
 [profile.release]
 opt-level = 3

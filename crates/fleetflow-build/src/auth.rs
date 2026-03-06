@@ -217,6 +217,20 @@ impl RegistryAuth {
         helper: &str,
         registry: &str,
     ) -> BuildResult<Option<DockerCredentials>> {
+        // セキュリティ: パストラバーサルや危険な文字を含むヘルパー名を拒否
+        if helper.contains('/')
+            || helper.contains('\\')
+            || helper.contains('.')
+            || helper.contains(' ')
+            || helper.is_empty()
+        {
+            tracing::warn!(
+                "Credential helper '{}' contains invalid characters, skipping",
+                helper
+            );
+            return Ok(None);
+        }
+
         let helper_cmd = format!("docker-credential-{}", helper);
 
         let mut child = Command::new(&helper_cmd)
@@ -308,75 +322,69 @@ mod tests {
     #[test]
     fn test_get_from_env_ghcr_with_ghcr_token() {
         let auth = RegistryAuth::new();
-        // SAFETY: テストはデフォルトで単一スレッド実行（--test-threads=1推奨）
-        unsafe {
-            std::env::set_var("GHCR_TOKEN", "ghp_test_token_123");
-            std::env::remove_var("GITHUB_TOKEN");
-        }
-
-        let result = auth.get_from_env("ghcr.io");
-        assert!(result.is_some());
-        let creds = result.unwrap();
-        assert_eq!(creds.username, Some("fleetflow".to_string()));
-        assert_eq!(creds.password, Some("ghp_test_token_123".to_string()));
-        assert_eq!(creds.serveraddress, Some("ghcr.io".to_string()));
-
-        unsafe { std::env::remove_var("GHCR_TOKEN") };
+        temp_env::with_vars(
+            [
+                ("GHCR_TOKEN", Some("ghp_test_token_123")),
+                ("GITHUB_TOKEN", None),
+            ],
+            || {
+                let result = auth.get_from_env("ghcr.io");
+                assert!(result.is_some());
+                let creds = result.unwrap();
+                assert_eq!(creds.username, Some("fleetflow".to_string()));
+                assert_eq!(creds.password, Some("ghp_test_token_123".to_string()));
+                assert_eq!(creds.serveraddress, Some("ghcr.io".to_string()));
+            },
+        );
     }
 
     #[test]
     fn test_get_from_env_ghcr_with_github_token_fallback() {
         let auth = RegistryAuth::new();
-        unsafe {
-            std::env::remove_var("GHCR_TOKEN");
-            std::env::set_var("GITHUB_TOKEN", "gho_github_token_456");
-        }
-
-        let result = auth.get_from_env("ghcr.io");
-        assert!(result.is_some());
-        let creds = result.unwrap();
-        assert_eq!(creds.password, Some("gho_github_token_456".to_string()));
-
-        unsafe { std::env::remove_var("GITHUB_TOKEN") };
+        temp_env::with_vars(
+            [
+                ("GHCR_TOKEN", None),
+                ("GITHUB_TOKEN", Some("gho_github_token_456")),
+            ],
+            || {
+                let result = auth.get_from_env("ghcr.io");
+                assert!(result.is_some());
+                let creds = result.unwrap();
+                assert_eq!(creds.password, Some("gho_github_token_456".to_string()));
+            },
+        );
     }
 
     #[test]
     fn test_get_from_env_no_token() {
         let auth = RegistryAuth::new();
-        unsafe {
-            std::env::remove_var("GHCR_TOKEN");
-            std::env::remove_var("GITHUB_TOKEN");
-        }
-
-        let result = auth.get_from_env("ghcr.io");
-        assert!(result.is_none());
+        temp_env::with_vars(
+            [("GHCR_TOKEN", None::<&str>), ("GITHUB_TOKEN", None)],
+            || {
+                let result = auth.get_from_env("ghcr.io");
+                assert!(result.is_none());
+            },
+        );
     }
 
     #[test]
     fn test_get_from_env_empty_token() {
         let auth = RegistryAuth::new();
-        unsafe {
-            std::env::set_var("GHCR_TOKEN", "");
-            std::env::remove_var("GITHUB_TOKEN");
-        }
-
-        let result = auth.get_from_env("ghcr.io");
-        assert!(result.is_none());
-
-        unsafe { std::env::remove_var("GHCR_TOKEN") };
+        temp_env::with_vars([("GHCR_TOKEN", Some("")), ("GITHUB_TOKEN", None)], || {
+            let result = auth.get_from_env("ghcr.io");
+            assert!(result.is_none());
+        });
     }
 
     #[test]
     fn test_get_from_env_non_ghcr_registry() {
         let auth = RegistryAuth::new();
-        unsafe { std::env::set_var("GHCR_TOKEN", "some_token") };
-
-        let result = auth.get_from_env("docker.io");
-        assert!(result.is_none());
-        let result = auth.get_from_env("gcr.io");
-        assert!(result.is_none());
-
-        unsafe { std::env::remove_var("GHCR_TOKEN") };
+        temp_env::with_var("GHCR_TOKEN", Some("some_token"), || {
+            let result = auth.get_from_env("docker.io");
+            assert!(result.is_none());
+            let result = auth.get_from_env("gcr.io");
+            assert!(result.is_none());
+        });
     }
 
     #[test]

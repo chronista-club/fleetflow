@@ -41,7 +41,12 @@ pub async fn handle(
         Err(bollard::errors::Error::DockerResponseServerError {
             status_code: 404, ..
         }) => {
-            println!("  ℹ コンテナは実行されていません");
+            println!("  ℹ コンテナが存在しません");
+        }
+        Err(bollard::errors::Error::DockerResponseServerError {
+            status_code: 304, ..
+        }) => {
+            println!("  ℹ コンテナは既に停止しています");
         }
         Err(e) => return Err(e.into()),
     }
@@ -113,6 +118,16 @@ pub async fn handle(
             println!(
                 "{}",
                 format!("✓ '{}' を起動しました", service).green().bold()
+            );
+        }
+        Err(bollard::errors::Error::DockerResponseServerError {
+            status_code: 304, ..
+        }) => {
+            println!("  ℹ コンテナは既に起動しています");
+            println!();
+            println!(
+                "{}",
+                format!("✓ '{}' は既に起動中です", service).green().bold()
             );
         }
         Err(e) => return Err(e.into()),

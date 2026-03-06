@@ -10,16 +10,23 @@ pub async fn handle(
     config: &fleetflow_core::Flow,
 ) -> anyhow::Result<()> {
     match cmd {
-        StageCommands::Up {
-            stage,
-            yes: _,
-            pull,
-        } => {
+        StageCommands::Up { stage, yes, pull } => {
             println!(
                 "{}",
                 format!("ステージ '{}' を起動中...", stage).blue().bold()
             );
             utils::print_loaded_config_files(project_root);
+
+            // 確認（--yesが指定されていない場合）
+            if !yes {
+                println!();
+                println!(
+                    "{}",
+                    "警告: 既存のコンテナを停止・削除して再作成します。".yellow()
+                );
+                println!("実行するには --yes オプションを指定してください");
+                std::process::exit(2);
+            }
 
             let stage_config = config.stages.get(&stage).ok_or_else(|| {
                 let available: Vec<_> = config.stages.keys().collect();
@@ -181,7 +188,7 @@ pub async fn handle(
                         .bold()
                 );
                 println!("  データは復旧できません。実行するには --yes を指定してください。");
-                return Ok(());
+                std::process::exit(2);
             }
 
             // Docker接続
