@@ -148,7 +148,12 @@ pub fn parse_duration(input: &str) -> anyhow::Result<u64> {
         "m" | "min" | "mins" => 60,
         "h" | "hr" | "hrs" | "hour" | "hours" => 3600,
         "d" | "day" | "days" => 86400,
-        other => return Err(anyhow::anyhow!("不明な時間単位: '{}' (s/m/h/d が利用可能)", other)),
+        other => {
+            return Err(anyhow::anyhow!(
+                "不明な時間単位: '{}' (s/m/h/d が利用可能)",
+                other
+            ));
+        }
     };
 
     Ok(num * multiplier)

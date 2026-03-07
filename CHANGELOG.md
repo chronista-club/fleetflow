@@ -2,7 +2,7 @@
 
 FleetFlow の変更履歴。[Conventional Commits](https://www.conventionalcommits.org) に準拠。
 
-## [Unreleased]
+## [0.8.0] - 2026-03-07
 
 ### Bug Fixes
 
@@ -10,6 +10,7 @@ FleetFlow の変更履歴。[Conventional Commits](https://www.conventionalcommi
 
 ### Documentation
 
+- CONTRIBUTING.md 作成 (#82)
 - Spec/design の旧コマンド名 flow → fleet 一括置換 (#75)
 
 ### Features
@@ -21,6 +22,8 @@ FleetFlow の変更履歴。[Conventional Commits](https://www.conventionalcommi
 
 ### Miscellaneous
 
+- Cargo-deny 導入（ライセンス・脆弱性チェック） (#79)
+- CHANGELOG 自動生成 + git-cliff 導入 (#73)
 - Dependabot 導入 (#76)
 - Issue/PR テンプレート作成 (#77)
 

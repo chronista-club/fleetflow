@@ -62,10 +62,7 @@ pub async fn handle(
 
         if is_stage_restart {
             println!();
-            println!(
-                "{}",
-                format!("▶ {} を再起動中...", svc_name).green().bold()
-            );
+            println!("{}", format!("▶ {} を再起動中...", svc_name).green().bold());
         }
 
         // コンテナの停止
@@ -138,12 +135,9 @@ pub async fn handle(
     if is_stage_restart {
         println!(
             "{}",
-            format!(
-                "✓ ステージ '{}' の全サービスを再起動しました",
-                stage_name
-            )
-            .green()
-            .bold()
+            format!("✓ ステージ '{}' の全サービスを再起動しました", stage_name)
+                .green()
+                .bold()
         );
     } else {
         println!(

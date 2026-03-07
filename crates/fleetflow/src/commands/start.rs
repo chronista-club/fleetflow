@@ -74,7 +74,10 @@ pub async fn handle(
                 status_code: 404, ..
             }) => {
                 // コンテナが存在しない場合は作成して起動
-                println!("  ℹ '{}' のコンテナが存在しないため、新規作成します", svc_name);
+                println!(
+                    "  ℹ '{}' のコンテナが存在しないため、新規作成します",
+                    svc_name
+                );
 
                 let (container_config, create_options) =
                     fleetflow_container::service_to_container_config(
@@ -105,12 +108,9 @@ pub async fn handle(
     if is_stage_start {
         println!(
             "{}",
-            format!(
-                "✓ ステージ '{}' の全サービスを起動しました",
-                stage_name
-            )
-            .green()
-            .bold()
+            format!("✓ ステージ '{}' の全サービスを起動しました", stage_name)
+                .green()
+                .bold()
         );
     } else {
         println!(

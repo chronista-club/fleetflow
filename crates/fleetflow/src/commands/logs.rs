@@ -28,8 +28,7 @@ pub async fn handle(
         .get(&stage_name)
         .ok_or_else(|| anyhow::anyhow!("ステージ '{}' が見つかりません", stage_name))?;
 
-    let target_services =
-        utils::filter_services(&stage_config.services, services, &stage_name)?;
+    let target_services = utils::filter_services(&stage_config.services, services, &stage_name)?;
 
     // --since の計算（現在時刻 - duration → Unix timestamp）
     let since_ts = if let Some(ref since_str) = since {
@@ -38,7 +37,7 @@ pub async fn handle(
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        let ts = now.saturating_sub(duration_secs) as i32;
+        let ts = i32::try_from(now.saturating_sub(duration_secs)).unwrap_or(i32::MAX);
         println!("  ℹ {}前からのログを表示", since_str);
         ts
     } else {

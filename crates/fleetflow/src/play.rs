@@ -242,7 +242,10 @@ pub async fn handle_play_command(
             // イメージとコマンド
             docker_cmd.push_str(&format!(" {}", shell_escape(&service.image)));
             if let Some(cmd) = &service.command {
-                docker_cmd.push_str(&format!(" {}", cmd));
+                // コマンドは個々の引数をエスケープ
+                for arg in cmd.split_whitespace() {
+                    docker_cmd.push_str(&format!(" {}", shell_escape(arg)));
+                }
             }
 
             println!("    $ {}", docker_cmd.dimmed());

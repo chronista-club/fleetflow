@@ -171,9 +171,10 @@ pub fn service_to_container_config_with_network(
         exposed_ports: Some(exposed_ports),
         host_config,
         labels: Some(labels),
-        cmd: service.command.as_ref().map(|c| {
-            c.split_whitespace().map(String::from).collect()
-        }),
+        cmd: service
+            .command
+            .as_ref()
+            .map(|c| c.split_whitespace().map(String::from).collect()),
         healthcheck,
         networking_config,
         ..Default::default()

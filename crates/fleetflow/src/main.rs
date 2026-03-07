@@ -368,9 +368,7 @@ async fn main() -> anyhow::Result<()> {
         tracing_subscriber::fmt::init();
     } else {
         tracing_subscriber::fmt()
-            .with_env_filter(
-                tracing_subscriber::EnvFilter::new(log_level),
-            )
+            .with_env_filter(tracing_subscriber::EnvFilter::new(log_level))
             .init();
     }
 
@@ -563,8 +561,16 @@ async fn main() -> anyhow::Result<()> {
             since,
         } => {
             let stage = stage.or(stage_flag);
-            commands::logs::handle(&config, &project_root, stage, &service, lines, follow, since)
-                .await?;
+            commands::logs::handle(
+                &config,
+                &project_root,
+                stage,
+                &service,
+                lines,
+                follow,
+                since,
+            )
+            .await?;
         }
         Commands::Restart { service, stage } => {
             commands::restart::handle(&config, service, stage).await?;
