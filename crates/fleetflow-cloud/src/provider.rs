@@ -173,3 +173,191 @@ impl Default for RetryConfig {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ---- AuthStatus tests ----
+
+    #[test]
+    fn test_auth_status_ok() {
+        let status = AuthStatus::ok("user@example.com");
+        assert!(status.authenticated);
+        assert_eq!(status.account_info, Some("user@example.com".to_string()));
+        assert!(status.error.is_none());
+    }
+
+    #[test]
+    fn test_auth_status_failed() {
+        let status = AuthStatus::failed("token expired");
+        assert!(!status.authenticated);
+        assert!(status.account_info.is_none());
+        assert_eq!(status.error, Some("token expired".to_string()));
+    }
+
+    #[test]
+    fn test_auth_status_serde_roundtrip() {
+        let status = AuthStatus::ok("admin");
+        let json = serde_json::to_string(&status).unwrap();
+        let deserialized: AuthStatus = serde_json::from_str(&json).unwrap();
+        assert!(deserialized.authenticated);
+        assert_eq!(deserialized.account_info, Some("admin".to_string()));
+    }
+
+    // ---- ResourceSet tests ----
+
+    #[test]
+    fn test_resource_set_new_is_empty() {
+        let set = ResourceSet::new();
+        assert!(set.resources.is_empty());
+    }
+
+    #[test]
+    fn test_resource_set_add_and_get() {
+        let mut set = ResourceSet::new();
+        let resource = ResourceConfig::new("server", "web-01", "sakura", serde_json::json!({}));
+        set.add(resource);
+
+        let found = set.get("server", "web-01");
+        assert!(found.is_some());
+        assert_eq!(found.unwrap().id, "web-01");
+    }
+
+    #[test]
+    fn test_resource_set_get_missing() {
+        let set = ResourceSet::new();
+        assert!(set.get("server", "nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_resource_set_iter() {
+        let mut set = ResourceSet::new();
+        set.add(ResourceConfig::new(
+            "server",
+            "a",
+            "sakura",
+            serde_json::json!({}),
+        ));
+        set.add(ResourceConfig::new(
+            "r2-bucket",
+            "b",
+            "cloudflare",
+            serde_json::json!({}),
+        ));
+
+        let items: Vec<_> = set.iter().collect();
+        assert_eq!(items.len(), 2);
+    }
+
+    #[test]
+    fn test_resource_set_by_type() {
+        let mut set = ResourceSet::new();
+        set.add(ResourceConfig::new(
+            "server",
+            "a",
+            "sakura",
+            serde_json::json!({}),
+        ));
+        set.add(ResourceConfig::new(
+            "server",
+            "b",
+            "sakura",
+            serde_json::json!({}),
+        ));
+        set.add(ResourceConfig::new(
+            "r2-bucket",
+            "c",
+            "cloudflare",
+            serde_json::json!({}),
+        ));
+
+        assert_eq!(set.by_type("server").len(), 2);
+        assert_eq!(set.by_type("r2-bucket").len(), 1);
+        assert_eq!(set.by_type("worker").len(), 0);
+    }
+
+    #[test]
+    fn test_resource_set_add_overwrites_same_key() {
+        let mut set = ResourceSet::new();
+        set.add(ResourceConfig::new(
+            "server",
+            "web",
+            "sakura",
+            serde_json::json!({"core": 1}),
+        ));
+        set.add(ResourceConfig::new(
+            "server",
+            "web",
+            "sakura",
+            serde_json::json!({"core": 4}),
+        ));
+
+        assert_eq!(set.resources.len(), 1);
+        let found = set.get("server", "web").unwrap();
+        assert_eq!(found.config["core"], 4);
+    }
+
+    // ---- ResourceConfig tests ----
+
+    #[test]
+    fn test_resource_config_key() {
+        let config = ResourceConfig::new("server", "web-01", "sakura", serde_json::json!({}));
+        assert_eq!(config.key(), "server:web-01");
+    }
+
+    #[test]
+    fn test_resource_config_get_config_valid() {
+        let config = ResourceConfig::new(
+            "server",
+            "web-01",
+            "sakura",
+            serde_json::json!({"core": 4, "name": "test-server"}),
+        );
+
+        assert_eq!(config.get_config::<i32>("core"), Some(4));
+        assert_eq!(
+            config.get_config::<String>("name"),
+            Some("test-server".to_string())
+        );
+    }
+
+    #[test]
+    fn test_resource_config_get_config_missing_key() {
+        let config = ResourceConfig::new("server", "web-01", "sakura", serde_json::json!({}));
+        assert_eq!(config.get_config::<i32>("core"), None);
+    }
+
+    #[test]
+    fn test_resource_config_get_config_type_mismatch() {
+        let config = ResourceConfig::new(
+            "server",
+            "web-01",
+            "sakura",
+            serde_json::json!({"core": "not-a-number"}),
+        );
+        assert_eq!(config.get_config::<i32>("core"), None);
+    }
+
+    #[test]
+    fn test_resource_config_serde_roundtrip() {
+        let config =
+            ResourceConfig::new("server", "web-01", "sakura", serde_json::json!({"core": 2}));
+        let json = serde_json::to_string(&config).unwrap();
+        let deserialized: ResourceConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.resource_type, "server");
+        assert_eq!(deserialized.id, "web-01");
+        assert_eq!(deserialized.provider, "sakura");
+    }
+
+    // ---- RetryConfig tests ----
+
+    #[test]
+    fn test_retry_config_default() {
+        let config = RetryConfig::default();
+        assert_eq!(config.max_attempts, 3);
+        assert_eq!(config.initial_delay, std::time::Duration::from_secs(1));
+        assert_eq!(config.max_delay, std::time::Duration::from_secs(30));
+        assert!((config.backoff_multiplier - 2.0).abs() < f64::EPSILON);
+    }
+}

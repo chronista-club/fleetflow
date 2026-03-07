@@ -108,3 +108,99 @@ pub fn get_builtin_script(name: &str) -> Option<&'static str> {
 pub fn is_builtin_script(name: &str) -> bool {
     get_builtin_script(name).is_some()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_get_builtin_script_mise() {
+        let script = get_builtin_script("fleetflow-mise-setup");
+        assert!(script.is_some());
+        let content = script.unwrap();
+        assert!(content.starts_with("#!/bin/bash"));
+        assert!(content.contains("mise"));
+        assert!(content.contains("@sacloud-name"));
+    }
+
+    #[test]
+    fn test_get_builtin_script_docker() {
+        let script = get_builtin_script("fleetflow-docker-setup");
+        assert!(script.is_some());
+        let content = script.unwrap();
+        assert!(content.starts_with("#!/bin/bash"));
+        assert!(content.contains("docker"));
+        assert!(content.contains("@sacloud-once"));
+    }
+
+    #[test]
+    fn test_get_builtin_script_fleetflow() {
+        let script = get_builtin_script("fleetflow-fleetflow-setup");
+        assert!(script.is_some());
+        let content = script.unwrap();
+        assert!(content.starts_with("#!/bin/bash"));
+        assert!(content.contains("fleetflow"));
+        assert!(content.contains("FLEETFLOW_VERSION"));
+    }
+
+    #[test]
+    fn test_get_builtin_script_unknown() {
+        assert!(get_builtin_script("nonexistent-script").is_none());
+        assert!(get_builtin_script("").is_none());
+        assert!(get_builtin_script("fleetflow-").is_none());
+    }
+
+    #[test]
+    fn test_is_builtin_script_true() {
+        assert!(is_builtin_script("fleetflow-mise-setup"));
+        assert!(is_builtin_script("fleetflow-docker-setup"));
+        assert!(is_builtin_script("fleetflow-fleetflow-setup"));
+    }
+
+    #[test]
+    fn test_is_builtin_script_false() {
+        assert!(!is_builtin_script("custom-script"));
+        assert!(!is_builtin_script(""));
+        assert!(!is_builtin_script("fleetflow-unknown"));
+    }
+
+    #[test]
+    fn test_scripts_have_sacloud_annotations() {
+        let scripts = [
+            ("fleetflow-mise-setup", MISE_SETUP),
+            ("fleetflow-docker-setup", DOCKER_SETUP),
+            ("fleetflow-fleetflow-setup", FLEETFLOW_SETUP),
+        ];
+
+        for (name, content) in &scripts {
+            assert!(
+                content.contains("@sacloud-name"),
+                "{} should have @sacloud-name",
+                name
+            );
+            assert!(
+                content.contains("@sacloud-once"),
+                "{} should have @sacloud-once",
+                name
+            );
+            assert!(
+                content.contains("@sacloud-desc"),
+                "{} should have @sacloud-desc",
+                name
+            );
+            assert!(
+                content.contains("set -e"),
+                "{} should have set -e for error handling",
+                name
+            );
+        }
+    }
+
+    #[test]
+    fn test_script_names_in_content_match() {
+        // Verify the @sacloud-name in each script matches its lookup key
+        assert!(MISE_SETUP.contains("@sacloud-name \"fleetflow-mise-setup\""));
+        assert!(DOCKER_SETUP.contains("@sacloud-name \"fleetflow-docker-setup\""));
+        assert!(FLEETFLOW_SETUP.contains("@sacloud-name \"fleetflow-fleetflow-setup\""));
+    }
+}

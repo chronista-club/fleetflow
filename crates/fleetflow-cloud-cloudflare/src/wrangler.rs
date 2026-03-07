@@ -158,3 +158,158 @@ pub struct DnsRecordInfo {
     pub ttl: Option<u32>,
     pub proxied: bool,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ---- Wrangler construction ----
+
+    #[test]
+    fn test_wrangler_new_with_account_id() {
+        let wrangler = Wrangler::new(Some("abc-123".to_string()));
+        assert_eq!(wrangler.account_id, Some("abc-123".to_string()));
+    }
+
+    #[test]
+    fn test_wrangler_new_without_account_id() {
+        let wrangler = Wrangler::new(None);
+        assert!(wrangler.account_id.is_none());
+    }
+
+    // ---- WranglerAuth tests ----
+
+    #[test]
+    fn test_wrangler_auth_serde_roundtrip() {
+        let auth = WranglerAuth {
+            authenticated: true,
+            account_id: Some("acc-1".to_string()),
+            email: Some("user@example.com".to_string()),
+        };
+
+        let json = serde_json::to_string(&auth).unwrap();
+        let deserialized: WranglerAuth = serde_json::from_str(&json).unwrap();
+
+        assert!(deserialized.authenticated);
+        assert_eq!(deserialized.account_id, Some("acc-1".to_string()));
+        assert_eq!(deserialized.email, Some("user@example.com".to_string()));
+    }
+
+    #[test]
+    fn test_wrangler_auth_unauthenticated() {
+        let auth = WranglerAuth {
+            authenticated: false,
+            account_id: None,
+            email: None,
+        };
+
+        assert!(!auth.authenticated);
+        assert!(auth.account_id.is_none());
+        assert!(auth.email.is_none());
+    }
+
+    // ---- R2BucketInfo tests ----
+
+    #[test]
+    fn test_r2_bucket_info_serde_roundtrip() {
+        let bucket = R2BucketInfo {
+            name: "my-bucket".to_string(),
+            created_at: Some("2025-01-01T00:00:00Z".to_string()),
+        };
+
+        let json = serde_json::to_string(&bucket).unwrap();
+        let deserialized: R2BucketInfo = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.name, "my-bucket");
+        assert_eq!(
+            deserialized.created_at,
+            Some("2025-01-01T00:00:00Z".to_string())
+        );
+    }
+
+    #[test]
+    fn test_r2_bucket_info_no_created_at() {
+        let bucket = R2BucketInfo {
+            name: "new-bucket".to_string(),
+            created_at: None,
+        };
+
+        assert!(bucket.created_at.is_none());
+    }
+
+    // ---- WorkerInfo tests ----
+
+    #[test]
+    fn test_worker_info_serde_roundtrip() {
+        let worker = WorkerInfo {
+            name: "my-worker".to_string(),
+            created_at: Some("2025-06-01".to_string()),
+            routes: vec!["*.example.com/*".to_string()],
+        };
+
+        let json = serde_json::to_string(&worker).unwrap();
+        let deserialized: WorkerInfo = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.name, "my-worker");
+        assert_eq!(deserialized.routes.len(), 1);
+    }
+
+    // ---- WorkerConfig tests ----
+
+    #[test]
+    fn test_worker_config_construction() {
+        let config = WorkerConfig {
+            name: "api-worker".to_string(),
+            script_path: "./src/worker.js".to_string(),
+            routes: vec!["api.example.com/*".to_string()],
+            vars: [("ENV".to_string(), "production".to_string())]
+                .into_iter()
+                .collect(),
+        };
+
+        assert_eq!(config.name, "api-worker");
+        assert_eq!(config.script_path, "./src/worker.js");
+        assert_eq!(config.routes.len(), 1);
+        assert_eq!(config.vars.get("ENV"), Some(&"production".to_string()));
+    }
+
+    // ---- DnsRecordInfo tests ----
+
+    #[test]
+    fn test_dns_record_info_serde_roundtrip() {
+        let record = DnsRecordInfo {
+            id: "rec-abc".to_string(),
+            name: "mcp-prod.example.com".to_string(),
+            record_type: "A".to_string(),
+            content: "203.0.113.1".to_string(),
+            ttl: Some(300),
+            proxied: false,
+        };
+
+        let json = serde_json::to_string(&record).unwrap();
+        let deserialized: DnsRecordInfo = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.id, "rec-abc");
+        assert_eq!(deserialized.name, "mcp-prod.example.com");
+        assert_eq!(deserialized.record_type, "A");
+        assert_eq!(deserialized.content, "203.0.113.1");
+        assert_eq!(deserialized.ttl, Some(300));
+        assert!(!deserialized.proxied);
+    }
+
+    #[test]
+    fn test_dns_record_info_cname() {
+        let record = DnsRecordInfo {
+            id: "rec-cname".to_string(),
+            name: "www.example.com".to_string(),
+            record_type: "CNAME".to_string(),
+            content: "example.com".to_string(),
+            ttl: None,
+            proxied: true,
+        };
+
+        assert_eq!(record.record_type, "CNAME");
+        assert!(record.proxied);
+        assert!(record.ttl.is_none());
+    }
+}

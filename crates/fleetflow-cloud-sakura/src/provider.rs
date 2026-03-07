@@ -490,3 +490,150 @@ impl CloudProvider for SakuraCloudProvider {
         Ok(result)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ---- parse_plan tests ----
+
+    #[test]
+    fn test_parse_plan_standard() {
+        let (core, mem) = parse_plan(&Some("2core-4gb".to_string()));
+        assert_eq!(core, 2);
+        assert_eq!(mem, 4);
+    }
+
+    #[test]
+    fn test_parse_plan_single_core() {
+        let (core, mem) = parse_plan(&Some("1core-1gb".to_string()));
+        assert_eq!(core, 1);
+        assert_eq!(mem, 1);
+    }
+
+    #[test]
+    fn test_parse_plan_large() {
+        let (core, mem) = parse_plan(&Some("16core-64gb".to_string()));
+        assert_eq!(core, 16);
+        assert_eq!(mem, 64);
+    }
+
+    #[test]
+    fn test_parse_plan_none() {
+        let (core, mem) = parse_plan(&None);
+        assert_eq!(core, 1);
+        assert_eq!(mem, 1);
+    }
+
+    #[test]
+    fn test_parse_plan_invalid_format_single_part() {
+        // Only one part, no dash
+        let (core, mem) = parse_plan(&Some("4core".to_string()));
+        assert_eq!(core, 1);
+        assert_eq!(mem, 1);
+    }
+
+    #[test]
+    fn test_parse_plan_invalid_numbers() {
+        // Non-numeric values default to 1
+        let (core, mem) = parse_plan(&Some("xcore-ygb".to_string()));
+        assert_eq!(core, 1);
+        assert_eq!(mem, 1);
+    }
+
+    #[test]
+    fn test_parse_plan_empty_string() {
+        let (core, mem) = parse_plan(&Some("".to_string()));
+        assert_eq!(core, 1);
+        assert_eq!(mem, 1);
+    }
+
+    // ---- SimpleServerInfo tests ----
+
+    #[test]
+    fn test_simple_server_info_from_server_info() {
+        let server_info = crate::usacloud::ServerInfo {
+            id: 12345,
+            name: "web-01".to_string(),
+            cpu: Some(4),
+            memory_mb: Some(4096),
+            instance_status: Some("up".to_string()),
+            interfaces: Some(vec![crate::usacloud::InterfaceInfo {
+                ip_address: Some("203.0.113.10".to_string()),
+            }]),
+            tags: vec![],
+        };
+
+        let simple: SimpleServerInfo = server_info.into();
+        assert_eq!(simple.id, "12345");
+        assert_eq!(simple.name, "web-01");
+        assert!(simple.is_running);
+        assert_eq!(simple.ip_address, Some("203.0.113.10".to_string()));
+    }
+
+    #[test]
+    fn test_simple_server_info_from_stopped_server() {
+        let server_info = crate::usacloud::ServerInfo {
+            id: 99,
+            name: "stopped-srv".to_string(),
+            cpu: None,
+            memory_mb: None,
+            instance_status: Some("down".to_string()),
+            interfaces: None,
+            tags: vec![],
+        };
+
+        let simple: SimpleServerInfo = server_info.into();
+        assert_eq!(simple.id, "99");
+        assert!(!simple.is_running);
+        assert!(simple.ip_address.is_none());
+    }
+
+    // ---- SakuraCloudProvider basic tests ----
+
+    #[test]
+    fn test_provider_name() {
+        let provider = SakuraCloudProvider::new("tk1a");
+        assert_eq!(provider.name(), "sakura-cloud");
+        assert_eq!(provider.display_name(), "さくらのクラウド");
+    }
+
+    #[test]
+    fn test_parse_server_config() {
+        let provider = SakuraCloudProvider::new("tk1a");
+        let config = ResourceConfig::new(
+            "server",
+            "web-01",
+            "sakura-cloud",
+            serde_json::json!({
+                "core": 4,
+                "memory": 8,
+                "disk_size": 100,
+                "os_type": "ubuntu2404",
+                "ssh_key": "my-key"
+            }),
+        );
+
+        let parsed = provider.parse_server_config(&config).unwrap();
+        assert_eq!(parsed.name, "web-01");
+        assert_eq!(parsed.core, 4);
+        assert_eq!(parsed.memory, 8);
+        assert_eq!(parsed.disk_size, Some(100));
+        assert_eq!(parsed.os_type, Some("ubuntu2404".to_string()));
+        assert_eq!(parsed.ssh_key, Some("my-key".to_string()));
+    }
+
+    #[test]
+    fn test_parse_server_config_defaults() {
+        let provider = SakuraCloudProvider::new("tk1a");
+        let config =
+            ResourceConfig::new("server", "minimal", "sakura-cloud", serde_json::json!({}));
+
+        let parsed = provider.parse_server_config(&config).unwrap();
+        assert_eq!(parsed.core, 1);
+        assert_eq!(parsed.memory, 1);
+        assert!(parsed.disk_size.is_none());
+        assert!(parsed.os_type.is_none());
+        assert!(parsed.ssh_key.is_none());
+    }
+}

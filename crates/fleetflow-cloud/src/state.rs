@@ -394,4 +394,254 @@ mod tests {
         let state = manager.load().await.unwrap();
         assert!(state.resources.is_empty());
     }
+
+    #[tokio::test]
+    async fn test_state_backup_created() {
+        let temp_dir = tempdir().unwrap();
+        let manager = StateManager::new(temp_dir.path());
+
+        // Save twice to trigger backup
+        let state = GlobalState::new();
+        manager.save(&state).await.unwrap();
+
+        let mut state2 = GlobalState::new();
+        state2.set_resource("test:key".to_string(), ResourceState::new("1", "server"));
+        manager.save(&state2).await.unwrap();
+
+        // Backup should exist
+        let backup_path = temp_dir.path().join(".fleetflow").join("state.json.backup");
+        assert!(backup_path.exists());
+    }
+
+    // ---- GlobalState tests ----
+
+    #[test]
+    fn test_global_state_default() {
+        let state = GlobalState::new();
+        assert_eq!(state.version, 1);
+        assert!(state.resources.is_empty());
+    }
+
+    #[test]
+    fn test_global_state_set_and_get_resource() {
+        let mut state = GlobalState::new();
+        let resource = ResourceState::new("123", "server").with_status(ResourceStatus::Running);
+        state.set_resource("sakura:server:web".to_string(), resource);
+
+        let found = state.get_resource("sakura:server:web");
+        assert!(found.is_some());
+        assert_eq!(found.unwrap().id, "123");
+        assert_eq!(found.unwrap().status, ResourceStatus::Running);
+    }
+
+    #[test]
+    fn test_global_state_remove_resource() {
+        let mut state = GlobalState::new();
+        state.set_resource("key1".to_string(), ResourceState::new("1", "server"));
+
+        let removed = state.remove_resource("key1");
+        assert!(removed.is_some());
+        assert_eq!(removed.unwrap().id, "1");
+        assert!(state.get_resource("key1").is_none());
+    }
+
+    #[test]
+    fn test_global_state_remove_nonexistent() {
+        let mut state = GlobalState::new();
+        let removed = state.remove_resource("nonexistent");
+        assert!(removed.is_none());
+    }
+
+    #[test]
+    fn test_global_state_get_provider_resources() {
+        let mut state = GlobalState::new();
+        state.set_resource(
+            "sakura:server:web".to_string(),
+            ResourceState::new("1", "server"),
+        );
+        state.set_resource(
+            "sakura:server:db".to_string(),
+            ResourceState::new("2", "server"),
+        );
+        state.set_resource(
+            "cloudflare:r2:bucket1".to_string(),
+            ResourceState::new("3", "r2-bucket"),
+        );
+
+        let sakura_resources = state.get_provider_resources("sakura");
+        assert_eq!(sakura_resources.len(), 2);
+
+        let cf_resources = state.get_provider_resources("cloudflare");
+        assert_eq!(cf_resources.len(), 1);
+
+        let empty = state.get_provider_resources("aws");
+        assert!(empty.is_empty());
+    }
+
+    // ---- ProviderState tests ----
+
+    #[test]
+    fn test_provider_state_crud() {
+        let mut state = ProviderState::new();
+        assert!(state.resources.is_empty());
+
+        state.add("web".to_string(), ResourceState::new("1", "server"));
+        assert!(state.get("web").is_some());
+
+        let removed = state.remove("web");
+        assert!(removed.is_some());
+        assert!(state.get("web").is_none());
+    }
+
+    #[test]
+    fn test_provider_state_iter() {
+        let mut state = ProviderState::new();
+        state.add("a".to_string(), ResourceState::new("1", "server"));
+        state.add("b".to_string(), ResourceState::new("2", "server"));
+
+        let items: Vec<_> = state.iter().collect();
+        assert_eq!(items.len(), 2);
+    }
+
+    // ---- ResourceState tests ----
+
+    #[test]
+    fn test_resource_state_new() {
+        let state = ResourceState::new("abc", "server");
+        assert_eq!(state.id, "abc");
+        assert_eq!(state.resource_type, "server");
+        assert_eq!(state.status, ResourceStatus::Unknown);
+        assert!(state.attributes.is_empty());
+    }
+
+    #[test]
+    fn test_resource_state_builder() {
+        let state = ResourceState::new("1", "server")
+            .with_status(ResourceStatus::Running)
+            .with_attribute("ip", serde_json::json!("10.0.0.1"))
+            .with_attribute("cpu", serde_json::json!(4));
+
+        assert_eq!(state.status, ResourceStatus::Running);
+        assert_eq!(state.attributes.len(), 2);
+    }
+
+    #[test]
+    fn test_resource_state_set_attribute() {
+        let mut state = ResourceState::new("1", "server");
+        state.set_attribute("ip", serde_json::json!("10.0.0.1"));
+
+        assert_eq!(
+            state.get_attribute::<String>("ip"),
+            Some("10.0.0.1".to_string())
+        );
+    }
+
+    #[test]
+    fn test_resource_state_get_attribute_typed() {
+        let state = ResourceState::new("1", "server")
+            .with_attribute("count", serde_json::json!(42))
+            .with_attribute("name", serde_json::json!("web"))
+            .with_attribute("active", serde_json::json!(true));
+
+        assert_eq!(state.get_attribute::<i32>("count"), Some(42));
+        assert_eq!(
+            state.get_attribute::<String>("name"),
+            Some("web".to_string())
+        );
+        assert_eq!(state.get_attribute::<bool>("active"), Some(true));
+    }
+
+    #[test]
+    fn test_resource_state_get_attribute_missing() {
+        let state = ResourceState::new("1", "server");
+        assert_eq!(state.get_attribute::<String>("nonexistent"), None);
+    }
+
+    #[test]
+    fn test_resource_state_get_attribute_type_mismatch() {
+        let state = ResourceState::new("1", "server")
+            .with_attribute("count", serde_json::json!("not-a-number"));
+        assert_eq!(state.get_attribute::<i32>("count"), None);
+    }
+
+    // ---- ResourceStatus tests ----
+
+    #[test]
+    fn test_resource_status_display() {
+        assert_eq!(ResourceStatus::Creating.to_string(), "creating");
+        assert_eq!(ResourceStatus::Running.to_string(), "running");
+        assert_eq!(ResourceStatus::Stopped.to_string(), "stopped");
+        assert_eq!(ResourceStatus::Deleting.to_string(), "deleting");
+        assert_eq!(ResourceStatus::Deleted.to_string(), "deleted");
+        assert_eq!(ResourceStatus::Error.to_string(), "error");
+        assert_eq!(ResourceStatus::Unknown.to_string(), "unknown");
+    }
+
+    #[test]
+    fn test_resource_status_equality() {
+        assert_eq!(ResourceStatus::Running, ResourceStatus::Running);
+        assert_ne!(ResourceStatus::Running, ResourceStatus::Stopped);
+    }
+
+    #[test]
+    fn test_resource_status_serde_roundtrip() {
+        let cases = vec![
+            (ResourceStatus::Creating, "\"creating\""),
+            (ResourceStatus::Running, "\"running\""),
+            (ResourceStatus::Stopped, "\"stopped\""),
+            (ResourceStatus::Deleting, "\"deleting\""),
+            (ResourceStatus::Deleted, "\"deleted\""),
+            (ResourceStatus::Error, "\"error\""),
+            (ResourceStatus::Unknown, "\"unknown\""),
+        ];
+        for (status, expected_json) in cases {
+            let json = serde_json::to_string(&status).unwrap();
+            assert_eq!(json, expected_json);
+            let deserialized: ResourceStatus = serde_json::from_str(&json).unwrap();
+            assert_eq!(deserialized, status);
+        }
+    }
+
+    // ---- StateManager path tests ----
+
+    #[test]
+    fn test_state_manager_paths() {
+        let manager = StateManager::new("/project");
+        assert_eq!(
+            manager.state_dir(),
+            std::path::PathBuf::from("/project/.fleetflow")
+        );
+        assert_eq!(
+            manager.state_path(),
+            std::path::PathBuf::from("/project/.fleetflow/state.json")
+        );
+        assert_eq!(
+            manager.backup_path(),
+            std::path::PathBuf::from("/project/.fleetflow/state.json.backup")
+        );
+        assert_eq!(
+            manager.lock_path(),
+            std::path::PathBuf::from("/project/.fleetflow/lock.json")
+        );
+    }
+
+    // ---- GlobalState serde roundtrip ----
+
+    #[test]
+    fn test_global_state_serde_roundtrip() {
+        let mut state = GlobalState::new();
+        state.set_resource(
+            "sakura:server:web".to_string(),
+            ResourceState::new("123", "server").with_status(ResourceStatus::Running),
+        );
+
+        let json = serde_json::to_string(&state).unwrap();
+        let deserialized: GlobalState = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.version, 1);
+        assert_eq!(deserialized.resources.len(), 1);
+        let resource = deserialized.get_resource("sakura:server:web").unwrap();
+        assert_eq!(resource.id, "123");
+        assert_eq!(resource.status, ResourceStatus::Running);
+    }
 }

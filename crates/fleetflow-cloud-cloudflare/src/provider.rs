@@ -215,3 +215,21 @@ impl CloudProvider for CloudflareProvider {
         Ok(result)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_provider_name() {
+        let provider = CloudflareProvider::new(Some("acc-123".to_string()));
+        assert_eq!(provider.name(), "cloudflare");
+        assert_eq!(provider.display_name(), "Cloudflare");
+    }
+
+    #[test]
+    fn test_provider_new_without_account_id() {
+        let provider = CloudflareProvider::new(None);
+        assert_eq!(provider.name(), "cloudflare");
+    }
+}

@@ -564,4 +564,244 @@ mod tests {
         assert!(server.is_running());
         assert!(server.tags.contains(&"fleetflow:test:server".to_string()));
     }
+
+    #[test]
+    fn test_server_info_no_interfaces() {
+        let server = ServerInfo {
+            id: 1,
+            name: "no-nic".to_string(),
+            cpu: None,
+            memory_mb: None,
+            instance_status: None,
+            interfaces: None,
+            tags: vec![],
+        };
+
+        assert_eq!(server.ip_address(), None);
+        assert!(!server.is_running());
+    }
+
+    #[test]
+    fn test_server_info_empty_interfaces() {
+        let server = ServerInfo {
+            id: 2,
+            name: "empty-nic".to_string(),
+            cpu: None,
+            memory_mb: None,
+            instance_status: Some("up".to_string()),
+            interfaces: Some(vec![]),
+            tags: vec![],
+        };
+
+        assert_eq!(server.ip_address(), None);
+        assert!(server.is_running());
+    }
+
+    #[test]
+    fn test_server_info_interface_no_ip() {
+        let server = ServerInfo {
+            id: 3,
+            name: "no-ip".to_string(),
+            cpu: None,
+            memory_mb: None,
+            instance_status: Some("down".to_string()),
+            interfaces: Some(vec![InterfaceInfo { ip_address: None }]),
+            tags: vec![],
+        };
+
+        assert_eq!(server.ip_address(), None);
+        assert!(!server.is_running());
+    }
+
+    #[test]
+    fn test_server_info_multiple_interfaces() {
+        let server = ServerInfo {
+            id: 4,
+            name: "multi-nic".to_string(),
+            cpu: Some(2),
+            memory_mb: Some(2048),
+            instance_status: Some("up".to_string()),
+            interfaces: Some(vec![
+                InterfaceInfo { ip_address: None },
+                InterfaceInfo {
+                    ip_address: Some("10.0.0.1".to_string()),
+                },
+                InterfaceInfo {
+                    ip_address: Some("10.0.0.2".to_string()),
+                },
+            ]),
+            tags: vec![],
+        };
+
+        // Should return first IP found
+        assert_eq!(server.ip_address(), Some("10.0.0.1".to_string()));
+    }
+
+    #[test]
+    fn test_server_info_id_str() {
+        let server = ServerInfo {
+            id: 123456789012,
+            name: "test".to_string(),
+            cpu: None,
+            memory_mb: None,
+            instance_status: None,
+            interfaces: None,
+            tags: vec![],
+        };
+
+        assert_eq!(server.id_str(), "123456789012");
+    }
+
+    #[test]
+    fn test_server_info_is_running_various_statuses() {
+        let make_server = |status: Option<&str>| ServerInfo {
+            id: 1,
+            name: "test".to_string(),
+            cpu: None,
+            memory_mb: None,
+            instance_status: status.map(|s| s.to_string()),
+            interfaces: None,
+            tags: vec![],
+        };
+
+        assert!(make_server(Some("up")).is_running());
+        assert!(!make_server(Some("down")).is_running());
+        assert!(!make_server(Some("")).is_running());
+        assert!(!make_server(None).is_running());
+    }
+
+    // ---- ServerInfo serde tests ----
+
+    #[test]
+    fn test_server_info_deserialize() {
+        let json = r#"{
+            "ID": 999,
+            "Name": "web-server",
+            "CPU": 4,
+            "MemoryMB": 8192,
+            "InstanceStatus": "up",
+            "Interfaces": [{"IPAddress": "203.0.113.1"}],
+            "Tags": ["fleetflow:proj:web"]
+        }"#;
+
+        let server: ServerInfo = serde_json::from_str(json).unwrap();
+        assert_eq!(server.id, 999);
+        assert_eq!(server.name, "web-server");
+        assert_eq!(server.cpu, Some(4));
+        assert_eq!(server.memory_mb, Some(8192));
+        assert!(server.is_running());
+        assert_eq!(server.ip_address(), Some("203.0.113.1".to_string()));
+        assert_eq!(server.tags.len(), 1);
+    }
+
+    #[test]
+    fn test_server_info_deserialize_minimal() {
+        let json = r#"{"ID": 1, "Name": "min"}"#;
+        let server: ServerInfo = serde_json::from_str(json).unwrap();
+        assert_eq!(server.id, 1);
+        assert_eq!(server.name, "min");
+        assert!(server.tags.is_empty()); // default
+    }
+
+    // ---- SshKeyInfo tests ----
+
+    #[test]
+    fn test_ssh_key_info_id_str() {
+        let key = SshKeyInfo {
+            id: 42,
+            name: "my-key".to_string(),
+            public_key: Some("ssh-rsa AAAA...".to_string()),
+        };
+        assert_eq!(key.id_str(), "42");
+    }
+
+    #[test]
+    fn test_ssh_key_info_deserialize() {
+        let json = r#"{"ID": 100, "Name": "deploy-key", "PublicKey": "ssh-ed25519 AAAA..."}"#;
+        let key: SshKeyInfo = serde_json::from_str(json).unwrap();
+        assert_eq!(key.id, 100);
+        assert_eq!(key.name, "deploy-key");
+        assert!(key.public_key.is_some());
+    }
+
+    // ---- NoteInfo tests ----
+
+    #[test]
+    fn test_note_info_id_str() {
+        let note = NoteInfo {
+            id: 12345,
+            name: "setup-script".to_string(),
+            class: Some("shell".to_string()),
+            scope: Some("user".to_string()),
+        };
+        assert_eq!(note.id_str(), "12345");
+    }
+
+    #[test]
+    fn test_note_info_deserialize() {
+        let json = r#"{"ID": 200, "Name": "init", "Class": "shell", "Scope": "shared"}"#;
+        let note: NoteInfo = serde_json::from_str(json).unwrap();
+        assert_eq!(note.id, 200);
+        assert_eq!(note.name, "init");
+        assert_eq!(note.class, Some("shell".to_string()));
+    }
+
+    // ---- ArchiveInfo tests ----
+
+    #[test]
+    fn test_archive_info_id_str() {
+        let archive = ArchiveInfo {
+            id: 987654,
+            name: "ubuntu-24.04".to_string(),
+            size_mb: Some(20480),
+            scope: Some("shared".to_string()),
+        };
+        assert_eq!(archive.id_str(), "987654");
+    }
+
+    #[test]
+    fn test_archive_info_deserialize() {
+        let json = r#"{"ID": 300, "Name": "ubuntu-2404", "SizeMB": 20480, "Scope": "shared"}"#;
+        let archive: ArchiveInfo = serde_json::from_str(json).unwrap();
+        assert_eq!(archive.id, 300);
+        assert_eq!(archive.name, "ubuntu-2404");
+        assert_eq!(archive.size_mb, Some(20480));
+    }
+
+    // ---- UsacloudAuth tests ----
+
+    #[test]
+    fn test_usacloud_auth_deserialize() {
+        let json = r#"{"Account": {"ID": "12345", "Name": "my-account"}}"#;
+        let auth: UsacloudAuth = serde_json::from_str(json).unwrap();
+        assert!(auth.account.is_some());
+        let account = auth.account.unwrap();
+        assert_eq!(account.id, "12345");
+        assert_eq!(account.name, "my-account");
+    }
+
+    #[test]
+    fn test_usacloud_auth_deserialize_no_account() {
+        let json = r#"{"Account": null}"#;
+        let auth: UsacloudAuth = serde_json::from_str(json).unwrap();
+        assert!(auth.account.is_none());
+    }
+
+    // ---- CreateServerConfig tests ----
+
+    #[test]
+    fn test_fleetflow_tags() {
+        let tags = CreateServerConfig::fleetflow_tags("my-project", "web-01");
+        assert_eq!(tags.len(), 2);
+        assert_eq!(tags[0], "fleetflow:my-project:web-01");
+        assert_eq!(tags[1], "fleetflow:project:my-project");
+    }
+
+    // ---- Usacloud construction test ----
+
+    #[test]
+    fn test_usacloud_new() {
+        let _usacloud = Usacloud::new("tk1a");
+        // Just verify it constructs without panic
+    }
 }

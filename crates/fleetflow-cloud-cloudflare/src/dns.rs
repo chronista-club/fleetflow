@@ -535,14 +535,20 @@ struct DeleteResult {
 mod tests {
     use super::*;
 
+    fn test_dns(domain: &str) -> CloudflareDns {
+        let config = DnsConfig {
+            api_token: "test-token".to_string(),
+            zone_id: "test-zone".to_string(),
+            domain: domain.to_string(),
+        };
+        CloudflareDns::new(config)
+    }
+
+    // ---- generate_subdomain tests ----
+
     #[test]
     fn test_generate_subdomain() {
-        let config = DnsConfig {
-            api_token: "test".to_string(),
-            zone_id: "test".to_string(),
-            domain: "example.com".to_string(),
-        };
-        let dns = CloudflareDns::new(config);
+        let dns = test_dns("example.com");
 
         assert_eq!(
             dns.generate_subdomain("creo-mcp-server", "prod"),
@@ -557,14 +563,159 @@ mod tests {
     }
 
     #[test]
-    fn test_full_domain() {
-        let config = DnsConfig {
-            api_token: "test".to_string(),
-            zone_id: "test".to_string(),
-            domain: "example.com".to_string(),
-        };
-        let dns = CloudflareDns::new(config);
+    fn test_generate_subdomain_no_creo_prefix() {
+        let dns = test_dns("example.com");
+        assert_eq!(dns.generate_subdomain("web-server", "live"), "web-live");
+    }
 
+    #[test]
+    fn test_generate_subdomain_no_suffix() {
+        let dns = test_dns("example.com");
+        assert_eq!(dns.generate_subdomain("creo-api", "dev"), "api-dev");
+    }
+
+    #[test]
+    fn test_generate_subdomain_both_prefix_and_suffix() {
+        let dns = test_dns("example.com");
+        // creo- is stripped from start, -server is stripped from end
+        assert_eq!(
+            dns.generate_subdomain("creo-auth-server", "prod"),
+            "auth-prod"
+        );
+    }
+
+    // ---- full_domain tests ----
+
+    #[test]
+    fn test_full_domain() {
+        let dns = test_dns("example.com");
         assert_eq!(dns.full_domain("mcp-prod"), "mcp-prod.example.com");
+    }
+
+    #[test]
+    fn test_full_domain_different_base() {
+        let dns = test_dns("myapp.dev");
+        assert_eq!(dns.full_domain("api-staging"), "api-staging.myapp.dev");
+    }
+
+    // ---- domain accessor test ----
+
+    #[test]
+    fn test_domain_accessor() {
+        let dns = test_dns("example.com");
+        assert_eq!(dns.domain(), "example.com");
+    }
+
+    // ---- DnsConfig tests ----
+
+    #[test]
+    fn test_dns_config_from_env_missing_token() {
+        // Ensure env vars are not set
+        // SAFETY: This test runs in a single-threaded context; no other thread
+        // relies on these environment variables concurrently.
+        unsafe {
+            std::env::remove_var("CLOUDFLARE_API_TOKEN");
+            std::env::remove_var("CLOUDFLARE_ZONE_ID");
+            std::env::remove_var("CLOUDFLARE_DOMAIN");
+        }
+
+        let result = DnsConfig::from_env();
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("CLOUDFLARE_API_TOKEN"));
+    }
+
+    // ---- API types serde tests ----
+
+    #[test]
+    fn test_create_dns_record_request_serialize() {
+        let req = CreateDnsRecordRequest {
+            r#type: "A".to_string(),
+            name: "mcp-prod".to_string(),
+            content: "203.0.113.1".to_string(),
+            ttl: 1,
+            proxied: false,
+        };
+
+        let json = serde_json::to_value(&req).unwrap();
+        assert_eq!(json["type"], "A");
+        assert_eq!(json["name"], "mcp-prod");
+        assert_eq!(json["content"], "203.0.113.1");
+        assert_eq!(json["ttl"], 1);
+        assert_eq!(json["proxied"], false);
+    }
+
+    #[test]
+    fn test_update_dns_record_request_serialize() {
+        let req = UpdateDnsRecordRequest {
+            content: "10.0.0.1".to_string(),
+        };
+        let json = serde_json::to_value(&req).unwrap();
+        assert_eq!(json["content"], "10.0.0.1");
+    }
+
+    #[test]
+    fn test_api_dns_record_deserialize() {
+        let json = r#"{
+            "id": "rec-123",
+            "name": "mcp-prod.example.com",
+            "type": "A",
+            "content": "203.0.113.1",
+            "ttl": 300,
+            "proxied": false
+        }"#;
+
+        let record: ApiDnsRecord = serde_json::from_str(json).unwrap();
+        assert_eq!(record.id, "rec-123");
+        assert_eq!(record.name, "mcp-prod.example.com");
+        assert_eq!(record.r#type, "A");
+        assert_eq!(record.content, "203.0.113.1");
+        assert_eq!(record.ttl, 300);
+        assert!(!record.proxied);
+    }
+
+    #[test]
+    fn test_api_response_success() {
+        let json = r#"{
+            "success": true,
+            "result": [
+                {
+                    "id": "rec-1",
+                    "name": "a.example.com",
+                    "type": "A",
+                    "content": "1.2.3.4",
+                    "ttl": 1,
+                    "proxied": true
+                }
+            ],
+            "errors": []
+        }"#;
+
+        let response: ApiResponse<Vec<ApiDnsRecord>> = serde_json::from_str(json).unwrap();
+        assert!(response.success);
+        assert_eq!(response.result.len(), 1);
+        assert!(response.errors.is_empty());
+    }
+
+    #[test]
+    fn test_api_response_failure() {
+        let json = r#"{
+            "success": false,
+            "result": [],
+            "errors": [{"code": 1003, "message": "Invalid zone ID"}]
+        }"#;
+
+        let response: ApiResponse<Vec<ApiDnsRecord>> = serde_json::from_str(json).unwrap();
+        assert!(!response.success);
+        assert_eq!(response.errors.len(), 1);
+        assert_eq!(response.errors[0].message, "Invalid zone ID");
+        assert_eq!(response.errors[0].code, 1003);
+    }
+
+    #[test]
+    fn test_delete_result_deserialize() {
+        let json = r#"{"id": "rec-456"}"#;
+        let result: DeleteResult = serde_json::from_str(json).unwrap();
+        assert_eq!(result.id, "rec-456");
     }
 }
