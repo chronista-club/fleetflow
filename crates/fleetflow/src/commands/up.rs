@@ -51,11 +51,103 @@ async fn build_service_image(
     Ok(())
 }
 
+/// 環境変数のキーがセンシティブかどうか判定する
+fn is_sensitive_key(key: &str) -> bool {
+    let lower = key.to_lowercase();
+    lower.contains("pass")
+        || lower.contains("secret")
+        || lower.contains("key")
+        || lower.contains("token")
+}
+
+/// dry-run モードで実行計画を表示する
+fn print_dry_run_plan(
+    config: &fleetflow_core::Flow,
+    stage_name: &str,
+    stage_config: &fleetflow_core::Stage,
+) -> anyhow::Result<()> {
+    println!(
+        "{}",
+        format!("[dry-run] ステージ '{}' の起動計画:", stage_name)
+            .yellow()
+            .bold()
+    );
+
+    let network_name = fleetflow_container::get_network_name(&config.name, stage_name);
+    println!();
+    println!("  ネットワーク: {} (作成予定)", network_name.cyan());
+
+    for service_name in &stage_config.services {
+        let service = config
+            .services
+            .get(service_name)
+            .ok_or_else(|| anyhow::anyhow!("サービス '{}' の定義が見つかりません", service_name))?;
+
+        let container_name = format!("{}-{}-{}", config.name, stage_name, service_name);
+        let image = service.image.as_deref().unwrap_or("(未設定)");
+
+        println!();
+        println!("  サービス: {}", service_name.cyan().bold());
+        println!("    コンテナ: {}", container_name);
+        println!("    イメージ: {}", image);
+
+        // ポートマッピング
+        for port in &service.ports {
+            let protocol = match port.protocol {
+                fleetflow_core::Protocol::Tcp => "tcp",
+                fleetflow_core::Protocol::Udp => "udp",
+            };
+            println!(
+                "    ポート: {} \u{2192} {}/{}",
+                port.host, port.container, protocol
+            );
+        }
+
+        // ボリューム
+        for vol in &service.volumes {
+            let mode = if vol.read_only { "ro" } else { "rw" };
+            println!(
+                "    ボリューム: {} \u{2192} {} ({})",
+                vol.host.display(),
+                vol.container.display(),
+                mode
+            );
+        }
+
+        // 環境変数
+        if !service.environment.is_empty() {
+            let env_strs: Vec<String> = service
+                .environment
+                .iter()
+                .map(|(k, v)| {
+                    if is_sensitive_key(k) {
+                        format!("{}=***", k)
+                    } else {
+                        format!("{}={}", k, v)
+                    }
+                })
+                .collect();
+            println!("    環境変数: {}", env_strs.join(", "));
+        }
+    }
+
+    println!();
+    println!(
+        "{}",
+        "[dry-run] 実際の操作は行われません。--dry-run を外して実行してください。"
+            .yellow()
+            .bold()
+    );
+
+    Ok(())
+}
+
 pub async fn handle(
     config: &fleetflow_core::Flow,
     project_root: &std::path::Path,
     stage: Option<String>,
     pull: bool,
+    dry_run: bool,
 ) -> anyhow::Result<()> {
     // 最初にバージョンチェック
     self_update::check_and_update_if_needed().await?;
@@ -74,6 +166,11 @@ pub async fn handle(
             available.join(", ")
         )
     })?;
+
+    // dry-run モードの場合は実行計画を表示して終了
+    if dry_run {
+        return print_dry_run_plan(config, &stage_name, stage_config);
+    }
 
     println!();
     println!(
