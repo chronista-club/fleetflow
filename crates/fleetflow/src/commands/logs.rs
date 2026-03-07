@@ -9,6 +9,7 @@ pub async fn handle(
     services: &[String],
     lines: usize,
     follow: bool,
+    since: Option<String>,
 ) -> anyhow::Result<()> {
     println!("{}", "ログを取得中...".blue());
     utils::print_loaded_config_files(project_root);
@@ -29,6 +30,20 @@ pub async fn handle(
 
     let target_services =
         utils::filter_services(&stage_config.services, services, &stage_name)?;
+
+    // --since の計算（現在時刻 - duration → Unix timestamp）
+    let since_ts = if let Some(ref since_str) = since {
+        let duration_secs = utils::parse_duration(since_str)?;
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let ts = now.saturating_sub(duration_secs) as i32;
+        println!("  ℹ {}前からのログを表示", since_str);
+        ts
+    } else {
+        0
+    };
 
     println!();
 
@@ -61,6 +76,7 @@ pub async fn handle(
             stderr: true,
             tail: lines.to_string(),
             timestamps: true,
+            since: since_ts,
             ..Default::default()
         };
 

@@ -121,6 +121,39 @@ pub fn expand_variables(
     result
 }
 
+/// duration 文字列をパースして秒数を返す（例: "5m" → 300, "1h" → 3600, "30s" → 30）
+pub fn parse_duration(input: &str) -> anyhow::Result<u64> {
+    let input = input.trim();
+    if input.is_empty() {
+        return Err(anyhow::anyhow!("空の duration 文字列"));
+    }
+
+    // 数値のみの場合は秒として扱う
+    if let Ok(secs) = input.parse::<u64>() {
+        return Ok(secs);
+    }
+
+    let (num_str, suffix) = input.split_at(
+        input
+            .find(|c: char| !c.is_ascii_digit())
+            .ok_or_else(|| anyhow::anyhow!("不正な duration: '{}'", input))?,
+    );
+
+    let num: u64 = num_str
+        .parse()
+        .map_err(|_| anyhow::anyhow!("不正な数値: '{}'", num_str))?;
+
+    let multiplier = match suffix.trim() {
+        "s" | "sec" | "secs" => 1,
+        "m" | "min" | "mins" => 60,
+        "h" | "hr" | "hrs" | "hour" | "hours" => 3600,
+        "d" | "day" | "days" => 86400,
+        other => return Err(anyhow::anyhow!("不明な時間単位: '{}' (s/m/h/d が利用可能)", other)),
+    };
+
+    Ok(num * multiplier)
+}
+
 /// シェル用にエスケープ
 pub fn shell_escape(s: &str) -> String {
     // シングルクォートでラップしてエスケープ
@@ -213,6 +246,19 @@ mod tests {
             );
             assert_eq!(result, "myproject-dev-dev");
         });
+    }
+
+    #[test]
+    fn test_parse_duration() {
+        assert_eq!(parse_duration("30s").unwrap(), 30);
+        assert_eq!(parse_duration("5m").unwrap(), 300);
+        assert_eq!(parse_duration("1h").unwrap(), 3600);
+        assert_eq!(parse_duration("2d").unwrap(), 172800);
+        assert_eq!(parse_duration("120").unwrap(), 120);
+        assert_eq!(parse_duration("10min").unwrap(), 600);
+        assert_eq!(parse_duration("3hrs").unwrap(), 10800);
+        assert!(parse_duration("").is_err());
+        assert!(parse_duration("5x").is_err());
     }
 
     #[test]

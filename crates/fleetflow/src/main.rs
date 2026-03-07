@@ -76,6 +76,9 @@ enum Commands {
         /// ログをリアルタイムで追跡
         #[arg(short, long)]
         follow: bool,
+        /// 指定時間以降のログを表示（例: 5m, 1h, 30s）
+        #[arg(long)]
+        since: Option<String>,
     },
     /// コンテナの一覧を表示
     Ps {
@@ -532,9 +535,11 @@ async fn main() -> anyhow::Result<()> {
             service,
             lines,
             follow,
+            since,
         } => {
             let stage = stage.or(stage_flag);
-            commands::logs::handle(&config, &project_root, stage, &service, lines, follow).await?;
+            commands::logs::handle(&config, &project_root, stage, &service, lines, follow, since)
+                .await?;
         }
         Commands::Restart { service, stage } => {
             commands::restart::handle(&config, service, stage).await?;
