@@ -198,7 +198,6 @@ pub async fn handle(
         );
 
         // イメージ確認
-        #[allow(deprecated)]
         let image = container_config.image.as_ref().ok_or_else(|| {
             anyhow::anyhow!("サービス '{}' のイメージ設定が見つかりません", service_name)
         })?;

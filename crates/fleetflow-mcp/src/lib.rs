@@ -141,10 +141,9 @@ impl FleetFlowServer {
             vec![format!("fleetflow.project={}", config.name)],
         );
 
-        #[allow(deprecated)]
-        let options = bollard::container::ListContainersOptions {
+        let options = bollard::query_parameters::ListContainersOptions {
             all: true,
-            filters: filter,
+            filters: Some(filter),
             ..Default::default()
         };
 
@@ -265,8 +264,7 @@ impl FleetFlowServer {
             format!("{}-{}-{}", config.name, stage, first_service)
         };
 
-        #[allow(deprecated)]
-        let options = bollard::container::LogsOptions::<String> {
+        let options = bollard::query_parameters::LogsOptions {
             stdout: true,
             stderr: true,
             tail: tail.to_string(),

@@ -66,8 +66,7 @@ pub async fn handle(
             );
         }
 
-        #[allow(deprecated)]
-        let options = bollard::container::LogsOptions::<String> {
+        let options = bollard::query_parameters::LogsOptions {
             follow,
             stdout: true,
             stderr: true,

@@ -47,16 +47,13 @@ impl ImagePusher {
         // 認証情報を取得
         let credentials = self.auth.get_credentials(&full_image)?;
 
-        // プッシュオプション（新しいAPI）
-        #[allow(deprecated)]
-        let options = bollard::image::PushImageOptions::<String> {
-            tag: tag.to_string(),
+        let options = bollard::query_parameters::PushImageOptions {
+            tag: Some(tag.to_string()),
+            ..Default::default()
         };
 
         println!("  → {}", full_image.cyan());
 
-        // プッシュを実行
-        #[allow(deprecated)]
         let mut stream = self.docker.push_image(image, Some(options), credentials);
 
         let mut last_status = String::new();

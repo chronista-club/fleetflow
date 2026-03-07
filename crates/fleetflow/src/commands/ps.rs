@@ -43,14 +43,12 @@ pub async fn handle(
         Some(filter_map)
     };
 
-    #[allow(deprecated)]
-    let options = bollard::container::ListContainersOptions {
+    let options = bollard::query_parameters::ListContainersOptions {
         all,
-        filters: filters.unwrap_or_default(),
+        filters: Some(filters.unwrap_or_default()),
         ..Default::default()
     };
 
-    #[allow(deprecated)]
     let containers = docker_conn.list_containers(Some(options)).await?;
 
     println!();

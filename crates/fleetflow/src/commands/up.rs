@@ -126,7 +126,6 @@ pub async fn handle(
 
         // build設定がある場合は先にビルドを実行（ローカルビルド優先）
         if service.build.is_some() {
-            #[allow(deprecated)]
             let image = container_config
                 .image
                 .as_ref()
@@ -137,7 +136,6 @@ pub async fn handle(
 
         // --pull フラグが指定されていて、build設定がない場合は最新イメージをpull
         if pull && service.build.is_none() {
-            #[allow(deprecated)]
             let image = container_config
                 .image
                 .as_ref()
@@ -168,8 +166,7 @@ pub async fn handle(
             }) => {
                 // コンテナが既に存在する場合
                 println!("  ℹ コンテナは既に存在します");
-                #[allow(deprecated)]
-                let container_name = &create_options.name;
+                let container_name = create_options.name.as_deref().unwrap_or_default();
 
                 // 既存コンテナを起動
                 match docker_conn
@@ -204,7 +201,6 @@ pub async fn handle(
                 status_code: 404, ..
             }) => {
                 // イメージが見つからない場合
-                #[allow(deprecated)]
                 let image = container_config
                     .image
                     .as_ref()

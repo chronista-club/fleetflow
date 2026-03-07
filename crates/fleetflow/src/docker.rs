@@ -28,14 +28,12 @@ async fn pull_image_inner(
         .get_credentials(image)
         .map_err(|e| anyhow::anyhow!("認証情報の取得に失敗: {}", e))?;
 
-    #[allow(deprecated)]
-    let options = bollard::image::CreateImageOptions {
-        from_image: image_name,
-        tag,
+    let options = bollard::query_parameters::CreateImageOptions {
+        from_image: Some(image_name.to_string()),
+        tag: Some(tag.to_string()),
         ..Default::default()
     };
 
-    #[allow(deprecated)]
     let mut stream = docker.create_image(Some(options), None, credentials);
 
     while let Some(info) = stream.next().await {
@@ -125,12 +123,11 @@ pub async fn ensure_network(docker: &bollard::Docker, network_name: &str) -> any
 }
 
 /// コンテナが存在しない場合にイメージ確認→pull→作成→起動する
-#[allow(deprecated)]
 pub async fn ensure_container_running(
     docker: &bollard::Docker,
     container_name: &str,
-    container_config: bollard::container::Config<String>,
-    create_options: bollard::container::CreateContainerOptions<String>,
+    container_config: bollard::models::ContainerCreateBody,
+    create_options: bollard::query_parameters::CreateContainerOptions,
 ) -> anyhow::Result<()> {
     let image = container_config
         .image

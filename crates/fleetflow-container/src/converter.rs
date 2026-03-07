@@ -1,12 +1,10 @@
 //! FlowConfig から Docker API パラメータへの変換
 
-// Bollard 0.19.4 の非推奨APIを一時的に使用（BOLLARD_API_MAPPING.md参照）
-#![allow(deprecated)]
-
-use bollard::container::{Config, CreateContainerOptions, NetworkingConfig};
 use bollard::models::{
-    EndpointSettings, HostConfig, PortBinding, RestartPolicy, RestartPolicyNameEnum,
+    ContainerCreateBody, EndpointSettings, HealthConfig, HostConfig, NetworkingConfig, PortBinding,
+    RestartPolicy, RestartPolicyNameEnum,
 };
+use bollard::query_parameters::CreateContainerOptions;
 use fleetflow_core::{Flow, Service};
 use std::collections::HashMap;
 
@@ -21,7 +19,7 @@ pub fn service_to_container_config(
     service: &Service,
     stage_name: &str,
     project_name: &str,
-) -> (Config<String>, CreateContainerOptions<String>) {
+) -> (ContainerCreateBody, CreateContainerOptions) {
     service_to_container_config_with_network(service_name, service, stage_name, project_name, true)
 }
 
@@ -32,13 +30,8 @@ pub fn service_to_container_config_with_network(
     stage_name: &str,
     project_name: &str,
     use_network: bool,
-) -> (Config<String>, CreateContainerOptions<String>) {
+) -> (ContainerCreateBody, CreateContainerOptions) {
     // イメージ名の決定
-    // 1. imageとversionの両方が指定されている場合は "image:version"
-    // 2. imageのみでタグが含まれている場合（":"を含む）はそのまま使用
-    // 3. imageのみでタグがない場合は "image:latest"
-    // 4. versionのみの場合は "service_name:version"
-    // 5. どちらもない場合は "service_name:latest"
     let image = match (&service.image, &service.version) {
         (Some(img), Some(ver)) => format!("{}:{}", img, ver),
         (Some(img), None) => {
@@ -94,7 +87,6 @@ pub fn service_to_container_config_with_network(
         .iter()
         .map(|v| {
             let mode = if v.read_only { "ro" } else { "rw" };
-            // 相対パスの場合は絶対パスに変換
             let host_path = if v.host.is_relative() {
                 std::env::current_dir()
                     .unwrap_or_else(|_| v.host.clone())
@@ -124,7 +116,6 @@ pub fn service_to_container_config_with_network(
     });
 
     // HostConfig設定
-    // 注意: network_modeはNetworkingConfigと併用できないため設定しない
     let host_config = Some(HostConfig {
         port_bindings: Some(port_bindings),
         binds: Some(binds),
@@ -157,33 +148,30 @@ pub fn service_to_container_config_with_network(
             },
         );
         Some(NetworkingConfig {
-            endpoints_config: endpoints,
+            endpoints_config: Some(endpoints),
         })
     } else {
         None
     };
 
     // ヘルスチェック設定
-    let healthcheck = service.healthcheck.as_ref().map(|hc| {
-        bollard::models::HealthConfig {
-            test: Some(hc.test.clone()),
-            interval: Some(hc.interval as i64 * 1_000_000_000), // 秒 → ナノ秒
-            timeout: Some(hc.timeout as i64 * 1_000_000_000),
-            retries: Some(hc.retries as i64),
-            start_period: Some(hc.start_period as i64 * 1_000_000_000),
-            start_interval: None,
-        }
+    let healthcheck = service.healthcheck.as_ref().map(|hc| HealthConfig {
+        test: Some(hc.test.clone()),
+        interval: Some(hc.interval as i64 * 1_000_000_000),
+        timeout: Some(hc.timeout as i64 * 1_000_000_000),
+        retries: Some(hc.retries as i64),
+        start_period: Some(hc.start_period as i64 * 1_000_000_000),
+        start_interval: None,
     });
 
     // コンテナ設定
-    let config = Config {
+    let config = ContainerCreateBody {
         image: Some(image),
         env: Some(env),
         exposed_ports: Some(exposed_ports),
         host_config,
         labels: Some(labels),
         cmd: service.command.as_ref().map(|c| {
-            // コマンドをスペースで分割
             c.split_whitespace().map(String::from).collect()
         }),
         healthcheck,
@@ -192,8 +180,8 @@ pub fn service_to_container_config_with_network(
     };
 
     let options = CreateContainerOptions {
-        name: format!("{}-{}-{}", project_name, stage_name, service_name),
-        platform: None,
+        name: Some(format!("{}-{}-{}", project_name, stage_name, service_name)),
+        ..Default::default()
     };
 
     (config, options)
@@ -226,7 +214,7 @@ mod tests {
             service_to_container_config("postgres", &service, "local", "vantage");
 
         assert_eq!(config.image, Some("postgres:16".to_string()));
-        assert_eq!(options.name, "vantage-local-postgres");
+        assert_eq!(options.name, Some("vantage-local-postgres".to_string()));
     }
 
     #[test]
@@ -235,7 +223,6 @@ mod tests {
 
         let (config, _) = service_to_container_config("redis", &service, "local", "test");
 
-        // imageが未指定の場合は"サービス名:latest"になる
         assert_eq!(config.image, Some("redis:latest".to_string()));
     }
 
@@ -417,7 +404,7 @@ mod tests {
         let service = Service::default();
         let (_, options) = service_to_container_config("my-service", &service, "dev", "myapp");
 
-        assert_eq!(options.name, "myapp-dev-my-service");
+        assert_eq!(options.name, Some("myapp-dev-my-service".to_string()));
     }
 
     #[test]
@@ -427,7 +414,6 @@ mod tests {
 
         let labels = config.labels.unwrap();
 
-        // OrbStackグループ化用ラベル
         assert_eq!(
             labels.get("com.docker.compose.project"),
             Some(&"vantage-local".to_string())
@@ -436,8 +422,6 @@ mod tests {
             labels.get("com.docker.compose.service"),
             Some(&"postgres".to_string())
         );
-
-        // FleetFlowメタデータラベル
         assert_eq!(
             labels.get("fleetflow.project"),
             Some(&"vantage".to_string())
@@ -447,8 +431,6 @@ mod tests {
             labels.get("fleetflow.service"),
             Some(&"postgres".to_string())
         );
-
-        // 全部で5つのラベルがあることを確認
         assert_eq!(labels.len(), 5);
     }
 
@@ -456,7 +438,6 @@ mod tests {
     fn test_orbstack_labels_with_different_stages() {
         let service = Service::default();
 
-        // localステージ
         let (config_local, _) = service_to_container_config("api", &service, "local", "myapp");
         let labels_local = config_local.labels.unwrap();
         assert_eq!(
@@ -464,7 +445,6 @@ mod tests {
             Some(&"myapp-local".to_string())
         );
 
-        // prodステージ
         let (config_prod, _) = service_to_container_config("api", &service, "prod", "myapp");
         let labels_prod = config_prod.labels.unwrap();
         assert_eq!(
@@ -481,7 +461,6 @@ mod tests {
     fn test_orbstack_labels_with_multiple_projects() {
         let service = Service::default();
 
-        // プロジェクトA
         let (config_a, _) = service_to_container_config("db", &service, "local", "project-a");
         let labels_a = config_a.labels.unwrap();
         assert_eq!(
@@ -493,7 +472,6 @@ mod tests {
             Some(&"project-a".to_string())
         );
 
-        // プロジェクトB
         let (config_b, _) = service_to_container_config("db", &service, "local", "project-b");
         let labels_b = config_b.labels.unwrap();
         assert_eq!(
@@ -534,7 +512,6 @@ mod tests {
                 "curl -f http://localhost:3000/health || exit 1".to_string()
             ])
         );
-        // 秒 → ナノ秒変換を確認
         assert_eq!(healthcheck.interval, Some(30_000_000_000));
         assert_eq!(healthcheck.timeout, Some(5_000_000_000));
         assert_eq!(healthcheck.retries, Some(3));
@@ -550,7 +527,6 @@ mod tests {
 
         let (config, _) = service_to_container_config("api", &service, "local", "test");
 
-        // HealthCheckが設定されていない場合はNone
         assert!(config.healthcheck.is_none());
     }
 }

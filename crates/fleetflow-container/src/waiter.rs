@@ -3,12 +3,9 @@
 //! K8sのReadiness Probeのコンセプトを取り入れた、
 //! 依存サービスの準備完了を待機する機能を提供します。
 
-// Bollard 0.19.4 の非推奨APIを一時的に使用
-#![allow(deprecated)]
-
 use crate::error::{ContainerError, Result};
 use bollard::Docker;
-use bollard::container::InspectContainerOptions;
+use bollard::query_parameters::InspectContainerOptions;
 use bollard::models::HealthStatusEnum;
 use fleetflow_core::WaitConfig;
 use std::time::Duration;
