@@ -3,6 +3,7 @@
 KDL で設定を書き、ローカルから本番まで同じファイルでコンテナ環境を管理する。
 
 [![CI](https://github.com/chronista-club/fleetflow/actions/workflows/ci.yml/badge.svg)](https://github.com/chronista-club/fleetflow/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/chronista-club/fleetflow/graph/badge.svg)](https://codecov.io/gh/chronista-club/fleetflow)
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](LICENSE-MIT)
 
 ## インストール・更新
