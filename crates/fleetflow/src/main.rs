@@ -114,10 +114,10 @@ enum Commands {
         #[arg(last = true)]
         command: Vec<String>,
     },
-    /// サービスを再起動
+    /// サービスまたはステージ全体を再起動
     Restart {
-        /// サービス名
-        service: String,
+        /// サービス名（省略時はステージ全体を再起動）
+        service: Option<String>,
         /// ステージ名 (local, dev, stg, prod)
         /// 環境変数 FLEET_STAGE または --stage オプションで指定
         #[arg(short, long, env = "FLEET_STAGE")]
