@@ -298,13 +298,13 @@ enum StageCommands {
         /// ステージ名 (local, dev, pre, prod)
         stage: String,
         /// 特定サービスのログのみ
-        #[arg(short, long)]
+        #[arg(short = 'n', long)]
         service: Option<String>,
         /// リアルタイム追従
         #[arg(short, long)]
         follow: bool,
         /// 最新N行
-        #[arg(short = 'n', long, default_value = "100")]
+        #[arg(short = 't', long, default_value = "100")]
         tail: usize,
     },
     /// コンテナ一覧
