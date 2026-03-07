@@ -2,6 +2,23 @@
 
 FleetFlow の変更履歴。[Conventional Commits](https://www.conventionalcommits.org) に準拠。
 
+## [0.8.1] - 2026-03-07
+
+### Features
+
+- Exec のインタラクティブモード対応 (#95)
+- --dry-run フラグ追加（up/deploy） (#90)
+- Fleet status コマンド追加 — 設定 vs 実態の差分表示 (#91)
+- Start/stop/restart のステージ・サービス指定を統一 (#63, #61)
+
+### Miscellaneous
+
+- カバレッジ計測 CI 導入 + Docker 統合テスト再有効化 (#81, #78)
+
+### Testing
+
+- MCP クレートにユニットテスト 20 件追加 (#80)
+- Cloud クレートにユニットテスト 152 件追加 (#80)
 ## [0.8.0] - 2026-03-07
 
 ### Bug Fixes
@@ -22,6 +39,7 @@ FleetFlow の変更履歴。[Conventional Commits](https://www.conventionalcommi
 
 ### Miscellaneous
 
+- V0.8.0 リリース — セキュリティ修正 + フォーマット整理
 - Cargo-deny 導入（ライセンス・脆弱性チェック） (#79)
 - CHANGELOG 自動生成 + git-cliff 導入 (#73)
 - Dependabot 導入 (#76)
