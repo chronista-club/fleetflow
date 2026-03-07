@@ -533,3 +533,335 @@ pub async fn run_server() -> Result<()> {
 
     Ok(())
 }
+
+// ============================================================================
+// テスト
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    // ------------------------------------------------------------------------
+    // パラメータのデシリアライズ
+    // ------------------------------------------------------------------------
+
+    #[test]
+    fn stage_param_deserialize() {
+        let v = json!({"stage": "local"});
+        let p: StageParam = serde_json::from_value(v).unwrap();
+        assert_eq!(p.stage, "local");
+    }
+
+    #[test]
+    fn down_param_remove_defaults_to_false() {
+        let v = json!({"stage": "dev"});
+        let p: DownParam = serde_json::from_value(v).unwrap();
+        assert_eq!(p.stage, "dev");
+        assert!(!p.remove, "remove should default to false");
+    }
+
+    #[test]
+    fn down_param_remove_true() {
+        let v = json!({"stage": "dev", "remove": true});
+        let p: DownParam = serde_json::from_value(v).unwrap();
+        assert!(p.remove);
+    }
+
+    #[test]
+    fn logs_param_optional_fields() {
+        let v = json!({"stage": "prod"});
+        let p: LogsParam = serde_json::from_value(v).unwrap();
+        assert_eq!(p.stage, "prod");
+        assert!(p.service.is_none());
+        assert!(p.tail.is_none());
+    }
+
+    #[test]
+    fn logs_param_with_all_fields() {
+        let v = json!({"stage": "local", "service": "web", "tail": 100});
+        let p: LogsParam = serde_json::from_value(v).unwrap();
+        assert_eq!(p.stage, "local");
+        assert_eq!(p.service.as_deref(), Some("web"));
+        assert_eq!(p.tail, Some(100));
+    }
+
+    #[test]
+    fn restart_param_deserialize() {
+        let v = json!({"stage": "dev", "service": "api"});
+        let p: RestartParam = serde_json::from_value(v).unwrap();
+        assert_eq!(p.stage, "dev");
+        assert_eq!(p.service, "api");
+    }
+
+    #[test]
+    fn restart_param_missing_service_fails() {
+        let v = json!({"stage": "dev"});
+        let result = serde_json::from_value::<RestartParam>(v);
+        assert!(result.is_err(), "service is required");
+    }
+
+    #[test]
+    fn build_param_defaults() {
+        let v = json!({"stage": "local"});
+        let p: BuildParam = serde_json::from_value(v).unwrap();
+        assert_eq!(p.stage, "local");
+        assert!(p.service.is_none());
+        assert!(!p.no_cache, "no_cache should default to false");
+    }
+
+    #[test]
+    fn build_param_with_all_fields() {
+        let v = json!({"stage": "prod", "service": "api", "no_cache": true});
+        let p: BuildParam = serde_json::from_value(v).unwrap();
+        assert_eq!(p.stage, "prod");
+        assert_eq!(p.service.as_deref(), Some("api"));
+        assert!(p.no_cache);
+    }
+
+    // ------------------------------------------------------------------------
+    // ツールルーター・ツール定義
+    // ------------------------------------------------------------------------
+
+    /// 期待する全ツール名
+    const EXPECTED_TOOLS: &[&str] = &[
+        "fleetflow_inspect_project",
+        "fleetflow_ps",
+        "fleetflow_up",
+        "fleetflow_down",
+        "fleetflow_logs",
+        "fleetflow_restart",
+        "fleetflow_validate",
+        "fleetflow_build",
+    ];
+
+    #[test]
+    fn server_registers_all_tools() {
+        let server = FleetFlowServer::new();
+        let tools = server.tool_router.list_all();
+        let names: Vec<&str> = tools.iter().map(|t| t.name.as_ref()).collect();
+
+        for expected in EXPECTED_TOOLS {
+            assert!(
+                names.contains(expected),
+                "tool '{}' should be registered, got: {:?}",
+                expected,
+                names,
+            );
+        }
+
+        assert_eq!(
+            tools.len(),
+            EXPECTED_TOOLS.len(),
+            "tool count mismatch: expected {}, got {} ({:?})",
+            EXPECTED_TOOLS.len(),
+            tools.len(),
+            names,
+        );
+    }
+
+    #[test]
+    fn all_tools_have_descriptions() {
+        let server = FleetFlowServer::new();
+        let tools = server.tool_router.list_all();
+
+        for tool in &tools {
+            assert!(
+                tool.description.is_some(),
+                "tool '{}' should have a description",
+                tool.name,
+            );
+            let desc = tool.description.as_deref().unwrap();
+            assert!(
+                !desc.is_empty(),
+                "tool '{}' description should not be empty",
+                tool.name,
+            );
+        }
+    }
+
+    #[test]
+    fn all_tools_have_input_schema() {
+        let server = FleetFlowServer::new();
+        let tools = server.tool_router.list_all();
+
+        for tool in &tools {
+            // input_schema は JsonObject (serde_json::Map) — 空でないことを確認
+            assert!(
+                !tool.input_schema.is_empty(),
+                "tool '{}' should have a non-empty input_schema",
+                tool.name,
+            );
+            // type: "object" が含まれていること（JSON Schema の基本）
+            assert_eq!(
+                tool.input_schema.get("type").and_then(|v| v.as_str()),
+                Some("object"),
+                "tool '{}' input_schema should have type=object",
+                tool.name,
+            );
+        }
+    }
+
+    #[test]
+    fn parameterless_tools_have_no_required_fields() {
+        let server = FleetFlowServer::new();
+        let tools = server.tool_router.list_all();
+
+        let parameterless = [
+            "fleetflow_inspect_project",
+            "fleetflow_ps",
+            "fleetflow_validate",
+        ];
+        for tool in &tools {
+            if parameterless.contains(&tool.name.as_ref()) {
+                // required は存在しないか、空配列であるべき
+                let required = tool.input_schema.get("required");
+                if let Some(req) = required {
+                    let arr = req.as_array().expect("required should be an array");
+                    assert!(
+                        arr.is_empty(),
+                        "tool '{}' should have no required params, got: {:?}",
+                        tool.name,
+                        arr,
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn up_tool_requires_stage_parameter() {
+        let server = FleetFlowServer::new();
+        let tools = server.tool_router.list_all();
+        let up_tool = tools.iter().find(|t| t.name == "fleetflow_up").unwrap();
+
+        let required = up_tool
+            .input_schema
+            .get("required")
+            .and_then(|v| v.as_array())
+            .expect("fleetflow_up should have required fields");
+
+        let required_names: Vec<&str> = required.iter().filter_map(|v| v.as_str()).collect();
+        assert!(
+            required_names.contains(&"stage"),
+            "fleetflow_up should require 'stage', got: {:?}",
+            required_names,
+        );
+    }
+
+    #[test]
+    fn down_tool_requires_stage_parameter() {
+        let server = FleetFlowServer::new();
+        let tools = server.tool_router.list_all();
+        let tool = tools.iter().find(|t| t.name == "fleetflow_down").unwrap();
+
+        let required = tool
+            .input_schema
+            .get("required")
+            .and_then(|v| v.as_array())
+            .expect("fleetflow_down should have required fields");
+
+        let required_names: Vec<&str> = required.iter().filter_map(|v| v.as_str()).collect();
+        assert!(required_names.contains(&"stage"));
+        // remove はデフォルト値があるので required でないはず
+        assert!(
+            !required_names.contains(&"remove"),
+            "'remove' should not be required (has serde default)",
+        );
+    }
+
+    #[test]
+    fn logs_tool_schema_has_optional_service_and_tail() {
+        let server = FleetFlowServer::new();
+        let tools = server.tool_router.list_all();
+        let tool = tools.iter().find(|t| t.name == "fleetflow_logs").unwrap();
+
+        let required = tool
+            .input_schema
+            .get("required")
+            .and_then(|v| v.as_array())
+            .expect("fleetflow_logs should have required fields");
+
+        let required_names: Vec<&str> = required.iter().filter_map(|v| v.as_str()).collect();
+        assert!(required_names.contains(&"stage"));
+        assert!(
+            !required_names.contains(&"service"),
+            "'service' should be optional",
+        );
+        assert!(
+            !required_names.contains(&"tail"),
+            "'tail' should be optional",
+        );
+    }
+
+    #[test]
+    fn restart_tool_requires_stage_and_service() {
+        let server = FleetFlowServer::new();
+        let tools = server.tool_router.list_all();
+        let tool = tools
+            .iter()
+            .find(|t| t.name == "fleetflow_restart")
+            .unwrap();
+
+        let required = tool
+            .input_schema
+            .get("required")
+            .and_then(|v| v.as_array())
+            .expect("fleetflow_restart should have required fields");
+
+        let required_names: Vec<&str> = required.iter().filter_map(|v| v.as_str()).collect();
+        assert!(required_names.contains(&"stage"));
+        assert!(required_names.contains(&"service"));
+    }
+
+    #[test]
+    fn build_tool_requires_only_stage() {
+        let server = FleetFlowServer::new();
+        let tools = server.tool_router.list_all();
+        let tool = tools.iter().find(|t| t.name == "fleetflow_build").unwrap();
+
+        let required = tool
+            .input_schema
+            .get("required")
+            .and_then(|v| v.as_array())
+            .expect("fleetflow_build should have required fields");
+
+        let required_names: Vec<&str> = required.iter().filter_map(|v| v.as_str()).collect();
+        assert!(required_names.contains(&"stage"));
+        assert!(
+            !required_names.contains(&"service"),
+            "'service' should be optional"
+        );
+        assert!(
+            !required_names.contains(&"no_cache"),
+            "'no_cache' should not be required (has serde default)",
+        );
+    }
+
+    // ------------------------------------------------------------------------
+    // ServerHandler::get_info
+    // ------------------------------------------------------------------------
+
+    #[test]
+    fn server_info_has_instructions() {
+        let server = FleetFlowServer::new();
+        let info = server.get_info();
+        let instructions = info.instructions.expect("instructions should be set");
+        assert!(
+            instructions.contains("FleetFlow"),
+            "instructions should mention FleetFlow",
+        );
+    }
+
+    // ------------------------------------------------------------------------
+    // Default trait
+    // ------------------------------------------------------------------------
+
+    #[test]
+    fn server_default_creates_valid_instance() {
+        let server = FleetFlowServer::default();
+        let tools = server.tool_router.list_all();
+        assert_eq!(tools.len(), EXPECTED_TOOLS.len());
+    }
+}
