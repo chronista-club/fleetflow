@@ -7,6 +7,7 @@ pub mod registry;
 pub mod restart;
 pub mod stage;
 pub mod start;
+pub mod status;
 pub mod stop;
 pub mod up;
 pub mod validate;
