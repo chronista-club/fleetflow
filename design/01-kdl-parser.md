@@ -18,7 +18,7 @@ FlowConfig (Internal Model)
 
 ## コンポーネント設計
 
-### Parser Module (`flow-atom/src/parser.rs`)
+### Parser Module (`fleetflow-core/src/parser.rs`)
 
 #### 公開API
 

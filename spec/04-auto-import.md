@@ -396,7 +396,7 @@ service "postgres" {
 **オーバーライドファイル**:
 
 ```
-flow.local.kdl    # ルートディレクトリに配置（gitignore推奨）
+fleet.local.kdl    # ルートディレクトリに配置（gitignore推奨）
 ```
 
 **読み込み順序**:
@@ -405,13 +405,13 @@ flow.local.kdl    # ルートディレクトリに配置（gitignore推奨）
 1. fleet.kdl
 2. services/**/*.kdl
 3. stages/**/*.kdl
-4. flow.local.kdl  ← 最後に読み込み、すべてをオーバーライド可能
+4. fleet.local.kdl  ← 最後に読み込み、すべてをオーバーライド可能
 ```
 
 **例**:
 
 ```kdl
-// flow.local.kdl（個人用カスタマイズ、git管理外）
+// fleet.local.kdl（個人用カスタマイズ、git管理外）
 service "postgres" {
     version "16"  // チームの標準は15だが、個人的に16を使いたい
     
@@ -624,7 +624,7 @@ include "stages/local.kdl"
 ### Phase 3: 拡張機能
 
 - [ ] variables/ のサポート
-- [ ] flow.local.kdl のオーバーライド
+- [ ] fleet.local.kdl のオーバーライド
 - [ ] デバッグモード
 
 ### Phase 4: 最適化

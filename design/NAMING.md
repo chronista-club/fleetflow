@@ -42,9 +42,9 @@ fleetflow.toml
 ### CLIコマンド例
 ```bash
 fleet deploy
-flow status
-flow cluster list
-flow flow run
+fleet status
+fleet cluster list
+fleet flow run
 ```
 
 ### Dockerイメージ

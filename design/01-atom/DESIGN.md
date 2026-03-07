@@ -119,26 +119,26 @@ pub host: PathBuf,  // String ではなく PathBuf
 
 ```
 ┌─────────────────────────────────┐
-│   CLI Layer (flow-cli)          │
+│   CLI Layer (fleetflow-cli)          │
 │   - コマンド解析                 │
 │   - ユーザーインターフェース      │
 └────────────┬────────────────────┘
              │
 ┌────────────▼────────────────────┐
-│   Config Layer (flow-config)    │
+│   Config Layer (fleetflow-config)    │
 │   - 設定ファイル検索             │
 │   - パス解決                     │
 └────────────┬────────────────────┘
              │
 ┌────────────▼────────────────────┐
-│   Core Layer (flow-atom)        │
+│   Core Layer (fleetflow-core)        │
 │   - KDLパース                    │
 │   - データモデル                 │
 │   - バリデーション               │
 └────────────┬────────────────────┘
              │
 ┌────────────▼────────────────────┐
-│   Runtime Layer (flow-container)│
+│   Runtime Layer (fleetflow-container)│
 │   - Docker API呼び出し           │
 │   - コンテナ管理                 │
 └─────────────────────────────────┘
@@ -148,15 +148,15 @@ pub host: PathBuf,  // String ではなく PathBuf
 
 ```
 fleetfleet.kdl (ファイル)
-    ↓ [flow-config]
+    ↓ [fleetflow-config]
 設定ファイルパス解決
-    ↓ [flow-atom::parser]
+    ↓ [fleetflow-core::parser]
 KdlDocument
-    ↓ [flow-atom::parser]
+    ↓ [fleetflow-core::parser]
 FlowConfig (内部モデル)
-    ↓ [flow-atom::validator]
+    ↓ [fleetflow-core::validator]
 検証済みFlowConfig
-    ↓ [flow-container]
+    ↓ [fleetflow-container]
 Docker API呼び出し
     ↓
 コンテナ起動
@@ -241,13 +241,13 @@ _ => eprintln!("Warning: Unknown node '{}'", node.name()),
 ### エラー型の階層
 
 ```rust
-FlowError (flow-atom)
+FlowError (fleetflow-core)
 ├── KdlParse(kdl::KdlError)      // KDL構文エラー
 ├── InvalidConfig(String)         // 設定エラー
 ├── ServiceNotFound(String)       // サービス参照エラー
 └── CircularDependency(String)    // 循環依存
 
-ConfigError (flow-config)
+ConfigError (fleetflow-config)
 ├── ConfigDirNotFound
 ├── FleetFlowFileNotFound(PathBuf)
 └── Io(std::io::Error)

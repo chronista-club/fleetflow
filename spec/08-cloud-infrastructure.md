@@ -218,10 +218,10 @@ fleet up --stage dev
 fleet down --stage dev
 
 # 差分を確認（dry-run）
-flow plan --stage dev
+fleet plan --stage dev
 
 # 状態を確認
-flow status --stage dev
+fleet status --stage dev
 ```
 
 ## 設計原則

@@ -161,7 +161,7 @@ service "api" {
 | **抽象度**   | 高い（論理的）       | 低い（物理的）          |
 | **定義場所** | fleet.kdl             | 実行時にDockerが作成    |
 | **スコープ** | アプリケーション全体 | 1つの実行インスタンス   |
-| **例**       | "postgres"サービス   | flow-postgres-1コンテナ |
+| **例**       | "postgres"サービス   | {project}-{stage}-postgresコンテナ |
 
 **関係性**:
 
@@ -170,7 +170,7 @@ Service (fleet.kdl)
   ↓ 変換
 Docker Image (postgres:16)
   ↓ 起動
-Container (flow-postgres-1)
+Container ({project}-{stage}-postgres)
 ```
 
 #### サービスの状態遷移

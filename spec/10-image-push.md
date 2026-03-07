@@ -13,7 +13,7 @@
 
 現在のFleetFlowは以下の機能を持っている：
 - ローカルでのDockerイメージビルド（`fleet build`）
-- クラウドサーバーへのデプロイ（`flow cloud up`）
+- クラウドサーバーへのデプロイ（`fleet cloud up`）
 
 しかし、CI/CDパイプラインや本番更新では以下のフローが必要：
 
@@ -44,7 +44,7 @@ jobs:
       - name: Build and Push
         run: fleet build --push --tag ${{ github.sha }} live
       - name: Deploy
-        run: flow cloud up --stage live
+        run: fleet cloud up --stage live
 ```
 
 #### UC-2: 手動でのリリース
@@ -53,7 +53,7 @@ jobs:
 # ローカルからリリース
 docker login ghcr.io
 fleet build --push --tag v1.2.0 live
-flow cloud up --stage live
+fleet cloud up --stage live
 ```
 
 #### UC-3: 開発中のテストデプロイ
@@ -61,7 +61,7 @@ flow cloud up --stage live
 ```bash
 # 開発ブランチのイメージをdevサーバーにデプロイ
 fleet build --push --tag feature-xxx dev
-flow cloud up --stage dev
+fleet cloud up --stage dev
 ```
 
 ## 機能仕様

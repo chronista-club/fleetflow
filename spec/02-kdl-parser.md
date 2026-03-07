@@ -117,7 +117,7 @@ service "api" {
     env { NODE_ENV "production" }
 }
 
-// flow.local.kdl（ローカルオーバーライド）
+// fleet.local.kdl（ローカルオーバーライド）
 service "api" {
     env { DATABASE_URL "localhost:5432" }
 }
@@ -267,8 +267,8 @@ FlowConfig {
 - `std::collections::HashMap`
 
 ### 内部モジュール
-- `flow-atom::model` (データモデル)
-- `flow-atom::error` (エラー型)
+- `fleetflow-core::model` (データモデル)
+- `fleetflow-core::error` (エラー型)
 
 ## パース対象ノード
 

@@ -367,27 +367,27 @@ fleet up --build --no-cache local
 - キャッシュを使わずにフルビルド
 - 依存関係の更新時などに使用
 
-### 2. `flow rebuild`（新規コマンド）
+### 2. `fleet rebuild`（新規コマンド）
 
 特定のサービスを再ビルドする専用コマンド。
 
 #### 2.1 基本構文
 
 ```bash
-flow rebuild <service> [stage]
+fleet rebuild <service> [stage]
 ```
 
 #### 2.2 使用例
 
 ```bash
 # apiサービスをリビルド
-flow rebuild api
+fleet rebuild api
 
 # localステージのapiサービスをリビルド
-flow rebuild api local
+fleet rebuild api local
 
 # キャッシュなしでリビルド
-flow rebuild api --no-cache
+fleet rebuild api --no-cache
 ```
 
 #### 2.3 動作

@@ -185,7 +185,7 @@ fleet down
 
 **振る舞い**:
 1. Docker に接続
-2. flow- プレフィックスのコンテナを取得
+2. fleetflow.project ラベルのコンテナを取得
 3. ステージが指定されていればフィルタ
 4. 表形式で表示
 
@@ -408,13 +408,13 @@ $ fleet up
 
 ```bash
 # ステージ間のデータ移行
-flow migrate --from=local --to=dev
+fleet migrate --from=local --to=dev
 
 # ヘルスチェック
-flow health --stage=local
+fleet health --stage=local
 
 # リソース使用状況
-flow stats --stage=local
+fleet stats --stage=local
 ```
 
 ただし、これらは「本当に必要」と確信できた時だけ追加する。

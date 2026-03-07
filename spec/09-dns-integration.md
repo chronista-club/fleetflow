@@ -60,7 +60,7 @@ APIトークンは https://dash.cloudflare.com/profile/api-tokens で作成。
 ### cloud up
 
 ```bash
-flow cloud up --stage live --yes
+fleet cloud up --stage live --yes
 ```
 
 1. クラウドプロバイダーでサーバー作成
@@ -72,7 +72,7 @@ flow cloud up --stage live --yes
 ### cloud down
 
 ```bash
-flow cloud down --stage live --yes
+fleet cloud down --stage live --yes
 ```
 
 1. SSH接続してコンテナ停止
@@ -85,13 +85,13 @@ DNS操作のみを行う補助コマンド:
 
 ```bash
 # 現在のDNSレコード一覧
-flow cloud dns list
+fleet cloud dns list
 
 # 手動でレコード追加
-flow cloud dns add --subdomain mcp-prod --ip 203.0.113.1
+fleet cloud dns add --subdomain mcp-prod --ip 203.0.113.1
 
 # 手動でレコード削除
-flow cloud dns remove --subdomain mcp-prod
+fleet cloud dns remove --subdomain mcp-prod
 ```
 
 ## DNS設定
