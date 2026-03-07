@@ -16,6 +16,14 @@ use std::path::PathBuf;
 struct Cli {
     #[command(subcommand)]
     command: Commands,
+
+    /// 詳細な出力を表示
+    #[arg(short, long, global = true, conflicts_with = "quiet")]
+    verbose: bool,
+
+    /// エラー以外の出力を抑制
+    #[arg(short, long, global = true)]
+    quiet: bool,
 }
 
 #[derive(Subcommand)]
@@ -347,7 +355,24 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // 通常のCLIコマンドはstderrにログ出力
-    tracing_subscriber::fmt::init();
+    // -v/--verbose → debug, -q/--quiet → error, デフォルト → RUST_LOG or info
+    let log_level = if cli.verbose {
+        "debug"
+    } else if cli.quiet {
+        "error"
+    } else {
+        ""
+    };
+
+    if log_level.is_empty() {
+        tracing_subscriber::fmt::init();
+    } else {
+        tracing_subscriber::fmt()
+            .with_env_filter(
+                tracing_subscriber::EnvFilter::new(log_level),
+            )
+            .init();
+    }
 
     // Versionコマンドは設定ファイル不要
     if matches!(cli.command, Commands::Version) {
