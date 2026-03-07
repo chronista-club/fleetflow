@@ -44,6 +44,9 @@ enum Commands {
         /// 起動前に最新イメージをpullする
         #[arg(short, long)]
         pull: bool,
+        /// 実行せずに実行計画のみ表示
+        #[arg(long)]
+        dry_run: bool,
     },
     /// ステージを停止
     Down {
@@ -105,6 +108,20 @@ enum Commands {
         #[arg(short, long)]
         all: bool,
     },
+    /// プロジェクトの状態を表示（設定 vs 実態）
+    Status {
+        /// ステージ名 (local, dev, stg, prod)
+        stage: Option<String>,
+        /// ステージ名 (-s/--stage フラグ、FLEET_STAGE 環境変数)
+        #[arg(
+            short = 's',
+            long = "stage",
+            env = "FLEET_STAGE",
+            conflicts_with = "stage",
+            hide = true
+        )]
+        stage_flag: Option<String>,
+    },
     /// サービスコンテナ内でコマンドを実行
     Exec {
         /// ステージ名 (local, dev, stg, prod)
@@ -121,36 +138,66 @@ enum Commands {
         /// サービス名
         #[arg(short = 'n', long)]
         service: String,
+        /// インタラクティブモード（stdinを接続）
+        #[arg(short = 'i', long)]
+        interactive: bool,
+        /// 擬似TTYを割り当て
+        #[arg(short = 't', long)]
+        tty: bool,
         /// 実行するコマンド（-- 以降）。省略時は /bin/sh
         #[arg(last = true)]
         command: Vec<String>,
     },
     /// サービスまたはステージ全体を再起動
     Restart {
-        /// サービス名（省略時はステージ全体を再起動）
-        service: Option<String>,
         /// ステージ名 (local, dev, stg, prod)
-        /// 環境変数 FLEET_STAGE または --stage オプションで指定
-        #[arg(short, long, env = "FLEET_STAGE")]
         stage: Option<String>,
+        /// ステージ名 (-s/--stage フラグ、FLEET_STAGE 環境変数)
+        #[arg(
+            short = 's',
+            long = "stage",
+            env = "FLEET_STAGE",
+            conflicts_with = "stage",
+            hide = true
+        )]
+        stage_flag: Option<String>,
+        /// サービス名（省略時はステージ全体を再起動）
+        #[arg(short = 'n', long)]
+        service: Option<String>,
     },
     /// サービスまたはステージ全体を停止
     Stop {
-        /// サービス名（省略時はステージ全体を停止）
-        service: Option<String>,
         /// ステージ名 (local, dev, stg, prod)
-        /// 環境変数 FLEET_STAGE または --stage オプションで指定
-        #[arg(short, long, env = "FLEET_STAGE")]
         stage: Option<String>,
+        /// ステージ名 (-s/--stage フラグ、FLEET_STAGE 環境変数)
+        #[arg(
+            short = 's',
+            long = "stage",
+            env = "FLEET_STAGE",
+            conflicts_with = "stage",
+            hide = true
+        )]
+        stage_flag: Option<String>,
+        /// サービス名（省略時はステージ全体を停止）
+        #[arg(short = 'n', long)]
+        service: Option<String>,
     },
     /// サービスまたはステージ全体を起動
     Start {
-        /// サービス名（省略時はステージ全体を起動）
-        service: Option<String>,
         /// ステージ名 (local, dev, stg, prod)
-        /// 環境変数 FLEET_STAGE または --stage オプションで指定
-        #[arg(short, long, env = "FLEET_STAGE")]
         stage: Option<String>,
+        /// ステージ名 (-s/--stage フラグ、FLEET_STAGE 環境変数)
+        #[arg(
+            short = 's',
+            long = "stage",
+            env = "FLEET_STAGE",
+            conflicts_with = "stage",
+            hide = true
+        )]
+        stage_flag: Option<String>,
+        /// サービス名（省略時はステージ全体を起動）
+        #[arg(short = 'n', long)]
+        service: Option<String>,
     },
     /// 設定を検証
     Validate {
@@ -197,6 +244,9 @@ enum Commands {
         /// 確認なしで実行
         #[arg(short, long)]
         yes: bool,
+        /// 実行せずに実行計画のみ表示
+        #[arg(long)]
+        dry_run: bool,
     },
     /// Dockerイメージをビルド
     Build {
@@ -462,12 +512,21 @@ async fn main() -> anyhow::Result<()> {
         Commands::Ps {
             stage, stage_flag, ..
         } => stage.as_deref().or(stage_flag.as_deref()),
+        Commands::Status {
+            stage, stage_flag, ..
+        } => stage.as_deref().or(stage_flag.as_deref()),
         Commands::Exec {
             stage, stage_flag, ..
         } => stage.as_deref().or(stage_flag.as_deref()),
-        Commands::Restart { stage, .. } => stage.as_deref(),
-        Commands::Stop { stage, .. } => stage.as_deref(),
-        Commands::Start { stage, .. } => stage.as_deref(),
+        Commands::Restart {
+            stage, stage_flag, ..
+        } => stage.as_deref().or(stage_flag.as_deref()),
+        Commands::Stop {
+            stage, stage_flag, ..
+        } => stage.as_deref().or(stage_flag.as_deref()),
+        Commands::Start {
+            stage, stage_flag, ..
+        } => stage.as_deref().or(stage_flag.as_deref()),
         Commands::Validate {
             stage, stage_flag, ..
         } => stage.as_deref().or(stage_flag.as_deref()),
@@ -532,9 +591,10 @@ async fn main() -> anyhow::Result<()> {
             stage,
             stage_flag,
             pull,
+            dry_run,
         } => {
             let stage = stage.or(stage_flag);
-            commands::up::handle(&config, &project_root, stage, pull).await?;
+            commands::up::handle(&config, &project_root, stage, pull, dry_run).await?;
         }
         Commands::Down {
             stage,
@@ -551,6 +611,10 @@ async fn main() -> anyhow::Result<()> {
         } => {
             let stage = stage.or(stage_flag);
             commands::ps::handle(&config, &project_root, stage, all).await?;
+        }
+        Commands::Status { stage, stage_flag } => {
+            let stage = stage.or(stage_flag);
+            commands::status::handle(&config, &project_root, stage).await?;
         }
         Commands::Logs {
             stage,
@@ -572,13 +636,28 @@ async fn main() -> anyhow::Result<()> {
             )
             .await?;
         }
-        Commands::Restart { service, stage } => {
+        Commands::Restart {
+            stage,
+            stage_flag,
+            service,
+        } => {
+            let stage = stage.or(stage_flag);
             commands::restart::handle(&config, service, stage).await?;
         }
-        Commands::Stop { service, stage } => {
+        Commands::Stop {
+            stage,
+            stage_flag,
+            service,
+        } => {
+            let stage = stage.or(stage_flag);
             commands::stop::handle(&config, service, stage).await?;
         }
-        Commands::Start { service, stage } => {
+        Commands::Start {
+            stage,
+            stage_flag,
+            service,
+        } => {
+            let stage = stage.or(stage_flag);
             commands::start::handle(&config, service, stage).await?;
         }
         Commands::Deploy {
@@ -588,6 +667,7 @@ async fn main() -> anyhow::Result<()> {
             no_pull,
             no_prune,
             yes,
+            dry_run,
         } => {
             let stage = stage.or(stage_flag);
             commands::deploy::handle(
@@ -598,6 +678,7 @@ async fn main() -> anyhow::Result<()> {
                 no_pull,
                 no_prune,
                 yes,
+                dry_run,
             )
             .await?;
         }
@@ -655,10 +736,12 @@ async fn main() -> anyhow::Result<()> {
             stage,
             stage_flag,
             service,
+            interactive,
+            tty,
             command,
         } => {
             let stage = stage.or(stage_flag);
-            commands::exec::handle(&config, stage, service, command).await?;
+            commands::exec::handle(&config, stage, service, command, interactive, tty).await?;
         }
         Commands::Registry(_) => {
             unreachable!("Registry is handled before config loading");
