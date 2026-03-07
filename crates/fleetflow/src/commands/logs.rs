@@ -6,7 +6,7 @@ pub async fn handle(
     config: &fleetflow_core::Flow,
     project_root: &std::path::Path,
     stage: Option<String>,
-    service: Option<String>,
+    services: &[String],
     lines: usize,
     follow: bool,
 ) -> anyhow::Result<()> {
@@ -27,19 +27,8 @@ pub async fn handle(
         .get(&stage_name)
         .ok_or_else(|| anyhow::anyhow!("ステージ '{}' が見つかりません", stage_name))?;
 
-    let target_services = if let Some(ref service_name) = service {
-        if !stage_config.services.contains(service_name) {
-            return Err(anyhow::anyhow!(
-                "サービス '{}' はステージ '{}' に存在しません。\n利用可能なサービス: {}",
-                service_name,
-                stage_name,
-                stage_config.services.join(", ")
-            ));
-        }
-        vec![service_name.clone()]
-    } else {
-        stage_config.services.clone()
-    };
+    let target_services =
+        utils::filter_services(&stage_config.services, services, &stage_name)?;
 
     println!();
 

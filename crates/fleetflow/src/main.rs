@@ -67,9 +67,9 @@ enum Commands {
             hide = true
         )]
         stage_flag: Option<String>,
-        /// サービス名（指定しない場合は全サービス）
+        /// サービス名（複数指定可、省略時は全サービス）
         #[arg(short = 'n', long)]
-        service: Option<String>,
+        service: Vec<String>,
         /// ログの行数を指定
         #[arg(short = 'l', long, default_value = "100")]
         lines: usize,
@@ -123,19 +123,19 @@ enum Commands {
         #[arg(short, long, env = "FLEET_STAGE")]
         stage: Option<String>,
     },
-    /// サービスを停止
+    /// サービスまたはステージ全体を停止
     Stop {
-        /// サービス名
-        service: String,
+        /// サービス名（省略時はステージ全体を停止）
+        service: Option<String>,
         /// ステージ名 (local, dev, stg, prod)
         /// 環境変数 FLEET_STAGE または --stage オプションで指定
         #[arg(short, long, env = "FLEET_STAGE")]
         stage: Option<String>,
     },
-    /// サービスを起動
+    /// サービスまたはステージ全体を起動
     Start {
-        /// サービス名
-        service: String,
+        /// サービス名（省略時はステージ全体を起動）
+        service: Option<String>,
         /// ステージ名 (local, dev, stg, prod)
         /// 環境変数 FLEET_STAGE または --stage オプションで指定
         #[arg(short, long, env = "FLEET_STAGE")]
@@ -534,7 +534,7 @@ async fn main() -> anyhow::Result<()> {
             follow,
         } => {
             let stage = stage.or(stage_flag);
-            commands::logs::handle(&config, &project_root, stage, service, lines, follow).await?;
+            commands::logs::handle(&config, &project_root, stage, &service, lines, follow).await?;
         }
         Commands::Restart { service, stage } => {
             commands::restart::handle(&config, service, stage).await?;
