@@ -61,7 +61,7 @@ pub async fn handle() -> anyhow::Result<()> {
                     eprintln!();
                     eprintln!("{}", "✗ 設定エラー".red().bold());
                     eprintln!("  {}", e);
-                    std::process::exit(1);
+                    return Err(anyhow::anyhow!("設定ファイルの検証に失敗しました: {}", e));
                 }
             }
         }
@@ -71,7 +71,7 @@ pub async fn handle() -> anyhow::Result<()> {
             eprintln!("  {}", e);
             eprintln!();
             eprintln!("fleet.kdl が存在するディレクトリで実行してください");
-            std::process::exit(1);
+            return Err(anyhow::anyhow!("プロジェクトルートが見つかりません: {}", e));
         }
     }
 

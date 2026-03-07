@@ -109,26 +109,9 @@ pub async fn handle_build_command(
     }
 
     // ビルド対象のサービスを決定
-    let target_services: Vec<&String> = if service_filters.is_empty() {
-        // 全サービス
-        stage_config.services.iter().collect()
-    } else {
-        // 指定されたサービスのみ
-        for filter in service_filters {
-            if !stage_config.services.contains(filter) {
-                return Err(anyhow::anyhow!(
-                    "サービス '{}' はステージ '{}' に含まれていません",
-                    filter,
-                    stage_name
-                ));
-            }
-        }
-        stage_config
-            .services
-            .iter()
-            .filter(|s| service_filters.contains(s))
-            .collect()
-    };
+    let target_services_owned =
+        utils::filter_services(&stage_config.services, service_filters, stage_name)?;
+    let target_services: Vec<&String> = target_services_owned.iter().collect();
 
     // ビルド可能なサービスをフィルタ（build設定があるもののみ）
     let buildable_services: Vec<(&String, &fleetflow_core::Service)> = target_services
@@ -201,7 +184,7 @@ pub async fn handle_build_command(
             }
             Err(e) => {
                 eprintln!("  {} Dockerfile解決エラー: {}", "✗".red().bold(), e);
-                return Err(anyhow::anyhow!("Dockerfile解決に失敗しました"));
+                return Err(anyhow::Error::from(e).context("Dockerfile解決に失敗しました"));
             }
         };
 
@@ -210,7 +193,7 @@ pub async fn handle_build_command(
             Ok(path) => path,
             Err(e) => {
                 eprintln!("  {} コンテキスト解決エラー: {}", "✗".red().bold(), e);
-                return Err(anyhow::anyhow!("コンテキスト解決に失敗しました"));
+                return Err(anyhow::Error::from(e).context("コンテキスト解決に失敗しました"));
             }
         };
 
@@ -268,7 +251,10 @@ pub async fn handle_build_command(
                 }
                 Err(e) => {
                     eprintln!("  {} ビルドエラー: {}", "✗".red().bold(), e);
-                    return Err(anyhow::anyhow!("ビルドに失敗しました"));
+                    return Err(e.context(format!(
+                        "サービス '{}' のビルドに失敗しました",
+                        service_name
+                    )));
                 }
             }
         } else {
@@ -291,7 +277,10 @@ pub async fn handle_build_command(
                 }
                 Err(e) => {
                     eprintln!("  {} ビルドエラー: {}", "✗".red().bold(), e);
-                    return Err(anyhow::anyhow!("ビルドに失敗しました"));
+                    return Err(anyhow::Error::from(e).context(format!(
+                        "サービス '{}' のビルドに失敗しました",
+                        service_name
+                    )));
                 }
             }
         }

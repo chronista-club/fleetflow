@@ -42,6 +42,36 @@ pub fn print_loaded_config_files(project_root: &std::path::Path) {
     }
 }
 
+/// サービスフィルタ（ステージ定義順を維持）
+pub fn filter_services(
+    stage_services: &[String],
+    filters: &[String],
+    stage_name: &str,
+) -> anyhow::Result<Vec<String>> {
+    if filters.is_empty() {
+        return Ok(stage_services.to_vec());
+    }
+
+    // 指定されたサービスがステージに存在するか確認
+    for filter in filters {
+        if !stage_services.contains(filter) {
+            return Err(anyhow::anyhow!(
+                "サービス '{}' はステージ '{}' に含まれていません。\n利用可能なサービス: {}",
+                filter,
+                stage_name,
+                stage_services.join(", ")
+            ));
+        }
+    }
+
+    // ステージ定義順を維持してフィルタ
+    Ok(stage_services
+        .iter()
+        .filter(|s| filters.contains(s))
+        .cloned()
+        .collect())
+}
+
 /// 変数を展開する ({{ VAR_NAME }} 形式)
 pub fn expand_variables(
     value: &str,

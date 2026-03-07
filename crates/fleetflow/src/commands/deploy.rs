@@ -25,22 +25,7 @@ pub async fn handle(
         .ok_or_else(|| anyhow::anyhow!("ステージ '{}' が見つかりません", stage_name))?;
 
     // デプロイ対象のサービスを決定（--serviceオプションがあればフィルタ）
-    let target_services: Vec<String> = if services.is_empty() {
-        stage_config.services.clone()
-    } else {
-        // 指定されたサービスがステージに存在するか確認
-        for target in services {
-            if !stage_config.services.contains(target) {
-                return Err(anyhow::anyhow!(
-                    "サービス '{}' はステージ '{}' に存在しません。\n利用可能なサービス: {}",
-                    target,
-                    stage_name,
-                    stage_config.services.join(", ")
-                ));
-            }
-        }
-        services.to_vec()
-    };
+    let target_services = utils::filter_services(&stage_config.services, services, &stage_name)?;
 
     println!();
     if !services.is_empty() {
@@ -166,26 +151,7 @@ pub async fn handle(
         format!("【Step 3/5】ネットワーク準備中: {}", network_name).blue()
     );
 
-    let network_config = bollard::models::NetworkCreateRequest {
-        name: network_name.clone(),
-        driver: Some("bridge".to_string()),
-        ..Default::default()
-    };
-
-    match docker_conn.create_network(network_config).await {
-        Ok(_) => {
-            println!("  ✓ ネットワーク作成完了");
-        }
-        Err(bollard::errors::Error::DockerResponseServerError {
-            status_code: 409, ..
-        }) => {
-            println!("  ✓ ネットワークは既に存在します");
-        }
-        Err(e) => {
-            println!("  ✗ ネットワーク作成エラー: {}", e);
-            return Err(e.into());
-        }
-    }
+    docker::ensure_network(&docker_conn, &network_name).await?;
 
     // 4. コンテナの作成・起動
     println!();

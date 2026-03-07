@@ -94,25 +94,7 @@ pub async fn handle(
     println!();
     println!("{}", format!("🌐 ネットワーク: {}", network_name).blue());
 
-    let network_config = bollard::models::NetworkCreateRequest {
-        name: network_name.clone(),
-        driver: Some("bridge".to_string()),
-        ..Default::default()
-    };
-
-    match docker_conn.create_network(network_config).await {
-        Ok(_) => {
-            println!("  ✓ ネットワーク作成完了");
-        }
-        Err(bollard::errors::Error::DockerResponseServerError {
-            status_code: 409, ..
-        }) => {
-            println!("  ℹ ネットワークは既に存在します");
-        }
-        Err(e) => {
-            eprintln!("  ⚠ ネットワーク作成エラー: {}", e);
-        }
-    }
+    docker::ensure_network(&docker_conn, &network_name).await?;
 
     // 各サービスを起動
     for service_name in &stage_config.services {

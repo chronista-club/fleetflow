@@ -74,7 +74,6 @@ pub async fn handle(
             // コンテナが存在しない場合は作成して起動
             println!("  ℹ コンテナが存在しないため、新規作成します");
 
-            // コンテナ作成・起動（upコマンドのロジックを再利用）
             let (container_config, create_options) =
                 fleetflow_container::service_to_container_config(
                     &service,
@@ -83,37 +82,14 @@ pub async fn handle(
                     &config.name,
                 );
 
-            // イメージ名の取得
-            #[allow(deprecated)]
-            let image = container_config.image.as_ref().ok_or_else(|| {
-                anyhow::anyhow!("サービス '{}' のイメージ設定が見つかりません", service)
-            })?;
+            docker::ensure_container_running(
+                &docker_conn,
+                &container_name,
+                container_config,
+                create_options,
+            )
+            .await?;
 
-            // イメージの存在確認とpull
-            match docker_conn.inspect_image(image).await {
-                Ok(_) => {}
-                Err(bollard::errors::Error::DockerResponseServerError {
-                    status_code: 404, ..
-                }) => {
-                    docker::pull_image(&docker_conn, image).await?;
-                }
-                Err(e) => return Err(e.into()),
-            }
-
-            // コンテナ作成
-            docker_conn
-                .create_container(Some(create_options), container_config)
-                .await?;
-
-            // コンテナ起動
-            docker_conn
-                .start_container(
-                    &container_name,
-                    None::<bollard::query_parameters::StartContainerOptions>,
-                )
-                .await?;
-
-            println!("  ✓ コンテナを作成・起動しました");
             println!();
             println!(
                 "{}",
