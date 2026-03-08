@@ -801,10 +801,7 @@ mod tests {
             app.get_config::<String>("record_type"),
             Some("CNAME".to_string())
         );
-        assert_eq!(
-            app.get_config::<String>("target"),
-            Some("dev".to_string())
-        );
+        assert_eq!(app.get_config::<String>("target"), Some("dev".to_string()));
 
         let cname_api = resource_set.get("dns-record", "dns-cname-api");
         assert!(cname_api.is_some());
