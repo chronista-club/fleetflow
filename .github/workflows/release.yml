@@ -66,8 +66,9 @@ jobs:
           echo "FleetFlow: $FLEET_VER"
           echo "Plugin:    $PLUGIN_VER"
           if [ "$FLEET_VER" != "$PLUGIN_VER" ]; then
-            echo "::warning::プラグインバージョン不一致: FleetFlow=$FLEET_VER, Plugin=$PLUGIN_VER"
-            echo "::warning::claude-plugin-fleetflow のバージョンを $FLEET_VER に更新してください"
+            echo "::error::プラグインバージョン不一致: FleetFlow=$FLEET_VER, Plugin=$PLUGIN_VER"
+            echo "::error::claude-plugin-fleetflow のバージョンを $FLEET_VER に更新してからリリースしてください"
+            exit 1
           else
             echo "✓ バージョン一致"
           fi
@@ -75,7 +76,7 @@ jobs:
   # バイナリビルド＆リリースアップロード
   build-release:
     name: ビルド (${{ matrix.target }})
-    needs: ci-check
+    needs: [ci-check, plugin-version-check]
     strategy:
       fail-fast: false
       matrix:
