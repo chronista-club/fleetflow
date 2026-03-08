@@ -25,7 +25,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: mise のインストール
         uses: jdx/mise-action@v2
@@ -57,7 +57,7 @@ jobs:
     name: プラグインバージョン同期
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: バージョン一致チェック
         run: |
@@ -93,7 +93,7 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: バージョン取得
         id: get_version
