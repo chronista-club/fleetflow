@@ -1,3 +1,4 @@
+pub mod cloud;
 pub mod deploy;
 pub mod down;
 pub mod exec;

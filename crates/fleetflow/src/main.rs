@@ -299,6 +299,9 @@ enum Commands {
     /// Fleet Registryを管理（複数fleetとサーバーの統合管理）
     #[command(subcommand)]
     Registry(RegistryCommands),
+    /// クラウドインフラを管理（サーバー作成・削除・状態確認）
+    #[command(subcommand)]
+    Cloud(CloudCommands),
 }
 
 /// Fleet Registryのサブコマンド
@@ -318,6 +321,39 @@ enum RegistryCommands {
         /// 確認なしで実行
         #[arg(short, long)]
         yes: bool,
+    },
+}
+
+/// クラウドインフラ管理のサブコマンド
+#[derive(Subcommand)]
+enum CloudCommands {
+    /// クラウドプロバイダーの認証状態を確認
+    Auth,
+    /// インフラの変更計画を表示（dry-run）
+    Plan {
+        /// ステージ名 (dev, pre, prod)
+        stage: String,
+    },
+    /// クラウドリソースを作成・更新
+    Up {
+        /// ステージ名 (dev, pre, prod)
+        stage: String,
+        /// 確認プロンプトをスキップ
+        #[arg(short = 'y', long)]
+        yes: bool,
+    },
+    /// クラウドリソースを削除
+    Down {
+        /// ステージ名 (dev, pre, prod)
+        stage: String,
+        /// 確認プロンプトをスキップ
+        #[arg(short = 'y', long)]
+        yes: bool,
+    },
+    /// クラウドリソースの状態を表示
+    Status {
+        /// ステージ名（省略時は全ステージ）
+        stage: Option<String>,
     },
 }
 
@@ -544,6 +580,13 @@ async fn main() -> anyhow::Result<()> {
             StageCommands::Ps { stage } => stage.as_deref(),
         },
         Commands::Registry(_) => None,
+        Commands::Cloud(cloud_cmd) => match cloud_cmd {
+            CloudCommands::Auth => None,
+            CloudCommands::Plan { stage } => Some(stage.as_str()),
+            CloudCommands::Up { stage, .. } => Some(stage.as_str()),
+            CloudCommands::Down { stage, .. } => Some(stage.as_str()),
+            CloudCommands::Status { stage } => stage.as_deref(),
+        },
         _ => stage_from_env.as_deref(),
     };
 
@@ -742,6 +785,9 @@ async fn main() -> anyhow::Result<()> {
         } => {
             let stage = stage.or(stage_flag);
             commands::exec::handle(&config, stage, service, command, interactive, tty).await?;
+        }
+        Commands::Cloud(cloud_cmd) => {
+            commands::cloud::handle(cloud_cmd, &config).await?;
         }
         Commands::Registry(_) => {
             unreachable!("Registry is handled before config loading");

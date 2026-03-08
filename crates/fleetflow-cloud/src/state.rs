@@ -85,6 +85,10 @@ impl ProviderState {
         Self::default()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.resources.is_empty()
+    }
+
     pub fn add(&mut self, id: String, state: ResourceState) {
         self.resources.insert(id, state);
     }
@@ -479,6 +483,18 @@ mod tests {
     }
 
     // ---- ProviderState tests ----
+
+    #[test]
+    fn test_provider_state_is_empty() {
+        let mut state = ProviderState::new();
+        assert!(state.is_empty());
+
+        state.add("web".to_string(), ResourceState::new("1", "server"));
+        assert!(!state.is_empty());
+
+        state.remove("web");
+        assert!(state.is_empty());
+    }
 
     #[test]
     fn test_provider_state_crud() {
