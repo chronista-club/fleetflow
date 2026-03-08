@@ -1,5 +1,6 @@
 use colored::Colorize;
 use fleetflow_cloud::{ActionType, CloudProvider, ResourceConfig, ResourceSet};
+use fleetflow_cloud_cloudflare::CloudflareProvider;
 use fleetflow_cloud_sakura::SakuraCloudProvider;
 
 use super::super::CloudCommands;
@@ -14,7 +15,10 @@ fn create_providers(config: &fleetflow_core::Flow) -> Vec<Box<dyn CloudProvider>
                 let zone = provider_config.zone.as_deref().unwrap_or("tk1a");
                 providers.push(Box::new(SakuraCloudProvider::new(zone)));
             }
-            // TODO: Cloudflare 対応時に追加
+            "cloudflare" => {
+                let account_id = provider_config.config.get("account_id").cloned();
+                providers.push(Box::new(CloudflareProvider::new(account_id)));
+            }
             other => {
                 tracing::warn!("未対応のプロバイダー: {}", other);
             }
@@ -59,6 +63,39 @@ fn build_resource_set(config: &fleetflow_core::Flow, stage_name: &str) -> Resour
                 server.provider.clone(),
                 serde_json::Value::Object(details),
             ));
+
+            // DNS レコードを ResourceConfig として追加（provider は "cloudflare"）
+            let dns_hostname = server.config.get("dns_hostname");
+            if let Some(hostname) = dns_hostname {
+                // A レコード: hostname → サーバーIP（apply 時に解決）
+                let dns_details = serde_json::json!({
+                    "record_type": "A",
+                    "hostname": hostname,
+                    "server_name": server_name,
+                });
+                resource_set.add(ResourceConfig::new(
+                    "dns-record",
+                    format!("dns-a-{}", hostname),
+                    "cloudflare".to_string(),
+                    dns_details,
+                ));
+
+                // CNAME レコード: 各 alias → hostname
+                for alias in &server.dns_aliases {
+                    let cname_details = serde_json::json!({
+                        "record_type": "CNAME",
+                        "hostname": alias,
+                        "target": hostname,
+                        "server_name": server_name,
+                    });
+                    resource_set.add(ResourceConfig::new(
+                        "dns-record",
+                        format!("dns-cname-{}", alias),
+                        "cloudflare".to_string(),
+                        cname_details,
+                    ));
+                }
+            }
         }
     }
 
@@ -629,6 +666,251 @@ mod tests {
             web.get_config::<String>("os"),
             Some("ubuntu-24.04".to_string())
         );
+    }
+
+    #[test]
+    fn test_create_providers_cloudflare() {
+        let mut providers_map = HashMap::new();
+        providers_map.insert(
+            "cloudflare".to_string(),
+            CloudProviderModel {
+                name: "cloudflare".to_string(),
+                zone: None,
+                config: HashMap::new(),
+            },
+        );
+        let flow = fleetflow_core::Flow {
+            name: "test".to_string(),
+            providers: providers_map,
+            servers: HashMap::new(),
+            stages: HashMap::new(),
+            services: HashMap::new(),
+            registry: None,
+            variables: HashMap::new(),
+        };
+        let providers = create_providers(&flow);
+        assert_eq!(providers.len(), 1);
+        assert_eq!(providers[0].name(), "cloudflare");
+    }
+
+    #[test]
+    fn test_create_providers_both() {
+        let mut providers_map = HashMap::new();
+        providers_map.insert(
+            "sakura-cloud".to_string(),
+            CloudProviderModel {
+                name: "sakura-cloud".to_string(),
+                zone: Some("tk1a".to_string()),
+                config: HashMap::new(),
+            },
+        );
+        providers_map.insert(
+            "cloudflare".to_string(),
+            CloudProviderModel {
+                name: "cloudflare".to_string(),
+                zone: None,
+                config: HashMap::new(),
+            },
+        );
+        let flow = fleetflow_core::Flow {
+            name: "test".to_string(),
+            providers: providers_map,
+            servers: HashMap::new(),
+            stages: HashMap::new(),
+            services: HashMap::new(),
+            registry: None,
+            variables: HashMap::new(),
+        };
+        let providers = create_providers(&flow);
+        assert_eq!(providers.len(), 2);
+    }
+
+    fn make_flow_with_dns() -> fleetflow_core::Flow {
+        let mut providers = HashMap::new();
+        providers.insert(
+            "sakura-cloud".to_string(),
+            CloudProviderModel {
+                name: "sakura-cloud".to_string(),
+                zone: Some("tk1a".to_string()),
+                config: HashMap::new(),
+            },
+        );
+
+        let mut server_config = HashMap::new();
+        server_config.insert("dns_hostname".to_string(), "dev".to_string());
+
+        let mut servers = HashMap::new();
+        servers.insert(
+            "creo-vps".to_string(),
+            ServerResource {
+                provider: "sakura-cloud".to_string(),
+                plan: Some("4core-8gb".to_string()),
+                dns_aliases: vec!["app".to_string(), "api".to_string()],
+                config: server_config,
+                ..Default::default()
+            },
+        );
+
+        let mut stages = HashMap::new();
+        stages.insert(
+            "live".to_string(),
+            Stage {
+                services: vec![],
+                servers: vec!["creo-vps".to_string()],
+                ..Default::default()
+            },
+        );
+
+        fleetflow_core::Flow {
+            name: "creo-memories".to_string(),
+            providers,
+            servers,
+            stages,
+            services: HashMap::new(),
+            registry: None,
+            variables: HashMap::new(),
+        }
+    }
+
+    #[test]
+    fn test_build_resource_set_dns_records() {
+        let flow = make_flow_with_dns();
+        let resource_set = build_resource_set(&flow, "live");
+
+        // server + A レコード + 2 CNAME レコード = 4
+        assert_eq!(resource_set.resources.len(), 4);
+
+        // サーバーリソース
+        let server = resource_set.get("server", "creo-vps");
+        assert!(server.is_some());
+
+        // A レコード
+        let a_record = resource_set.get("dns-record", "dns-a-dev");
+        assert!(a_record.is_some());
+        let a = a_record.unwrap();
+        assert_eq!(a.provider, "cloudflare");
+        assert_eq!(a.get_config::<String>("record_type"), Some("A".to_string()));
+        assert_eq!(a.get_config::<String>("hostname"), Some("dev".to_string()));
+
+        // CNAME レコード
+        let cname_app = resource_set.get("dns-record", "dns-cname-app");
+        assert!(cname_app.is_some());
+        let app = cname_app.unwrap();
+        assert_eq!(app.provider, "cloudflare");
+        assert_eq!(
+            app.get_config::<String>("record_type"),
+            Some("CNAME".to_string())
+        );
+        assert_eq!(
+            app.get_config::<String>("target"),
+            Some("dev".to_string())
+        );
+
+        let cname_api = resource_set.get("dns-record", "dns-cname-api");
+        assert!(cname_api.is_some());
+    }
+
+    #[test]
+    fn test_build_resource_set_no_dns_without_hostname() {
+        let mut providers = HashMap::new();
+        providers.insert(
+            "sakura-cloud".to_string(),
+            CloudProviderModel {
+                name: "sakura-cloud".to_string(),
+                zone: Some("tk1a".to_string()),
+                config: HashMap::new(),
+            },
+        );
+
+        let mut servers = HashMap::new();
+        servers.insert(
+            "web-01".to_string(),
+            ServerResource {
+                provider: "sakura-cloud".to_string(),
+                plan: Some("2core-4gb".to_string()),
+                // dns_hostname なし → DNS レコード生成しない
+                ..Default::default()
+            },
+        );
+
+        let mut stages = HashMap::new();
+        stages.insert(
+            "dev".to_string(),
+            Stage {
+                services: vec![],
+                servers: vec!["web-01".to_string()],
+                ..Default::default()
+            },
+        );
+
+        let flow = fleetflow_core::Flow {
+            name: "test".to_string(),
+            providers,
+            servers,
+            stages,
+            services: HashMap::new(),
+            registry: None,
+            variables: HashMap::new(),
+        };
+
+        let resource_set = build_resource_set(&flow, "dev");
+        // server のみ、DNS なし
+        assert_eq!(resource_set.resources.len(), 1);
+        assert!(resource_set.get("server", "web-01").is_some());
+        assert_eq!(resource_set.by_type("dns-record").len(), 0);
+    }
+
+    #[test]
+    fn test_build_resource_set_dns_hostname_only_no_aliases() {
+        let mut providers = HashMap::new();
+        providers.insert(
+            "sakura-cloud".to_string(),
+            CloudProviderModel {
+                name: "sakura-cloud".to_string(),
+                zone: Some("tk1a".to_string()),
+                config: HashMap::new(),
+            },
+        );
+
+        let mut server_config = HashMap::new();
+        server_config.insert("dns_hostname".to_string(), "prod".to_string());
+
+        let mut servers = HashMap::new();
+        servers.insert(
+            "vps".to_string(),
+            ServerResource {
+                provider: "sakura-cloud".to_string(),
+                config: server_config,
+                // aliases なし
+                ..Default::default()
+            },
+        );
+
+        let mut stages = HashMap::new();
+        stages.insert(
+            "live".to_string(),
+            Stage {
+                services: vec![],
+                servers: vec!["vps".to_string()],
+                ..Default::default()
+            },
+        );
+
+        let flow = fleetflow_core::Flow {
+            name: "test".to_string(),
+            providers,
+            servers,
+            stages,
+            services: HashMap::new(),
+            registry: None,
+            variables: HashMap::new(),
+        };
+
+        let resource_set = build_resource_set(&flow, "live");
+        // server + A レコード のみ
+        assert_eq!(resource_set.resources.len(), 2);
+        assert!(resource_set.get("dns-record", "dns-a-prod").is_some());
+        assert_eq!(resource_set.by_type("dns-record").len(), 1);
     }
 
     #[test]

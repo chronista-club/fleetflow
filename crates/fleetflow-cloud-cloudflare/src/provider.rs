@@ -1,18 +1,20 @@
 //! Cloudflare provider implementation
 //!
-//! This is a skeleton implementation for future development.
+//! DNS record management via Cloudflare API.
+//! R2 bucket management via wrangler CLI.
 
+use crate::dns::{CloudflareDns, DnsConfig};
 use crate::error::CloudflareError;
 use crate::wrangler::Wrangler;
 use async_trait::async_trait;
 use fleetflow_cloud::{
     Action, ActionType, ApplyResult, AuthStatus, CloudProvider, Plan, ProviderState, ResourceSet,
+    ResourceState, ResourceStatus,
 };
 
 /// Cloudflare provider
 pub struct CloudflareProvider {
     wrangler: Wrangler,
-    // TODO: このフィールドは将来のアカウント管理機能で使用予定
     #[allow(dead_code)]
     account_id: Option<String>,
 }
@@ -23,6 +25,12 @@ impl CloudflareProvider {
             wrangler: Wrangler::new(account_id.clone()),
             account_id,
         }
+    }
+
+    /// DNS クライアントを環境変数から生成（必要時のみ）
+    fn create_dns_client() -> Result<CloudflareDns, CloudflareError> {
+        let config = DnsConfig::from_env()?;
+        Ok(CloudflareDns::new(config))
     }
 }
 
@@ -54,13 +62,28 @@ impl CloudProvider for CloudflareProvider {
     }
 
     async fn get_state(&self) -> fleetflow_cloud::Result<ProviderState> {
-        let state = ProviderState::new();
+        let mut state = ProviderState::new();
 
-        // TODO: Implement R2 bucket state retrieval
-        // let buckets = self.wrangler.list_r2_buckets().await...
+        // DNS レコード状態を取得
+        if let Ok(dns) = Self::create_dns_client()
+            && let Ok(records) = dns.list_records().await
+        {
+            for record in records {
+                let subdomain = record
+                    .name
+                    .trim_end_matches(&format!(".{}", dns.domain()))
+                    .to_string();
+                let key = format!("dns-a-{}", subdomain);
+                let resource = ResourceState::new(&record.id, "dns-record")
+                    .with_status(ResourceStatus::Running)
+                    .with_attribute("record_type", serde_json::json!("A"))
+                    .with_attribute("content", serde_json::json!(record.content))
+                    .with_attribute("name", serde_json::json!(record.name))
+                    .with_attribute("record_id", serde_json::json!(&record.id));
 
-        // TODO: Implement Worker state retrieval
-        // let workers = self.wrangler.list_workers().await...
+                state.add(key, resource);
+            }
+        }
 
         Ok(state)
     }
@@ -103,8 +126,49 @@ impl CloudProvider for CloudflareProvider {
             }
         }
 
-        // TODO: Add Worker planning
-        // TODO: Add DNS planning
+        // DNS レコードの plan
+        for resource in desired.iter() {
+            if resource.resource_type != "dns-record" {
+                continue;
+            }
+
+            let hostname = resource
+                .get_config::<String>("hostname")
+                .unwrap_or_default();
+            let record_type = resource
+                .get_config::<String>("record_type")
+                .unwrap_or_default();
+
+            let current_resource = current.get(&resource.id);
+
+            match current_resource {
+                None => {
+                    actions.push(Action {
+                        id: format!("create-{}", resource.id),
+                        action_type: ActionType::Create,
+                        resource_type: "dns-record".to_string(),
+                        resource_id: resource.id.clone(),
+                        description: format!("{} レコード {} を作成", record_type, hostname),
+                        details: [
+                            ("record_type".to_string(), serde_json::json!(record_type)),
+                            ("hostname".to_string(), serde_json::json!(hostname)),
+                        ]
+                        .into_iter()
+                        .collect(),
+                    });
+                }
+                Some(_existing) => {
+                    actions.push(Action {
+                        id: format!("noop-{}", resource.id),
+                        action_type: ActionType::NoOp,
+                        resource_type: "dns-record".to_string(),
+                        resource_id: resource.id.clone(),
+                        description: format!("{} レコード {} は既に存在", record_type, hostname),
+                        details: Default::default(),
+                    });
+                }
+            }
+        }
 
         Ok(Plan::new(actions))
     }
@@ -130,6 +194,76 @@ impl CloudProvider for CloudflareProvider {
                             }
                         }
                     }
+                    "dns-record" => {
+                        let hostname = action
+                            .details
+                            .get("hostname")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("");
+                        let record_type = action
+                            .details
+                            .get("record_type")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("A");
+
+                        match Self::create_dns_client() {
+                            Ok(dns) => {
+                                let dns_result = match record_type {
+                                    "CNAME" => {
+                                        let target = action
+                                            .details
+                                            .get("target")
+                                            .and_then(|v| v.as_str())
+                                            .unwrap_or("");
+                                        let target_fqdn = dns.full_domain(target);
+                                        dns.ensure_cname_record(hostname, &target_fqdn).await
+                                    }
+                                    _ => {
+                                        // A レコード: IP は details["ip"] から取得
+                                        // IP が未指定の場合はスキップ（サーバー作成後に設定）
+                                        let ip = action
+                                            .details
+                                            .get("ip")
+                                            .and_then(|v| v.as_str())
+                                            .unwrap_or("");
+                                        if ip.is_empty() {
+                                            result.add_success(
+                                                action.id.clone(),
+                                                format!(
+                                                    "DNS A レコード {} はサーバー IP 取得後に作成されます",
+                                                    hostname
+                                                ),
+                                            );
+                                            continue;
+                                        }
+                                        dns.ensure_record(hostname, ip).await
+                                    }
+                                };
+
+                                match dns_result {
+                                    Ok(_record) => {
+                                        result.add_success(
+                                            action.id.clone(),
+                                            format!(
+                                                "DNS {} レコード {} を作成しました",
+                                                record_type,
+                                                dns.full_domain(hostname)
+                                            ),
+                                        );
+                                    }
+                                    Err(e) => {
+                                        result.add_failure(action.id.clone(), e.to_string());
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                result.add_failure(
+                                    action.id.clone(),
+                                    format!("DNS クライアント初期化失敗: {}", e),
+                                );
+                            }
+                        }
+                    }
                     _ => {
                         result.add_failure(
                             action.id.clone(),
@@ -149,6 +283,49 @@ impl CloudProvider for CloudflareProvider {
                             }
                             Err(e) => {
                                 result.add_failure(action.id.clone(), e.to_string());
+                            }
+                        }
+                    }
+                    "dns-record" => {
+                        let hostname = action
+                            .details
+                            .get("hostname")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("");
+                        let record_type = action
+                            .details
+                            .get("record_type")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("A");
+
+                        match Self::create_dns_client() {
+                            Ok(dns) => {
+                                let dns_result = match record_type {
+                                    "CNAME" => dns.remove_cname_record(hostname).await,
+                                    _ => dns.remove_record(hostname).await,
+                                };
+
+                                match dns_result {
+                                    Ok(()) => {
+                                        result.add_success(
+                                            action.id.clone(),
+                                            format!(
+                                                "DNS {} レコード {} を削除しました",
+                                                record_type,
+                                                dns.full_domain(hostname)
+                                            ),
+                                        );
+                                    }
+                                    Err(e) => {
+                                        result.add_failure(action.id.clone(), e.to_string());
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                result.add_failure(
+                                    action.id.clone(),
+                                    format!("DNS クライアント初期化失敗: {}", e),
+                                );
                             }
                         }
                     }
@@ -173,12 +350,32 @@ impl CloudProvider for CloudflareProvider {
     }
 
     async fn destroy(&self, resource_id: &str) -> fleetflow_cloud::Result<()> {
-        // Try to delete as R2 bucket first
-        // TODO: Need to determine resource type from ID or state
-        self.wrangler
-            .delete_r2_bucket(resource_id)
-            .await
-            .map_err(|e| fleetflow_cloud::CloudError::ApiError(e.to_string()))?;
+        if resource_id.starts_with("dns-a-") || resource_id.starts_with("dns-cname-") {
+            // DNS レコード削除
+            let hostname = resource_id
+                .trim_start_matches("dns-a-")
+                .trim_start_matches("dns-cname-");
+            let is_cname = resource_id.starts_with("dns-cname-");
+
+            let dns = Self::create_dns_client()
+                .map_err(|e| fleetflow_cloud::CloudError::ApiError(e.to_string()))?;
+
+            if is_cname {
+                dns.remove_cname_record(hostname)
+                    .await
+                    .map_err(|e| fleetflow_cloud::CloudError::ApiError(e.to_string()))?;
+            } else {
+                dns.remove_record(hostname)
+                    .await
+                    .map_err(|e| fleetflow_cloud::CloudError::ApiError(e.to_string()))?;
+            }
+        } else {
+            // R2 バケット削除
+            self.wrangler
+                .delete_r2_bucket(resource_id)
+                .await
+                .map_err(|e| fleetflow_cloud::CloudError::ApiError(e.to_string()))?;
+        }
 
         Ok(())
     }
