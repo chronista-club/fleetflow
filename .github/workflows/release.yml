@@ -52,6 +52,26 @@ jobs:
       - name: ビルド
         run: mise run build
 
+  # プラグインバージョン同期チェック
+  plugin-version-check:
+    name: プラグインバージョン同期
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: バージョン一致チェック
+        run: |
+          FLEET_VER=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)"/\1/')
+          PLUGIN_VER=$(curl -sf https://raw.githubusercontent.com/chronista-club/claude-plugin-fleetflow/main/.claude-plugin/plugin.json | jq -r .version)
+          echo "FleetFlow: $FLEET_VER"
+          echo "Plugin:    $PLUGIN_VER"
+          if [ "$FLEET_VER" != "$PLUGIN_VER" ]; then
+            echo "::warning::プラグインバージョン不一致: FleetFlow=$FLEET_VER, Plugin=$PLUGIN_VER"
+            echo "::warning::claude-plugin-fleetflow のバージョンを $FLEET_VER に更新してください"
+          else
+            echo "✓ バージョン一致"
+          fi
+
   # バイナリビルド＆リリースアップロード
   build-release:
     name: ビルド (${{ matrix.target }})
