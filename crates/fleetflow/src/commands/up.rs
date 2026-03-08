@@ -352,6 +352,69 @@ pub async fn handle(
         }
     }
 
+    // Readinessチェック: readiness設定があるサービスを確認
+    let readiness_services: Vec<_> = stage_config
+        .services
+        .iter()
+        .filter_map(|svc_name| {
+            config.services.get(svc_name).and_then(|svc| {
+                svc.readiness
+                    .as_ref()
+                    .map(|r| (svc_name.clone(), r.clone()))
+            })
+        })
+        .collect();
+
+    if !readiness_services.is_empty() {
+        println!();
+        println!(
+            "{}",
+            format!(
+                "🏥 Readinessチェック ({} サービス)...",
+                readiness_services.len()
+            )
+            .blue()
+            .bold()
+        );
+
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(5))
+            .build()?;
+
+        for (svc_name, readiness) in &readiness_services {
+            let url = format!("http://localhost:{}{}", readiness.port, readiness.path);
+            println!("  {} → {}", svc_name.cyan(), url);
+
+            let deadline =
+                std::time::Instant::now() + std::time::Duration::from_secs(readiness.timeout);
+            let mut ready = false;
+
+            while std::time::Instant::now() < deadline {
+                match client.get(&url).send().await {
+                    Ok(resp) if resp.status().is_success() => {
+                        ready = true;
+                        break;
+                    }
+                    _ => {
+                        tokio::time::sleep(std::time::Duration::from_secs(readiness.interval))
+                            .await;
+                    }
+                }
+            }
+
+            if ready {
+                println!("  {} {} ready", "✓".green(), svc_name.cyan());
+            } else {
+                println!(
+                    "  {} {} は {}秒以内に応答しませんでした",
+                    "✗".red(),
+                    svc_name.cyan(),
+                    readiness.timeout
+                );
+            }
+        }
+    }
+
     println!();
     println!("{}", "✓ すべてのサービスが起動しました！".green().bold());
 

@@ -176,6 +176,10 @@ pub fn parse_service(node: &KdlNode) -> Result<(String, Service)> {
                         service.wait_for = Some(WaitConfig::default());
                     }
                 }
+                // Readinessチェック
+                "readiness" => {
+                    service.readiness = Some(parse_readiness(child));
+                }
                 // コンテナレジストリURL
                 "registry" => {
                     service.registry = child
@@ -350,6 +354,93 @@ pub fn parse_wait_config(doc: &KdlDocument) -> WaitConfig {
     }
 
     config
+}
+
+/// readinessノードをパース
+///
+/// プロパティ形式とブロック形式の両方をサポート:
+/// ```kdl
+/// // プロパティ形式（推奨）
+/// readiness path="/health" port=3000 timeout=30 interval=2
+///
+/// // ブロック形式
+/// readiness {
+///     path "/health"
+///     port 3000
+/// }
+/// ```
+pub fn parse_readiness(node: &KdlNode) -> crate::model::ReadinessCheck {
+    use crate::model::ReadinessCheck;
+
+    let mut path = "/health".to_string();
+    let mut port = 0u16;
+    let mut timeout = 30u64;
+    let mut interval = 2u64;
+
+    // プロパティ形式: readiness path="/health" port=3000
+    for entry in node.entries() {
+        if let Some(name) = entry.name() {
+            match name.value() {
+                "path" => {
+                    if let Some(v) = entry.value().as_string() {
+                        path = v.to_string();
+                    }
+                }
+                "port" => {
+                    if let Some(v) = entry.value().as_integer() {
+                        port = v as u16;
+                    }
+                }
+                "timeout" => {
+                    if let Some(v) = entry.value().as_integer() {
+                        timeout = v as u64;
+                    }
+                }
+                "interval" => {
+                    if let Some(v) = entry.value().as_integer() {
+                        interval = v as u64;
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    // ブロック形式: readiness { path "/health"; port 3000 }
+    if let Some(children) = node.children() {
+        for child in children.nodes() {
+            match child.name().value() {
+                "path" => {
+                    if let Some(v) = child.entries().first().and_then(|e| e.value().as_string()) {
+                        path = v.to_string();
+                    }
+                }
+                "port" => {
+                    if let Some(v) = child.entries().first().and_then(|e| e.value().as_integer()) {
+                        port = v as u16;
+                    }
+                }
+                "timeout" => {
+                    if let Some(v) = child.entries().first().and_then(|e| e.value().as_integer()) {
+                        timeout = v as u64;
+                    }
+                }
+                "interval" => {
+                    if let Some(v) = child.entries().first().and_then(|e| e.value().as_integer()) {
+                        interval = v as u64;
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    ReadinessCheck {
+        path,
+        port,
+        timeout,
+        interval,
+    }
 }
 
 #[cfg(test)]
@@ -569,6 +660,109 @@ mod tests {
 
         let (_, service) = parse_service(node).unwrap();
         assert!(service.wait_for.is_none());
+    }
+
+    #[test]
+    fn test_parse_readiness_property_style() {
+        let kdl = r#"
+            service "api" {
+                image "myapp:latest"
+                readiness path="/health" port=3000 timeout=60 interval=5
+            }
+        "#;
+        let doc: KdlDocument = kdl.parse().unwrap();
+        let node = doc.nodes().first().unwrap();
+
+        let (_, service) = parse_service(node).unwrap();
+
+        assert!(service.readiness.is_some());
+        let readiness = service.readiness.unwrap();
+        assert_eq!(readiness.path, "/health");
+        assert_eq!(readiness.port, 3000);
+        assert_eq!(readiness.timeout, 60);
+        assert_eq!(readiness.interval, 5);
+    }
+
+    #[test]
+    fn test_parse_readiness_block_style() {
+        let kdl = r#"
+            service "api" {
+                image "myapp:latest"
+                readiness {
+                    path "/ready"
+                    port 8080
+                    timeout 45
+                    interval 3
+                }
+            }
+        "#;
+        let doc: KdlDocument = kdl.parse().unwrap();
+        let node = doc.nodes().first().unwrap();
+
+        let (_, service) = parse_service(node).unwrap();
+
+        assert!(service.readiness.is_some());
+        let readiness = service.readiness.unwrap();
+        assert_eq!(readiness.path, "/ready");
+        assert_eq!(readiness.port, 8080);
+        assert_eq!(readiness.timeout, 45);
+        assert_eq!(readiness.interval, 3);
+    }
+
+    #[test]
+    fn test_parse_readiness_defaults() {
+        let kdl = r#"
+            service "api" {
+                image "myapp:latest"
+                readiness port=3000
+            }
+        "#;
+        let doc: KdlDocument = kdl.parse().unwrap();
+        let node = doc.nodes().first().unwrap();
+
+        let (_, service) = parse_service(node).unwrap();
+
+        assert!(service.readiness.is_some());
+        let readiness = service.readiness.unwrap();
+        assert_eq!(readiness.path, "/health");
+        assert_eq!(readiness.port, 3000);
+        assert_eq!(readiness.timeout, 30);
+        assert_eq!(readiness.interval, 2);
+    }
+
+    #[test]
+    fn test_parse_service_no_readiness() {
+        let kdl = r#"
+            service "db" {
+                image "postgres:16"
+            }
+        "#;
+        let doc: KdlDocument = kdl.parse().unwrap();
+        let node = doc.nodes().first().unwrap();
+
+        let (_, service) = parse_service(node).unwrap();
+        assert!(service.readiness.is_none());
+    }
+
+    #[test]
+    fn test_parse_readiness_with_healthcheck() {
+        let kdl = r#"
+            service "api" {
+                image "myapp:latest"
+                healthcheck {
+                    test "CMD-SHELL" "curl -f http://localhost:3000/health || exit 1"
+                }
+                readiness port=3000
+            }
+        "#;
+        let doc: KdlDocument = kdl.parse().unwrap();
+        let node = doc.nodes().first().unwrap();
+
+        let (_, service) = parse_service(node).unwrap();
+
+        assert!(service.healthcheck.is_some());
+        assert!(service.readiness.is_some());
+        assert_eq!(service.readiness.unwrap().port, 3000);
     }
 
     #[test]

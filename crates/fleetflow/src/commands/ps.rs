@@ -58,14 +58,14 @@ pub async fn handle(
         println!(
             "{}",
             format!(
-                "{:<20} {:<15} {:<20} {:<50}",
-                "NAME", "STATUS", "IMAGE", "PORTS"
+                "{:<20} {:<15} {:<12} {:<20} {:<50}",
+                "NAME", "STATUS", "HEALTH", "IMAGE", "PORTS"
             )
             .bold()
         );
-        println!("{}", "─".repeat(105).dimmed());
+        println!("{}", "─".repeat(117).dimmed());
 
-        for container in containers {
+        for container in &containers {
             let name = container
                 .names
                 .as_ref()
@@ -78,6 +78,17 @@ pub async fn handle(
                 status.green()
             } else {
                 status.red()
+            };
+
+            // Docker status 文字列からヘルス情報を抽出
+            let health = if status.contains("(healthy)") {
+                "healthy".green()
+            } else if status.contains("(unhealthy)") {
+                "unhealthy".red()
+            } else if status.contains("(health: starting)") {
+                "starting".yellow()
+            } else {
+                "-".dimmed()
             };
 
             let image = container.image.as_deref().unwrap_or("N/A");
@@ -98,9 +109,10 @@ pub async fn handle(
                 .unwrap_or_default();
 
             println!(
-                "{:<20} {:<15} {:<20} {:<50}",
+                "{:<20} {:<15} {:<12} {:<20} {:<50}",
                 name.cyan(),
                 status_colored,
+                health,
                 image,
                 ports.dimmed()
             );

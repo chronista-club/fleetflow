@@ -54,6 +54,9 @@ pub struct Service {
     /// 依存サービス待機設定（exponential backoff）
     #[kdl(child)]
     pub wait_for: Option<WaitConfig>,
+    /// Readinessチェック設定（fleet up後のHTTPワンショットチェック）
+    #[kdl(child)]
+    pub readiness: Option<ReadinessCheck>,
     /// サービス固有のコンテナレジストリURL（例: ghcr.io/owner）
     #[kdl(property)]
     pub registry: Option<String>,
@@ -189,6 +192,45 @@ fn default_start_period() -> u64 {
     10
 }
 
+/// Readinessチェック設定
+///
+/// fleet up後にホスト側からHTTPリクエストを送り、サービスが応答可能か確認する。
+/// healthcheck（Docker HEALTHCHECK）とは異なり、FleetFlowが一度だけ実行するワンショットチェック。
+///
+/// KDL形式：
+/// ```kdl
+/// readiness path="/health" port=3000 timeout=30 interval=2
+/// ```
+#[derive(Debug, Clone, Serialize, Deserialize, KdlDeserialize, KdlSerialize)]
+#[kdl(name = "readiness")]
+pub struct ReadinessCheck {
+    /// HTTPチェックのパス（例: "/health"）
+    #[serde(default = "default_readiness_path")]
+    #[kdl(property, default)]
+    pub path: String,
+    /// チェック対象ポート
+    #[kdl(property)]
+    pub port: u16,
+    /// 全体タイムアウト（秒）— この時間内にreadyにならなければ失敗
+    #[serde(default = "default_readiness_timeout")]
+    #[kdl(property, default)]
+    pub timeout: u64,
+    /// リトライ間隔（秒）
+    #[serde(default = "default_readiness_interval")]
+    #[kdl(property, default)]
+    pub interval: u64,
+}
+
+fn default_readiness_path() -> String {
+    "/health".to_string()
+}
+fn default_readiness_timeout() -> u64 {
+    30
+}
+fn default_readiness_interval() -> u64 {
+    2
+}
+
 /// 依存サービス待機設定（Exponential Backoff）
 ///
 /// KDL形式：
@@ -277,6 +319,9 @@ impl Service {
         }
         if other.wait_for.is_some() {
             self.wait_for = other.wait_for;
+        }
+        if other.readiness.is_some() {
+            self.readiness = other.readiness;
         }
         if other.registry.is_some() {
             self.registry = other.registry;
