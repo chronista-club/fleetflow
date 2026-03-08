@@ -4,7 +4,7 @@ use colored::Colorize;
 pub async fn self_update() -> anyhow::Result<()> {
     use std::process::Command;
 
-    println!("{}", "🔄 FleetFlow self-update".blue().bold());
+    println!("{}", "FleetFlow self-update".blue().bold());
     println!();
 
     let current_version = env!("CARGO_PKG_VERSION");
@@ -36,7 +36,7 @@ pub async fn self_update() -> anyhow::Result<()> {
     println!("最新バージョン: {}", latest_version.green());
 
     // バージョン比較
-    if current_version == latest_version {
+    if !is_newer_version(latest_version, current_version) {
         println!();
         println!("{}", "✓ 既に最新版です！".green().bold());
         return Ok(());
@@ -45,7 +45,7 @@ pub async fn self_update() -> anyhow::Result<()> {
     println!();
     println!(
         "{}",
-        format!("新しいバージョン {} が利用可能です", latest_version).yellow()
+        format!("{} → {} に更新します", current_version, latest_version).yellow()
     );
 
     // ダウンロードURL決定
@@ -122,35 +122,24 @@ pub async fn self_update() -> anyhow::Result<()> {
         ));
     }
 
-    // 現在のバイナリパスを取得
+    // 現在のバイナリパスを取得して直接置換
     let current_exe = std::env::current_exe()?;
-    let new_binary = temp_dir.join("fleet"); // バイナリ名は "fleet"
+    let new_binary = temp_dir.join("fleet");
 
-    // バイナリを置換
-    println!("インストール中...");
+    println!("インストール中: {}", current_exe.display());
 
-    // まず古いバイナリをリネーム（バックアップ）
-    let backup_path = current_exe.with_extension("old");
-    if backup_path.exists() {
-        std::fs::remove_file(&backup_path)?;
-    }
-
-    // 新しいバイナリをコピー
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        // 実行権限を付与
         let mut perms = std::fs::metadata(&new_binary)?.permissions();
         perms.set_mode(0o755);
         std::fs::set_permissions(&new_binary, perms)?;
     }
 
-    // Linuxでは実行中のバイナリでも「削除→コピー」で置換可能
-    // （削除しても実行中プロセスはinode参照を保持するため動作継続）
+    // 実行中バイナリを削除→コピーで置換
     if current_exe.exists()
         && let Err(e) = std::fs::remove_file(&current_exe)
     {
-        // 削除失敗時は権限不足の可能性
         println!();
         println!("{}", "⚠ バイナリの更新に失敗しました。".yellow());
         println!("権限が不足している可能性があります。以下のコマンドを実行してください:");
@@ -186,82 +175,8 @@ pub async fn self_update() -> anyhow::Result<()> {
         }
     }
 
-    // /usr/local/bin/fleet へのシンボリックリンクを作成
-    ensure_usr_local_bin_symlink();
-
-    // クリーンアップ（成功時のみ）
+    // クリーンアップ
     std::fs::remove_dir_all(&temp_dir).ok();
-
-    Ok(())
-}
-
-/// 起動時にバージョンチェックを行い、更新があれば通知・更新
-/// CI/CD環境（CI環境変数が設定されている場合）ではスキップする
-pub async fn check_and_update_if_needed() -> anyhow::Result<()> {
-    // CI/CD環境では対話的プロンプトを出せないのでスキップ
-    if std::env::var("CI").is_ok() || std::env::var("FLEETFLOW_NO_UPDATE_CHECK").is_ok() {
-        return Ok(());
-    }
-
-    let current_version = env!("CARGO_PKG_VERSION");
-
-    // GitHub APIから最新リリース情報を取得（タイムアウト短め）
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(5))
-        .build()?;
-
-    let response = match client
-        .get("https://api.github.com/repos/chronista-club/fleetflow/releases/latest")
-        .header("User-Agent", "fleetflow")
-        .send()
-        .await
-    {
-        Ok(r) => r,
-        Err(_) => {
-            // ネットワークエラーは無視して続行
-            return Ok(());
-        }
-    };
-
-    if !response.status().is_success() {
-        // APIエラーは無視して続行
-        return Ok(());
-    }
-
-    let release: serde_json::Value = match response.json().await {
-        Ok(r) => r,
-        Err(_) => return Ok(()),
-    };
-
-    let latest_version = match release["tag_name"].as_str() {
-        Some(tag) => tag.trim_start_matches('v'),
-        None => return Ok(()),
-    };
-
-    // バージョン比較
-    if is_newer_version(latest_version, current_version) {
-        println!();
-        println!(
-            "📦 新しいバージョン {} が利用可能です（現在: {}）",
-            latest_version.green(),
-            current_version.yellow()
-        );
-        println!("{}", "   更新するには: fleet self-update".dimmed());
-        println!();
-
-        // 自動更新の確認
-        print!("今すぐ更新しますか？ [y/N]: ");
-        use std::io::Write;
-        std::io::stdout().flush()?;
-
-        let mut input = String::new();
-        std::io::stdin().read_line(&mut input)?;
-
-        if input.trim().eq_ignore_ascii_case("y") {
-            return self_update().await;
-        }
-        println!();
-    }
 
     Ok(())
 }
@@ -283,81 +198,7 @@ fn is_newer_version(new_ver: &str, current_ver: &str) -> bool {
         }
     }
 
-    // 桁数が多い方が新しい (例: 1.0.1 > 1.0)
     new_parts.len() > current_parts.len()
-}
-
-/// /usr/local/bin/fleet へのシンボリックリンクを作成（~/.cargo/bin/fleet を指す）
-fn ensure_usr_local_bin_symlink() {
-    use std::os::unix::fs::symlink;
-    use std::path::Path;
-
-    let cargo_bin_fleet = dirs::home_dir()
-        .map(|h| h.join(".cargo/bin/fleet"))
-        .filter(|p| p.exists());
-
-    let Some(cargo_bin) = cargo_bin_fleet else {
-        // ~/.cargo/bin/fleet が存在しない場合はスキップ
-        return;
-    };
-
-    let usr_local_bin = Path::new("/usr/local/bin/fleet");
-
-    // 既にシンボリックリンクで正しいリンク先を指している場合はスキップ
-    if usr_local_bin.is_symlink()
-        && let Ok(target) = std::fs::read_link(usr_local_bin)
-        && target == cargo_bin
-    {
-        println!(
-            "{}",
-            "✓ /usr/local/bin/fleet は既に正しくリンクされています".dimmed()
-        );
-        return;
-    }
-
-    // 既存のファイル/シンボリックリンクを削除してから作成
-    if (usr_local_bin.exists() || usr_local_bin.is_symlink())
-        && let Err(e) = std::fs::remove_file(usr_local_bin)
-    {
-        if e.kind() == std::io::ErrorKind::PermissionDenied {
-            println!(
-                "{}",
-                "ℹ /usr/local/bin/fleet にシンボリックリンクを作成するには:".dimmed()
-            );
-            println!(
-                "{}",
-                format!("  sudo ln -sf {} /usr/local/bin/fleet", cargo_bin.display()).dimmed()
-            );
-        }
-        return;
-    }
-
-    // シンボリックリンクを作成
-    match symlink(&cargo_bin, usr_local_bin) {
-        Ok(_) => {
-            println!(
-                "{}",
-                format!(
-                    "✓ /usr/local/bin/fleet → {} にシンボリックリンクを作成しました",
-                    cargo_bin.display()
-                )
-                .green()
-            );
-        }
-        Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
-            println!(
-                "{}",
-                "ℹ /usr/local/bin/fleet にシンボリックリンクを作成するには:".dimmed()
-            );
-            println!(
-                "{}",
-                format!("  sudo ln -sf {} /usr/local/bin/fleet", cargo_bin.display()).dimmed()
-            );
-        }
-        Err(_) => {
-            // その他のエラーは無視（ディレクトリが存在しない等）
-        }
-    }
 }
 
 /// cargo install でFleetFlowを更新
@@ -366,7 +207,7 @@ async fn cargo_install_update() -> anyhow::Result<()> {
 
     println!(
         "{}",
-        "🔧 cargo install --git https://github.com/chronista-club/fleetflow --force".cyan()
+        "cargo install --git https://github.com/chronista-club/fleetflow --force".cyan()
     );
     println!();
 
@@ -382,15 +223,45 @@ async fn cargo_install_update() -> anyhow::Result<()> {
     if status.success() {
         println!();
         println!("{}", "✓ FleetFlow を更新しました！".green().bold());
-
-        // /usr/local/bin/fleet へのシンボリックリンクを作成
-        ensure_usr_local_bin_symlink();
-
         Ok(())
     } else {
         Err(anyhow::anyhow!(
             "cargo install に失敗しました（終了コード: {:?}）",
             status.code()
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_newer_version_major() {
+        assert!(is_newer_version("1.0.0", "0.9.0"));
+        assert!(!is_newer_version("0.9.0", "1.0.0"));
+    }
+
+    #[test]
+    fn test_is_newer_version_minor() {
+        assert!(is_newer_version("0.10.0", "0.9.0"));
+        assert!(!is_newer_version("0.9.0", "0.10.0"));
+    }
+
+    #[test]
+    fn test_is_newer_version_patch() {
+        assert!(is_newer_version("0.9.1", "0.9.0"));
+        assert!(!is_newer_version("0.9.0", "0.9.1"));
+    }
+
+    #[test]
+    fn test_is_newer_version_equal() {
+        assert!(!is_newer_version("0.9.0", "0.9.0"));
+    }
+
+    #[test]
+    fn test_is_newer_version_extra_digits() {
+        assert!(is_newer_version("0.9.0.1", "0.9.0"));
+        assert!(!is_newer_version("0.9.0", "0.9.0.1"));
     }
 }

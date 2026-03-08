@@ -1,5 +1,4 @@
 use crate::docker;
-use crate::self_update;
 use colored::Colorize;
 use std::collections::HashMap;
 
@@ -149,9 +148,6 @@ pub async fn handle(
     pull: bool,
     dry_run: bool,
 ) -> anyhow::Result<()> {
-    // 最初にバージョンチェック
-    self_update::check_and_update_if_needed().await?;
-
     // ステージ名の決定（デフォルトステージをサポート）
     let stage_name = crate::utils::determine_stage_name(stage, config)?;
 
