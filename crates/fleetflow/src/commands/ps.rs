@@ -1,6 +1,5 @@
 use crate::docker;
 use crate::utils;
-use anyhow::Context;
 use colored::Colorize;
 
 pub async fn handle(
@@ -129,17 +128,8 @@ pub async fn handle(
 /// - `project` が None + `stage` が Some → 全プロジェクトの指定ステージを表示
 /// - 両方 None → 全プロジェクト・全ステージを表示
 pub async fn handle_cp_query(project: Option<&str>, stage: Option<&str>) -> anyhow::Result<()> {
-    // 認証情報の確認
-    let creds_path = dirs::config_dir()
-        .context("ホームディレクトリが見つかりません")?
-        .join("fleetflow/credentials.json");
-
-    if !creds_path.exists() {
-        eprintln!("{}", "Control Plane に未ログインです。".red().bold());
-        eprintln!();
-        eprintln!("  {} でログインしてください。", "fleet login".cyan());
-        std::process::exit(1);
-    }
+    use super::cp_client;
+    use serde_json::json;
 
     let scope = match (project, stage) {
         (Some(p), Some(s)) => format!("プロジェクト: {} / ステージ: {}", p.cyan(), s.cyan()),
@@ -151,19 +141,18 @@ pub async fn handle_cp_query(project: Option<&str>, stage: Option<&str>) -> anyh
     println!("{} {}", "Control Plane 横断クエリ:".bold(), scope);
     println!();
 
-    // TODO: Control Plane API (Unison Protocol) に接続してクエリを実行
-    // 1. credentials.json からトークンを読み込み
-    // 2. Unison Client で CP に接続
-    // 3. stage.list_across_projects() を呼び出し
-    // 4. 結果を表形式で表示
+    let (client, _creds) = cp_client::connect().await?;
 
-    println!(
-        "{}",
-        "Control Plane API への接続は未実装です。".yellow()
-    );
-    println!("実装予定: Unison Protocol 経由で CP サーバーに接続し、");
-    println!("横断クエリ結果を以下の形式で表示します:");
-    println!();
+    // stage チャネルの list_across_projects で横断クエリ
+    let payload = match (project, stage) {
+        (Some(p), _) => json!({ "project_slug": p }),
+        (None, Some(s)) => json!({ "stage_name": s }),
+        (None, None) => json!({}),
+    };
+
+    let resp = cp_client::request(&client, "stage", "list_across_projects", payload).await?;
+
+    // 結果表示
     println!(
         "{}",
         format!(
@@ -173,14 +162,54 @@ pub async fn handle_cp_query(project: Option<&str>, stage: Option<&str>) -> anyh
         .bold()
     );
     println!("{}", "─".repeat(65).dimmed());
-    println!(
-        "{:<20} {:<8} {:<15} {:<12} {:<10}",
-        "example-app".dimmed(),
-        "prod".dimmed(),
-        "web".dimmed(),
-        "running".dimmed(),
-        "healthy".dimmed()
-    );
 
+    if let Some(stages) = resp["stages"].as_array() {
+        if stages.is_empty() {
+            println!("{}", "該当するステージがありません。".dimmed());
+        } else {
+            for s in stages {
+                let project_name = s["project_name"].as_str().unwrap_or("N/A");
+                let stage_name = s["name"].as_str().unwrap_or("N/A");
+
+                // 各ステージのサービス情報があれば表示
+                if let Some(services) = s["services"].as_array() {
+                    for svc in services {
+                        let svc_name = svc["name"].as_str().unwrap_or("N/A");
+                        let status = svc["status"].as_str().unwrap_or("unknown");
+                        let health = svc["health"].as_str().unwrap_or("-");
+                        let status_colored = match status {
+                            "running" => status.green(),
+                            "stopped" => status.red(),
+                            _ => status.yellow(),
+                        };
+                        let health_colored = match health {
+                            "healthy" => health.green(),
+                            "unhealthy" => health.red(),
+                            _ => health.dimmed(),
+                        };
+                        println!(
+                            "{:<20} {:<8} {:<15} {:<12} {:<10}",
+                            project_name.cyan(),
+                            stage_name,
+                            svc_name,
+                            status_colored,
+                            health_colored,
+                        );
+                    }
+                } else {
+                    println!(
+                        "{:<20} {:<8} {:<15} {:<12} {:<10}",
+                        project_name.cyan(),
+                        stage_name,
+                        "-".dimmed(),
+                        "-".dimmed(),
+                        "-".dimmed(),
+                    );
+                }
+            }
+        }
+    }
+
+    client.disconnect().await.ok();
     Ok(())
 }

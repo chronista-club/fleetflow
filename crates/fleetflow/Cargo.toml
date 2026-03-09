@@ -61,6 +61,10 @@ libc = "0.2"
 # Browser opening (Auth0 login)
 open = "5"
 
+# Control Plane client
+unison = { path = "../../../unison/crates/unison-protocol" }
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
+
 [dev-dependencies]
 assert_cmd = "2.0"
 predicates = "3.1"

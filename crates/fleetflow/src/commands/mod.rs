@@ -1,6 +1,7 @@
 pub mod auth;
 pub mod cloud;
 pub mod cp;
+pub mod cp_client;
 pub mod daemon;
 pub mod deploy;
 pub mod down;
