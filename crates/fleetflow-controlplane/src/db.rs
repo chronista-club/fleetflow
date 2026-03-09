@@ -66,7 +66,7 @@ impl Database {
     }
 
     /// Connect to in-memory SurrealDB for testing.
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-utils"))]
     pub async fn connect_memory() -> Result<Self> {
         let db = surrealdb::engine::any::connect("mem://")
             .await

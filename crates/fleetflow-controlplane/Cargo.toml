@@ -41,6 +41,11 @@ tracing.workspace = true
 chrono.workspace = true
 uuid = { version = "1", features = ["v4", "serde"] }
 
+[features]
+test-utils = []
+
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
 tempfile.workspace = true
+fleetflow-controlplane = { path = ".", features = ["test-utils"] }
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
