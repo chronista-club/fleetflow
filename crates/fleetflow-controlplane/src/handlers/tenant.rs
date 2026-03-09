@@ -5,6 +5,7 @@ use tracing::{error, info};
 use unison::network::channel::UnisonChannel;
 use unison::network::server::ProtocolServer;
 
+use crate::model::Tenant;
 use crate::server::AppState;
 
 pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
@@ -40,6 +41,45 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                     .send_response(
                                         msg.id,
                                         "get",
+                                        json!({ "error": e.to_string() }),
+                                    )
+                                    .await?;
+                            }
+                        }
+                    }
+                    "create" => {
+                        let payload = msg.payload_as_value()?;
+                        let slug = payload["slug"].as_str().unwrap_or_default();
+                        let name = payload["name"].as_str().unwrap_or(slug);
+                        let plan = payload["plan"].as_str().unwrap_or("self-hosted");
+                        let auth0_org_id = payload["auth0_org_id"].as_str().map(String::from);
+
+                        let tenant = Tenant {
+                            id: None,
+                            slug: slug.into(),
+                            name: name.into(),
+                            auth0_org_id,
+                            plan: plan.into(),
+                            created_at: None,
+                            updated_at: None,
+                        };
+
+                        match state.db.create_tenant(&tenant).await {
+                            Ok(created) => {
+                                channel
+                                    .send_response(
+                                        msg.id,
+                                        "create",
+                                        json!({ "tenant": created }),
+                                    )
+                                    .await?;
+                            }
+                            Err(e) => {
+                                error!(error = %e, "tenant.create 失敗");
+                                channel
+                                    .send_response(
+                                        msg.id,
+                                        "create",
                                         json!({ "error": e.to_string() }),
                                     )
                                     .await?;

@@ -36,6 +36,60 @@ pub async fn handle_tenant(cmd: &TenantCommands) -> Result<()> {
 
             client.disconnect().await.ok();
         }
+        TenantCommands::List => {
+            let (client, _creds) = cp_client::connect().await?;
+
+            println!("{}", "テナント一覧".bold());
+            println!();
+
+            let resp =
+                cp_client::request(&client, "tenant", "list", json!({})).await?;
+
+            if let Some(tenants) = resp["tenants"].as_array() {
+                if tenants.is_empty() {
+                    println!("{}", "テナントがありません。".dimmed());
+                } else {
+                    println!(
+                        "{}",
+                        format!("{:<20} {:<25} {:<15}", "SLUG", "NAME", "PLAN").bold()
+                    );
+                    println!("{}", "─".repeat(60).dimmed());
+                    for t in tenants {
+                        println!(
+                            "{:<20} {:<25} {:<15}",
+                            t["slug"].as_str().unwrap_or("N/A").cyan(),
+                            t["name"].as_str().unwrap_or("N/A"),
+                            t["plan"].as_str().unwrap_or("N/A").dimmed(),
+                        );
+                    }
+                }
+            }
+
+            client.disconnect().await.ok();
+        }
+        TenantCommands::Create { slug, name, plan } => {
+            let (client, _creds) = cp_client::connect().await?;
+
+            println!("{}", "テナント作成".bold());
+
+            let resp = cp_client::request(
+                &client,
+                "tenant",
+                "create",
+                json!({
+                    "slug": slug,
+                    "name": name,
+                    "plan": plan,
+                }),
+            )
+            .await?;
+
+            if resp.get("tenant").is_some() {
+                println!("{} {}", "作成完了:".green(), slug.cyan());
+            }
+
+            client.disconnect().await.ok();
+        }
     }
 
     Ok(())

@@ -362,6 +362,20 @@ enum DaemonCommands {
 enum TenantCommands {
     /// テナント状態を表示
     Status,
+    /// テナント一覧
+    List,
+    /// テナント作成
+    Create {
+        /// テナントのスラッグ
+        #[arg(long)]
+        slug: String,
+        /// テナント名
+        #[arg(long)]
+        name: String,
+        /// プラン（self-hosted, starter, pro, enterprise）
+        #[arg(long, default_value = "self-hosted")]
+        plan: String,
+    },
 }
 
 /// プロジェクト管理のサブコマンド
