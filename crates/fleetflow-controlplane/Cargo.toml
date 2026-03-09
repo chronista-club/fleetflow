@@ -1,0 +1,46 @@
+[package]
+name = "fleetflow-controlplane"
+description = "FleetFlow Control Plane — central management server"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+# Internal crates
+fleetflow-core.workspace = true
+fleetflow-container.workspace = true
+
+# Communication
+unison = { path = "../../../unison/crates/unison-protocol" }
+
+# Database
+surrealdb = { version = "3.0", features = ["kv-mem"] }
+
+# Auth
+jsonwebtoken = "10.3"
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+
+# Async runtime
+tokio.workspace = true
+futures-util.workspace = true
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+
+# Error handling
+thiserror.workspace = true
+anyhow.workspace = true
+
+# Logging
+tracing.workspace = true
+
+# Utils
+chrono.workspace = true
+uuid = { version = "1", features = ["v4", "serde"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
+tempfile.workspace = true
