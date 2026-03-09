@@ -411,8 +411,10 @@ enum ServerCommands {
 enum RegistryCommands {
     /// 全fleetとサーバーの一覧を表示
     List,
-    /// 各fleet × serverの稼働状態を表示
+    /// 各fleet × serverの稼働状態を表示（CP接続時は実稼働状態）
     Status,
+    /// Registry定義をControl Planeに同期
+    Sync,
     /// Registry定義に従ってデプロイ
     Deploy {
         /// デプロイ対象のfleet名
@@ -623,6 +625,9 @@ async fn main() -> anyhow::Result<()> {
             }
             RegistryCommands::Status => {
                 commands::registry::handle_status(&registry);
+            }
+            RegistryCommands::Sync => {
+                commands::registry::handle_sync(&registry).await?;
             }
             RegistryCommands::Deploy { fleet, stage, yes } => {
                 commands::registry::handle_deploy(&registry, &root, fleet, stage.as_deref(), *yes)

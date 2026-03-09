@@ -70,7 +70,7 @@ pub fn handle_list(registry: &Registry) {
 }
 
 /// fleet registry status — 各fleet × serverの稼働状態
-/// (Phase 1 の初期実装ではルーティング情報のみ表示。Docker状態はPhase 2で実装)
+/// CP 接続可能な場合は横断クエリで実稼働状態を取得、不可の場合はルーティング情報のみ表示
 pub fn handle_status(registry: &Registry) {
     println!(
         "{}  {}",
@@ -78,6 +78,16 @@ pub fn handle_status(registry: &Registry) {
         registry.name.cyan().bold()
     );
     println!();
+
+    // CP 接続を試みて実稼働状態を取得
+    let rt = tokio::runtime::Handle::try_current();
+    let cp_status = if rt.is_ok() {
+        // 既に tokio ランタイム内 — ブロック不可、スキップ
+        None
+    } else {
+        // CP に接続してステージ状態を取得（ベストエフォート）
+        try_fetch_cp_status()
+    };
 
     println!(
         "  {:<14} {:<10} {:<14} {}",
@@ -92,21 +102,158 @@ pub fn handle_status(registry: &Registry) {
         println!("  {}", "(ルーティング未定義)".dimmed());
     } else {
         for route in &registry.routes {
-            // Phase 1: SSH接続は行わず、ルーティング情報のみ表示
+            let status = cp_status
+                .as_ref()
+                .and_then(|stages| {
+                    stages.iter().find(|s| {
+                        s["project_name"].as_str() == Some(route.fleet.as_str())
+                            && s["name"].as_str() == Some(route.stage.as_str())
+                    })
+                })
+                .map(|s| {
+                    let svc_count = s["services"]
+                        .as_array()
+                        .map(|arr| arr.len())
+                        .unwrap_or(0);
+                    let running = s["services"]
+                        .as_array()
+                        .map(|arr| {
+                            arr.iter()
+                                .filter(|svc| svc["status"].as_str() == Some("running"))
+                                .count()
+                        })
+                        .unwrap_or(0);
+                    if running == svc_count && svc_count > 0 {
+                        format!("{}/{} running", running, svc_count).green().to_string()
+                    } else if running > 0 {
+                        format!("{}/{} running", running, svc_count).yellow().to_string()
+                    } else {
+                        "stopped".red().to_string()
+                    }
+                })
+                .unwrap_or_else(|| "未確認".dimmed().to_string());
+
             println!(
                 "  {:<14} {:<10} {:<14} {}",
                 route.fleet.green(),
                 route.stage,
                 route.server.yellow(),
-                "未確認".dimmed()
+                status
             );
         }
     }
-    println!();
+
+    if cp_status.is_none() {
+        println!();
+        println!(
+            "  {}",
+            "ヒント: `fleet login` で CP に接続すると実稼働状態を表示します".dimmed()
+        );
+    }
+}
+
+/// CP からステージ横断情報を取得（ベストエフォート）
+fn try_fetch_cp_status() -> Option<Vec<serde_json::Value>> {
+    use super::cp_client;
+    use serde_json::json;
+
+    let rt = tokio::runtime::Runtime::new().ok()?;
+
+    rt.block_on(async {
+        let (client, _creds) = cp_client::connect().await.ok()?;
+        let resp = cp_client::request(&client, "stage", "list_across_projects", json!({}))
+            .await
+            .ok()?;
+        client.disconnect().await.ok();
+        resp["stages"].as_array().cloned()
+    })
+}
+
+/// fleet registry sync — Registry定義をControl Planeに同期
+///
+/// Registry 内の全 fleet を CP の project として登録し、
+/// 全 server を CP の server として登録する。
+pub async fn handle_sync(registry: &Registry) -> anyhow::Result<()> {
+    use super::cp_client;
+    use serde_json::json;
+
     println!(
-        "  {}",
-        "ヒント: サーバー状態の確認は Phase 2 で実装予定".dimmed()
+        "{}  {}",
+        "Registry Sync:".bold(),
+        registry.name.cyan().bold()
     );
+    println!();
+
+    let (client, _creds) = cp_client::connect().await?;
+
+    // Fleet → Project として登録
+    println!("{}", "プロジェクト同期:".bold());
+    for (name, entry) in &registry.fleets {
+        let desc = entry.description.as_deref().unwrap_or("");
+        let resp = cp_client::request(
+            &client,
+            "project",
+            "create",
+            json!({
+                "tenant_slug": "default",
+                "name": name,
+                "slug": name,
+                "description": desc,
+            }),
+        )
+        .await;
+
+        match resp {
+            Ok(r) if r.get("project").is_some() => {
+                println!("  {} {}", "✓".green(), name.cyan());
+            }
+            Ok(_) => {
+                // 既に存在する可能性
+                println!("  {} {} (既に存在)", "○".dimmed(), name.cyan());
+            }
+            Err(e) => {
+                println!("  {} {} — {}", "✗".red(), name, e);
+            }
+        }
+    }
+    println!();
+
+    // Server として登録
+    println!("{}", "サーバー同期:".bold());
+    for (name, server) in &registry.servers {
+        let ip = server.ssh_host.as_deref().unwrap_or("");
+        let resp = cp_client::request(
+            &client,
+            "server",
+            "register",
+            json!({
+                "tenant_slug": "default",
+                "slug": name,
+                "hostname": name,
+                "provider": server.provider,
+                "ip_address": ip,
+            }),
+        )
+        .await;
+
+        match resp {
+            Ok(r) if r.get("server").is_some() => {
+                println!("  {} {}", "✓".green(), name.yellow());
+            }
+            Ok(_) => {
+                println!("  {} {} (既に存在)", "○".dimmed(), name.yellow());
+            }
+            Err(e) => {
+                println!("  {} {} — {}", "✗".red(), name, e);
+            }
+        }
+    }
+
+    client.disconnect().await.ok();
+
+    println!();
+    println!("{}", "同期完了".green().bold());
+    Ok(())
 }
 
 /// fleet registry deploy <fleet> — Registry定義に従ってSSH経由でデプロイ
