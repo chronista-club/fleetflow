@@ -1,5 +1,6 @@
 use crate::docker;
 use crate::utils;
+use anyhow::Context;
 use colored::Colorize;
 
 pub async fn handle(
@@ -118,6 +119,68 @@ pub async fn handle(
             );
         }
     }
+
+    Ok(())
+}
+
+/// Control Plane 横断クエリ
+///
+/// - `project` が Some → 特定プロジェクトの全ステージを表示
+/// - `project` が None + `stage` が Some → 全プロジェクトの指定ステージを表示
+/// - 両方 None → 全プロジェクト・全ステージを表示
+pub async fn handle_cp_query(project: Option<&str>, stage: Option<&str>) -> anyhow::Result<()> {
+    // 認証情報の確認
+    let creds_path = dirs::config_dir()
+        .context("ホームディレクトリが見つかりません")?
+        .join("fleetflow/credentials.json");
+
+    if !creds_path.exists() {
+        eprintln!("{}", "Control Plane に未ログインです。".red().bold());
+        eprintln!();
+        eprintln!("  {} でログインしてください。", "fleet login".cyan());
+        std::process::exit(1);
+    }
+
+    let scope = match (project, stage) {
+        (Some(p), Some(s)) => format!("プロジェクト: {} / ステージ: {}", p.cyan(), s.cyan()),
+        (Some(p), None) => format!("プロジェクト: {} (全ステージ)", p.cyan()),
+        (None, Some(s)) => format!("全プロジェクト / ステージ: {}", s.cyan()),
+        (None, None) => "全プロジェクト・全ステージ".to_string(),
+    };
+
+    println!("{} {}", "Control Plane 横断クエリ:".bold(), scope);
+    println!();
+
+    // TODO: Control Plane API (Unison Protocol) に接続してクエリを実行
+    // 1. credentials.json からトークンを読み込み
+    // 2. Unison Client で CP に接続
+    // 3. stage.list_across_projects() を呼び出し
+    // 4. 結果を表形式で表示
+
+    println!(
+        "{}",
+        "Control Plane API への接続は未実装です。".yellow()
+    );
+    println!("実装予定: Unison Protocol 経由で CP サーバーに接続し、");
+    println!("横断クエリ結果を以下の形式で表示します:");
+    println!();
+    println!(
+        "{}",
+        format!(
+            "{:<20} {:<8} {:<15} {:<12} {:<10}",
+            "PROJECT", "STAGE", "SERVICE", "STATUS", "HEALTH"
+        )
+        .bold()
+    );
+    println!("{}", "─".repeat(65).dimmed());
+    println!(
+        "{:<20} {:<8} {:<15} {:<12} {:<10}",
+        "example-app".dimmed(),
+        "prod".dimmed(),
+        "web".dimmed(),
+        "running".dimmed(),
+        "healthy".dimmed()
+    );
 
     Ok(())
 }

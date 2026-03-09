@@ -107,6 +107,12 @@ enum Commands {
         /// 停止中のコンテナも表示
         #[arg(short, long)]
         all: bool,
+        /// Control Plane 横断: プロジェクト名で絞り込み
+        #[arg(long)]
+        project: Option<String>,
+        /// Control Plane 横断: 全プロジェクト・全ステージを表示
+        #[arg(long)]
+        global: bool,
     },
     /// プロジェクトの状態を表示（設定 vs 実態）
     Status {
@@ -500,6 +506,19 @@ async fn main() -> anyhow::Result<()> {
                 return commands::auth::handle_auth_status().await;
             }
         },
+        // Control Plane 横断クエリ（設定ファイル不要）
+        Commands::Ps {
+            project: Some(project),
+            stage,
+            stage_flag,
+            ..
+        } => {
+            let stage_name = stage.as_deref().or(stage_flag.as_deref());
+            return commands::ps::handle_cp_query(Some(project), stage_name).await;
+        }
+        Commands::Ps { global: true, .. } => {
+            return commands::ps::handle_cp_query(None, None).await;
+        }
         _ => {}
     }
 
@@ -580,7 +599,11 @@ async fn main() -> anyhow::Result<()> {
             stage, stage_flag, ..
         } => stage.as_deref().or(stage_flag.as_deref()),
         Commands::Ps {
-            stage, stage_flag, ..
+            stage,
+            stage_flag,
+            project: _,
+            global: _,
+            ..
         } => stage.as_deref().or(stage_flag.as_deref()),
         Commands::Status {
             stage, stage_flag, ..
@@ -688,6 +711,8 @@ async fn main() -> anyhow::Result<()> {
             stage,
             stage_flag,
             all,
+            project: _,
+            global: _,
         } => {
             let stage = stage.or(stage_flag);
             commands::ps::handle(&config, &project_root, stage, all).await?;
