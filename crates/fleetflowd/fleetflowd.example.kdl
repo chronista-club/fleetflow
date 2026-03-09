@@ -1,0 +1,38 @@
+// fleetflowd.kdl — Control Plane デーモン設定
+//
+// 配置場所（優先順）:
+//   1. --config オプションで指定
+//   2. ./fleetflowd.kdl
+//   3. ~/.config/fleetflow/fleetflowd.kdl
+//   4. /etc/fleetflow/fleetflowd.kdl
+
+daemon {
+    pid-file "/var/run/fleetflowd.pid"
+    log-file "/var/log/fleetflow/fleetflowd.log"
+    log-level "info"
+}
+
+api {
+    // Unison Protocol (QUIC + TLS 1.3) リスナー
+    listen "[::1]:4510"
+}
+
+database {
+    endpoint "ws://127.0.0.1:12000"
+    namespace "fleetflow"
+    database "control_plane"
+    username "fleetflow-api"
+    // 環境変数展開: ${VAR_NAME}
+    password "${FLEETFLOW_DB_PASSWORD}"
+}
+
+auth {
+    // Auth0 テナント設定
+    domain "anycreative.auth0.com"
+    audience "https://api.fleetflow.dev"
+}
+
+// health {
+//     check-interval "30s"
+//     heartbeat-timeout "90s"
+// }

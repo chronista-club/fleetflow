@@ -15,6 +15,9 @@ fleetflow-container.workspace = true
 # Communication
 unison = { path = "../../../unison/crates/unison-protocol" }
 
+# Docker
+bollard.workspace = true
+
 # Database
 surrealdb = { version = "3.0", features = ["kv-mem"] }
 

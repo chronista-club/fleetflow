@@ -58,6 +58,9 @@ chrono.workspace = true
 # Process management (daemon stop)
 libc = "0.2"
 
+# Browser opening (Auth0 login)
+open = "5"
+
 [dev-dependencies]
 assert_cmd = "2.0"
 predicates = "3.1"
