@@ -184,5 +184,5 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                 }
             }
         })
-    });
+    }).await;
 }

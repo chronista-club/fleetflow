@@ -1,3 +1,4 @@
+pub mod auth;
 pub mod cloud;
 pub mod deploy;
 pub mod down;

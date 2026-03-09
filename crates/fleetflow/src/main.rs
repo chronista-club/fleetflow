@@ -302,6 +302,24 @@ enum Commands {
     /// クラウドインフラを管理（サーバー作成・削除・状態確認）
     #[command(subcommand)]
     Cloud(CloudCommands),
+    /// Control Plane にログイン（Auth0 Device Authorization Flow）
+    Login {
+        /// API エンドポイント
+        #[arg(long)]
+        endpoint: Option<String>,
+    },
+    /// Control Plane からログアウト
+    Logout,
+    /// 認証状態を確認
+    #[command(subcommand)]
+    Auth(AuthCommands),
+}
+
+/// 認証管理のサブコマンド
+#[derive(Subcommand)]
+enum AuthCommands {
+    /// 認証状態を表示
+    Status,
 }
 
 /// Fleet Registryのサブコマンド
@@ -469,6 +487,22 @@ async fn main() -> anyhow::Result<()> {
         return self_update::self_update().await;
     }
 
+    // 認証コマンドは設定ファイル不要
+    match &cli.command {
+        Commands::Login { endpoint } => {
+            return commands::auth::handle_login(endpoint.clone()).await;
+        }
+        Commands::Logout => {
+            return commands::auth::handle_logout().await;
+        }
+        Commands::Auth(auth_cmd) => match auth_cmd {
+            AuthCommands::Status => {
+                return commands::auth::handle_auth_status().await;
+            }
+        },
+        _ => {}
+    }
+
     // Registryコマンドは独自のファイル発見ロジックを使用
     if let Commands::Registry(ref registry_cmd) = cli.command {
         let (registry, root) = commands::registry::load_registry()?;
@@ -587,6 +621,9 @@ async fn main() -> anyhow::Result<()> {
             CloudCommands::Down { stage, .. } => Some(stage.as_str()),
             CloudCommands::Status { stage } => stage.as_deref(),
         },
+        Commands::Login { .. } | Commands::Logout | Commands::Auth(_) => {
+            unreachable!("Auth commands are handled before config loading");
+        }
         _ => stage_from_env.as_deref(),
     };
 
@@ -791,6 +828,9 @@ async fn main() -> anyhow::Result<()> {
         }
         Commands::Registry(_) => {
             unreachable!("Registry is handled before config loading");
+        }
+        Commands::Login { .. } | Commands::Logout | Commands::Auth(_) => {
+            unreachable!("Auth commands are handled before config loading");
         }
     }
 
