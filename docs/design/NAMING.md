@@ -88,8 +88,10 @@ fleetflow/
 │   ├── fleetflow/
 │   ├── fleetflow-config/
 │   └── fleetflow-container/
-├── design/
 ├── docs/
+│   ├── spec/
+│   ├── design/
+│   └── guide/
 └── .fleetflow/
 ```
 

@@ -9,4 +9,4 @@
 - [ ] ワークスペースのルート `Cargo.toml` の `members` を更新。
 - [ ] 他の全てのクレート（`fleetflow`, `fleetflow-container` 等）の依存関係を `fleetflow-core` に更新。
 - [ ] コード内の `use fleetflow_core` を `use fleetflow_core` に置換。
-- [ ] ドキュメント（`README.md`, `spec/`, `design/`）内の言及を更新。
+- [ ] ドキュメント（`README.md`, `docs/spec/`, `docs/design/`）内の言及を更新。

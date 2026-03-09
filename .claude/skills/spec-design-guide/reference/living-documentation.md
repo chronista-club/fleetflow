@@ -65,9 +65,9 @@ Living Documentationが「信頼できる生きたメモリー」であり続け
 
 **例**:
 
-- `parser.rs`を修正 → `spec/02-parser-feature/DESIGN.md`を確認・更新
-- データモデル変更 → `spec/01-feature-name/SPEC.md`を更新
-- 新機能追加 → 新しいspec/ディレクトリを作成
+- `parser.rs`を修正 → `docs/spec/02-parser-feature/DESIGN.md`を確認・更新
+- データモデル変更 → `docs/spec/01-feature-name/SPEC.md`を更新
+- 新機能追加 → 新しいdocs/spec/ファイルを作成
 
 ### 2. ドキュメントとコードの不一致は技術的負債
 
@@ -100,17 +100,17 @@ Living Documentationが「信頼できる生きたメモリー」であり続け
 vim src/parser/core.rs
 
 # 2. 関連ドキュメントを確認
-cat spec/02-parser-feature/DESIGN.md
+cat docs/spec/02-parser-feature/DESIGN.md
 
 # 3. ドキュメントが現実と一致しているか確認
 # 不一致なら更新
-vim spec/02-parser-feature/DESIGN.md
+vim docs/spec/02-parser-feature/DESIGN.md
 
 # 4. チェックリストを更新
 # DESIGN.mdの実装チェックリストにチェック
 
 # 5. コミット（ドキュメント更新も含める）
-git add src/parser/core.rs spec/02-parser-feature/DESIGN.md
+git add src/parser/core.rs docs/spec/02-parser-feature/DESIGN.md
 git commit -m "パーサー改善とドキュメント更新"
 
 # 6. PRの説明にドキュメント更新を記載
@@ -130,8 +130,8 @@ git commit -m "パーサー改善とドキュメント更新"
 週次/月次でドキュメントとコードの乖離をチェック:
 
 ```bash
-# 各spec/ディレクトリを順番に確認
-cd spec/01-feature-name
+# 各docs/spec/ディレクトリを順番に確認
+cd docs/spec/01-feature-name
 # SPEC.mdとmodel.rsが一致しているか
 
 cd ../02-parser-feature
@@ -169,7 +169,7 @@ cd ../02-parser-feature
 ///       imageは"postgres:16"となる
 #[test]
 fn test_infer_image_name_with_version() {
-    // spec/02-parser-feature/SPEC.md FS-001に対応
+    // docs/spec/02-parser-feature/SPEC.md FS-001に対応
     let result = infer_image_name("postgres", Some("16"));
     assert_eq!(result, "postgres:16");
 }
@@ -199,7 +199,7 @@ fn test_infer_image_name_with_version() {
 # .github/workflows/docs-check.yml
 - name: ドキュメント鮮度チェック
   run: |
-    # 変更されたRustファイルに対応するspec/が更新されているかチェック
+    # 変更されたRustファイルに対応するdocs/spec/が更新されているかチェック
 ```
 
 ### pre-commit hook
@@ -213,7 +213,7 @@ changed_rs_files=$(git diff --cached --name-only | grep '\.rs$')
 
 if [ -n "$changed_rs_files" ]; then
     echo "⚠️  Rustファイルが変更されています"
-    echo "📝 関連するspec/ドキュメントを確認・更新してください"
+    echo "📝 関連するdocs/spec/ドキュメントを確認・更新してください"
     echo ""
     echo "変更ファイル:"
     echo "$changed_rs_files"
@@ -230,8 +230,8 @@ fi
 - ファイル2: 変更内容
 
 ## ドキュメント更新
-- spec/XX-YY/SPEC.md: 更新内容
-- spec/XX-YY/DESIGN.md: 更新内容
+- docs/spec/XX-YY/SPEC.md: 更新内容
+- docs/spec/XX-YY/DESIGN.md: 更新内容
 
 ## 理由
 なぜこの変更が必要だったか
@@ -246,7 +246,7 @@ Refs: #issue番号
 
 **重要**: コード変更を提案・実装する際は、必ず以下を実行してください:
 
-1. 変更するコードに対応する`spec/`ディレクトリを確認
+1. 変更するコードに対応する`docs/spec/`ディレクトリを確認
 2. SPEC.md/DESIGN.mdを読んで現状を理解
 3. コード変更後、ドキュメントとの乖離をチェック
 4. 乖離があればドキュメントを更新

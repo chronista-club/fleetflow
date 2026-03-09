@@ -18,9 +18,10 @@ fleetflow/
 │   ├── fleetflow-cloud/        # クラウドインフラ抽象化
 │   ├── fleetflow-cloud-sakura/ # さくらクラウド連携
 │   └── fleetflow-cloud-cloudflare/ # Cloudflare連携
-├── spec/                       # 仕様書
-├── design/                     # 設計書
-└── guides/                     # 利用ガイド
+├── docs/
+│   ├── spec/                   # 仕様書
+│   ├── design/                 # 設計書
+│   └── guide/                  # 利用ガイド
 ```
 
 ## クレート概要
@@ -187,7 +188,7 @@ FleetFlowは主にmacOSのローカル開発環境での利用を想定してお
 
 ## ドキュメント構造
 
-### spec/ - 仕様書（What & Why）
+### docs/spec/ - 仕様書（What & Why）
 
 機能の目的と仕様を定義。
 
@@ -199,7 +200,7 @@ FleetFlowは主にmacOSのローカル開発環境での利用を想定してお
 - `08-cloud-infrastructure.md` - クラウドインフラ
 - `09-dns-integration.md` - DNS連携
 
-### design/ - 設計書（How）
+### docs/design/ - 設計書（How）
 
 実装の詳細設計。
 
@@ -209,7 +210,7 @@ FleetFlowは主にmacOSのローカル開発環境での利用を想定してお
 - `04-cloud-infrastructure.md` - クラウド設計
 - `05-dns-integration.md` - DNS連携設計
 
-### guides/ - 利用ガイド（Usage）
+### docs/guide/ - 利用ガイド（Usage）
 
 ユースケース別の使い方。
 

@@ -402,20 +402,20 @@ pub enum SearchError {
 - **コミット**: (これから実装)
 ```
 
-#### 4. spec/ディレクトリの決定
+#### 4. docs/spec/ディレクトリの決定
 
-既存のspec/ディレクトリに対応：
-- `spec/03-feature-name/` → 機能関連
+既存のdocs/spec/ディレクトリに対応：
+- `docs/spec/03-feature-name/` → 機能関連
 
 新規の場合は連番を割り当て：
-- `spec/08-{機能名}/`
+- `docs/spec/08-{機能名}/`
 
 ### 完了条件
 
 - ✅ SPEC.mdが作成され、要件が明文化されている
 - ✅ DESIGN.mdが作成され、実装方針が明確
 - ✅ 実装チェックリストが用意されている
-- ✅ spec/ディレクトリが適切に決定されている
+- ✅ docs/spec/ディレクトリが適切に決定されている
 
 ### 成果物
 
@@ -607,8 +607,8 @@ git add \
   src/search/query.rs \
   src/search/engine.rs \
   src/api/search.rs \
-  spec/03-search-feature/SPEC.md \
-  spec/03-search-feature/DESIGN.md
+  docs/spec/03-search-feature/SPEC.md \
+  docs/spec/03-search-feature/DESIGN.md
 
 git commit -m "検索機能追加とドキュメント更新
 
@@ -618,8 +618,8 @@ git commit -m "検索機能追加とドキュメント更新
 - src/api/search.rs: 検索エンドポイント追加
 
 ## ドキュメント更新
-- spec/03-search-feature/SPEC.md: FS-001仕様追加
-- spec/03-search-feature/DESIGN.md: 検索設計追加、実装チェックリスト完了
+- docs/spec/03-search-feature/SPEC.md: FS-001仕様追加
+- docs/spec/03-search-feature/DESIGN.md: 検索設計追加、実装チェックリスト完了
 
 ## 理由
 ユーザーが素早く情報を見つけられるようにするため。

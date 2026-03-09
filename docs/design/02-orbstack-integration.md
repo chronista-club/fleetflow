@@ -383,7 +383,7 @@ async fn test_create_container_with_labels() {
 
 ### 2025-11-22: ドキュメント構造変更
 - **理由**: SDGスキルのフラット構造に対応
-- **影響**: docs/design/から design/へ移行
+- **影響**: docs/design/へ統合
 - **コミット**: d80720e
 
 ### 2025-11-16: 初版作成

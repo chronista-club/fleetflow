@@ -34,13 +34,13 @@ fleetflow/
 │   ├── fleetflow-cloud-sakura/    # さくらクラウド連携
 │   ├── fleetflow-cloud-cloudflare/ # Cloudflare連携
 │   └── fleetflow-mcp/            # MCPサーバー
-├── spec/                          # 仕様書（What & Why）- 番号付きフラット構造
-├── design/                        # 設計書（How）- 番号付きフラット構造
-├── guides/                        # 利用ガイド（Usage）
+├── docs/
+│   ├── spec/                      # 仕様書（What & Why）- 番号付きフラット構造
+│   ├── design/                    # 設計書（How）- 番号付きフラット構造
+│   └── guide/                     # 利用ガイド（Usage）
 ├── .claude/
 │   ├── CLAUDE.md                  # このファイル
 │   └── ports.md                   # ポート設定ガイド
-└── docs/                          # 公式ドキュメント
 ```
 
 ## ビルド・テスト・実行
@@ -117,7 +117,7 @@ Dockerラベルで自動グループ化:
 - `com.docker.compose.service` = `{service}`
 - `fleetflow.project` / `fleetflow.stage` / `fleetflow.service`
 
-詳細: `spec/06-orbstack-integration.md`, `design/02-orbstack-integration.md`
+詳細: `docs/spec/06-orbstack-integration.md`, `docs/design/02-orbstack-integration.md`
 
 ## CLIコマンド
 

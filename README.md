@@ -230,9 +230,10 @@ fleetflow/
 │   ├── fleetflow-mcp/              # MCP サーバー
 │   └── fleetflow-registry/         # 複数 fleet 管理
 ├── examples/                       # 設定ファイルのサンプル
-├── spec/                           # 仕様書
-├── design/                         # 設計書
-└── guides/                         # 利用ガイド
+├── docs/
+│   ├── spec/                      # 仕様書
+│   ├── design/                    # 設計書
+│   └── guide/                     # 利用ガイド
 ```
 
 ## ライセンス

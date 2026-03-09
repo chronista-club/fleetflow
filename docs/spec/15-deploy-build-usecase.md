@@ -112,5 +112,5 @@ fleet deploy live --yes --no-pull
 
 ## 関連ドキュメント
 
-- [spec/03-cli-commands.md](03-cli-commands.md) - CLIコマンド仕様
-- [spec/07-docker-build.md](07-docker-build.md) - Dockerビルド仕様
+- [docs/spec/03-cli-commands.md](03-cli-commands.md) - CLIコマンド仕様
+- [docs/spec/07-docker-build.md](07-docker-build.md) - Dockerビルド仕様

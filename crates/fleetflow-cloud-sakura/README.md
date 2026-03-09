@@ -50,8 +50,8 @@ server "web" {
 ## 関連ドキュメント
 
 - [fleetflow-cloud](../fleetflow-cloud/README.md)
-- [仕様書](../../spec/08-cloud-infrastructure.md)
-- [設計書](../../design/04-cloud-infrastructure.md)
+- [仕様書](../../docs/spec/08-cloud-infrastructure.md)
+- [設計書](../../docs/design/04-cloud-infrastructure.md)
 
 ## ライセンス
 

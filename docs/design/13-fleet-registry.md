@@ -330,7 +330,7 @@ sequenceDiagram
 - [ ] Cargo.toml: workspace に追加
 - [ ] CLI: Commands::Registry サブコマンド
 - [ ] commands/registry.rs: list, status, deploy ハンドラ
-- [ ] spec/design ドキュメント同期確認
+- [ ] docs/spec・docs/design ドキュメント同期確認
 
 ## 変更履歴
 

@@ -405,9 +405,10 @@ fleetflow/
 │   ├── fleetflow-cloud/        # クラウド抽象化
 │   ├── fleetflow-cloud-sakura/ # さくらクラウド
 │   └── fleetflow-cloud-cloudflare/ # Cloudflare
-├── spec/                       # 仕様書
-├── design/                     # 設計書
-└── guides/                     # 利用ガイド
+├── docs/
+│   ├── spec/                   # 仕様書
+│   ├── design/                 # 設計書
+│   └── guide/                  # 利用ガイド
 ```
 
 詳細: [reference/architecture.md](reference/architecture.md)

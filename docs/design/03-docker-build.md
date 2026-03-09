@@ -1,7 +1,7 @@
 # 設計書: Dockerイメージビルド機能
 
 **Issue**: #10
-**関連仕様**: `spec/07-docker-build.md`
+**関連仕様**: `docs/spec/07-docker-build.md`
 **作成日**: 2025-11-23
 **ステータス**: Phase 3 - 設計中
 

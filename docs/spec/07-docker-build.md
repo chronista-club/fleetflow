@@ -706,4 +706,4 @@ CMD ["node", "index.js"]
 
 ---
 
-**次のステップ**: 設計書の作成 (`design/03-docker-build.md`)
+**次のステップ**: 設計書の作成 (`docs/design/03-docker-build.md`)

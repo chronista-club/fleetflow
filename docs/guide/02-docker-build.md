@@ -1,7 +1,7 @@
 # ガイド: Dockerイメージビルド機能の使い方
 
 **Issue**: #10
-**関連**: `spec/07-docker-build.md`, `design/03-docker-build.md`
+**関連**: `docs/spec/07-docker-build.md`, `docs/design/03-docker-build.md`
 **作成日**: 2025-11-23
 
 ## このガイドについて

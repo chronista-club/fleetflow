@@ -262,4 +262,4 @@ Pushing worker...
 - [Dockerビルド仕様](./07-docker-build.md)
 - [クラウドインフラ仕様](./08-cloud-infrastructure.md)
 - [イメージプッシュ設計](../design/06-image-push.md)
-- [CI/CDデプロイガイド](../guides/03-ci-deployment.md)
+- [CI/CDデプロイガイド](../guide/03-ci-deployment.md)

@@ -196,7 +196,7 @@ FleetFlowにOrbStackとの連携機能を実装し、ローカル開発環境に
 
 ### 2025-11-22: ドキュメント構造変更
 - **理由**: SDGスキルのフラット構造に対応
-- **影響**: docs/design/から spec/, design/, guides/へ分割
+- **影響**: docs/design/から docs/spec/, docs/design/, docs/guide/へ分割
 - **コミット**: (未定)
 
 ### 2025-11-16: 初版作成

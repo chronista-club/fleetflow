@@ -402,7 +402,7 @@ git commit -m "$(cat <<'EOF'
 - ファイル1: 変更内容
 
 ## ドキュメント更新
-- spec/XX/SPEC.md: 更新内容
+- docs/spec/XX/SPEC.md: 更新内容
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 

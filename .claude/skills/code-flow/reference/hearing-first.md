@@ -299,8 +299,8 @@ Claude: 「ありがとうございます。
 - ユーザー管理: 既存DB利用
 
 それでは以下の流れで進めます：
-1. spec/08-auth-feature/SPEC.md作成
-2. spec/08-auth-feature/DESIGN.md作成
+1. docs/spec/08-auth-feature/SPEC.md作成
+2. docs/spec/08-auth-feature/DESIGN.md作成
 3. 実装
 
 まずSPEC.mdから作成します...」
@@ -480,7 +480,7 @@ A1: 「新機能」
   ↓
   [新機能なので...]
   ↓
-Q2: 「どのspec/ディレクトリに追加？」
+Q2: 「どのdocs/spec/ディレクトリに追加？」
 Q3: 「連番は？（08, 09, ...）」
 
 vs.
@@ -491,7 +491,7 @@ A1: 「既存機能の改善」
   ↓
   [既存機能の改善なので...]
   ↓
-Q2: 「どのspec/を修正？」
+Q2: 「どのdocs/spec/を修正？」
 Q3: 「何が問題？」
 ```
 
@@ -730,7 +730,7 @@ A3受信
   ↓
 ...
   ↓
-移行: 該当spec/を確認 → 更新
+移行: 該当docs/spec/を確認 → 更新
 ```
 
 ### パターン3: バグ修正

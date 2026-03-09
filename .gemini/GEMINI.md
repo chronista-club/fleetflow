@@ -47,14 +47,15 @@ fleetflow/
 │   ├── fleetflow-cloud/            # クラウドインフラ抽象化
 │   ├── fleetflow-cloud-sakura/     # さくらクラウド連携
 │   └── fleetflow-cloud-cloudflare/ # Cloudflare連携
-├── spec/                           # 仕様書（What & Why）
-│   ├── 01-core-concepts.md
-│   ├── ...
-├── design/                         # 設計書（How）
-│   ├── 01-kdl-parser.md
-│   ├── ...
-├── guides/                         # 利用ガイド（Usage）
-│   ├── ...
+├── docs/
+│   ├── spec/                       # 仕様書（What & Why）
+│   │   ├── 01-core-concepts.md
+│   │   ├── ...
+│   ├── design/                     # 設計書（How）
+│   │   ├── 01-kdl-parser.md
+│   │   ├── ...
+│   └── guide/                      # 利用ガイド（Usage）
+│       ├── ...
 ├── .claude/                        # Claude Code設定 (Geminiも参照)
 │   ├── CLAUDE.md                   # 元のプロジェクトガイド
 │   ├── ports.md                    # ポート設定ガイド
@@ -83,9 +84,9 @@ Phase 1: Brain相談 → Phase 2: ヒアリング → Phase 3: SDG → Phase 4: 
 仕様・設計・ガイドのドキュメントをフラット構造で作成：
 
 ```
-spec/              # What & Why（コンセプト・仕様・哲学）
-design/            # How（モデル・手法・実装）
-guides/            # Usage（使い方・ベストプラクティス）
+docs/spec/         # What & Why（コンセプト・仕様・哲学）
+docs/design/       # How（モデル・手法・実装）
+docs/guide/        # Usage（使い方・ベストプラクティス）
 ```
 
 **Living Documentation原則**：
@@ -107,7 +108,7 @@ Geminiは`.claude/skills/`以下のドキュメントを参照し、必要に応
 
 **spec-design-guide（SDG）**：
 - ✅ 新機能の設計・実装、リファクタリング時
-- ✅ `spec/`, `design/`, `guides/`ディレクトリ操作時
+- ✅ `docs/spec/`, `docs/design/`, `docs/guide/`ディレクトリ操作時
 
 **document-skills**：
 - ✅ README、ガイドなどの公式文書作成時
@@ -155,7 +156,7 @@ Geminiは`.claude/skills/`以下のドキュメントを参照し、必要に応
 
 ## KDL設定ファイル仕様 & OrbStack連携
 
-詳細は`spec/`, `design/`および`.claude/CLAUDE.md`を参照してください。
+詳細は`docs/spec/`, `docs/design/`および`.claude/CLAUDE.md`を参照してください。
 基本的な構造（`project`, `stage`, `service`）や命名規則（`{project}-{stage}-{service}`）は厳守します。
 
 ## Geminiでの開発推奨ワークフロー
@@ -184,11 +185,11 @@ Geminiは`.claude/skills/`以下のドキュメントを参照し、必要に応
 
 4.  **コンテキスト把握**:
     - `GEMINI.md` (本ファイル) および `.claude/CLAUDE.md` を確認。
-    - `spec/`, `design/` で仕様・設計を確認。
+    - `docs/spec/`, `docs/design/` で仕様・設計を確認。
 
 5.  **新機能・修正**:
     - ユーザーとの対話で要件を明確化 (Code Flow Phase 1-2)。
-    - 必要に応じて `spec/`, `design/` を更新 (Code Flow Phase 3)。
+    - 必要に応じて `docs/spec/`, `docs/design/` を更新 (Code Flow Phase 3)。
     - 実装とテスト (Code Flow Phase 4)。
     - **Living Documentation**: コード変更に合わせてドキュメントも更新。
 

@@ -42,9 +42,9 @@ builder.build(&dockerfile, tar, &build_config).await?;
 
 ## 関連ドキュメント
 
-- [仕様書](../../spec/07-docker-build.md)
-- [設計書](../../design/03-docker-build.md)
-- [利用ガイド](../../guides/02-docker-build.md)
+- [仕様書](../../docs/spec/07-docker-build.md)
+- [設計書](../../docs/design/03-docker-build.md)
+- [利用ガイド](../../docs/guide/02-docker-build.md)
 
 ## ライセンス
 
