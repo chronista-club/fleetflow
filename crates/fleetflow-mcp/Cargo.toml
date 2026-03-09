@@ -30,3 +30,9 @@ tracing.workspace = true
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 futures-util.workspace = true
 bollard.workspace = true
+
+# CP integration (v2)
+unison = { path = "../../../unison/crates/unison-protocol" }
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
+dirs = "6"
+chrono.workspace = true

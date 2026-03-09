@@ -16,6 +16,8 @@ use serde::Deserialize;
 use std::collections::HashMap;
 use tracing::error;
 
+mod cp;
+
 // ============================================================================
 // パラメータ定義
 // ============================================================================
@@ -67,6 +69,41 @@ pub struct BuildParam {
     /// キャッシュを使用せずにビルドする場合は true
     #[serde(default)]
     pub no_cache: bool,
+}
+
+// ============================================================================
+// CP パラメータ定義（v2）
+// ============================================================================
+
+/// プロジェクト slug パラメータ
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
+pub struct ProjectSlugParam {
+    /// プロジェクトの slug
+    pub slug: String,
+}
+
+/// コンテナ操作パラメータ（CP 経由）
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
+pub struct CpContainerParam {
+    /// プロジェクト slug
+    pub project: String,
+    /// ステージ名
+    pub stage: String,
+    /// サービス名
+    pub service: String,
+}
+
+/// CP ログ取得パラメータ
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
+pub struct CpLogsParam {
+    /// プロジェクト slug
+    pub project: String,
+    /// ステージ名
+    pub stage: String,
+    /// サービス名
+    pub service: String,
+    /// 取得する行数（デフォルト: 50）
+    pub tail: Option<u64>,
 }
 
 // ============================================================================
@@ -480,6 +517,361 @@ impl FleetFlowServer {
             Err(result)
         }
     }
+
+    // ========================================================================
+    // CP 経由ツール（v2）
+    // ========================================================================
+
+    /// CP 接続状態を確認
+    #[tool(
+        description = "Control Plane への接続状態を確認します。ログイン済みか、トークンの有効期限、テナント情報を表示します。"
+    )]
+    async fn fleetflow_cp_status(&self) -> Result<String, String> {
+        let creds_path = dirs::config_dir()
+            .ok_or("設定ディレクトリが見つかりません")?
+            .join("fleetflow/credentials.json");
+
+        if !creds_path.exists() {
+            return Ok("未ログイン。`fleet login` でログインしてください。".to_string());
+        }
+
+        let content = std::fs::read_to_string(&creds_path)
+            .map_err(|e| format!("credentials 読み込みエラー: {}", e))?;
+        let creds: cp::Credentials = serde_json::from_str(&content)
+            .map_err(|e| format!("credentials パースエラー: {}", e))?;
+
+        let expired = chrono::DateTime::parse_from_rfc3339(&creds.expires_at)
+            .map(|exp| exp < chrono::Utc::now())
+            .unwrap_or(false);
+
+        let mut info = String::new();
+        info.push_str("CP 接続情報:\n\n");
+        info.push_str(&format!(
+            "  Email:    {}\n",
+            creds.email.as_deref().unwrap_or("N/A")
+        ));
+        info.push_str(&format!(
+            "  Tenant:   {}\n",
+            creds.tenant_slug.as_deref().unwrap_or("default")
+        ));
+        info.push_str(&format!("  Endpoint: {}\n", creds.api_endpoint));
+        info.push_str(&format!(
+            "  Status:   {}\n",
+            if expired { "期限切れ" } else { "有効" }
+        ));
+
+        Ok(info)
+    }
+
+    /// CP 経由でプロジェクト一覧を取得
+    #[tool(
+        description = "Control Plane に登録されている全プロジェクトの一覧を取得します。CP にログイン済みである必要があります。"
+    )]
+    async fn fleetflow_cp_projects(&self) -> Result<String, String> {
+        let (client, _creds) = cp::connect().await.map_err(|e| e.to_string())?;
+
+        let resp = cp::request(&client, "project", "list", serde_json::json!({}))
+            .await
+            .map_err(|e| e.to_string())?;
+
+        client.disconnect().await.ok();
+
+        let mut result = "プロジェクト一覧:\n\n".to_string();
+
+        if let Some(projects) = resp["projects"].as_array() {
+            if projects.is_empty() {
+                result.push_str("  (プロジェクトなし)");
+            } else {
+                result.push_str(&format!(
+                    "  {:<20} {:<25} {}\n",
+                    "SLUG", "NAME", "CREATED"
+                ));
+                result.push_str(&format!("  {}\n", "─".repeat(65)));
+                for p in projects {
+                    result.push_str(&format!(
+                        "  {:<20} {:<25} {}\n",
+                        p["slug"].as_str().unwrap_or("N/A"),
+                        p["name"].as_str().unwrap_or("N/A"),
+                        p["created_at"].as_str().unwrap_or("N/A"),
+                    ));
+                }
+            }
+        }
+
+        Ok(result)
+    }
+
+    /// CP 経由でサーバー一覧を取得
+    #[tool(
+        description = "Control Plane に登録されている全サーバーの一覧を取得します。各サーバーのプロバイダ、IP、稼働状態を表示します。"
+    )]
+    async fn fleetflow_cp_servers(&self) -> Result<String, String> {
+        let (client, _creds) = cp::connect().await.map_err(|e| e.to_string())?;
+
+        let resp = cp::request(&client, "server", "list", serde_json::json!({}))
+            .await
+            .map_err(|e| e.to_string())?;
+
+        client.disconnect().await.ok();
+
+        let mut result = "サーバー一覧:\n\n".to_string();
+
+        if let Some(servers) = resp["servers"].as_array() {
+            if servers.is_empty() {
+                result.push_str("  (サーバーなし)");
+            } else {
+                result.push_str(&format!(
+                    "  {:<15} {:<15} {:<15} {:<10}\n",
+                    "SLUG", "PROVIDER", "IP", "STATUS"
+                ));
+                result.push_str(&format!("  {}\n", "─".repeat(55)));
+                for s in servers {
+                    result.push_str(&format!(
+                        "  {:<15} {:<15} {:<15} {:<10}\n",
+                        s["slug"].as_str().unwrap_or("N/A"),
+                        s["provider"].as_str().unwrap_or("N/A"),
+                        s["ip_address"].as_str().unwrap_or("N/A"),
+                        s["status"].as_str().unwrap_or("unknown"),
+                    ));
+                }
+            }
+        }
+
+        Ok(result)
+    }
+
+    /// CP 経由で全プロジェクト横断のステージ状態を取得
+    #[tool(
+        description = "全プロジェクトのステージ横断状態を取得します。各プロジェクト × ステージのサービス稼働数を表示します。"
+    )]
+    async fn fleetflow_cp_overview(&self) -> Result<String, String> {
+        let (client, _creds) = cp::connect().await.map_err(|e| e.to_string())?;
+
+        let resp = cp::request(
+            &client,
+            "stage",
+            "list_across_projects",
+            serde_json::json!({}),
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+
+        client.disconnect().await.ok();
+
+        let mut result = "プロジェクト横断ステータス:\n\n".to_string();
+
+        if let Some(stages) = resp["stages"].as_array() {
+            if stages.is_empty() {
+                result.push_str("  (ステージなし)");
+            } else {
+                result.push_str(&format!(
+                    "  {:<20} {:<10} {:<10} {}\n",
+                    "PROJECT", "STAGE", "SERVICES", "STATUS"
+                ));
+                result.push_str(&format!("  {}\n", "─".repeat(55)));
+                for s in stages {
+                    let svc_count = s["services"]
+                        .as_array()
+                        .map(|arr| arr.len())
+                        .unwrap_or(0);
+                    let running = s["services"]
+                        .as_array()
+                        .map(|arr| {
+                            arr.iter()
+                                .filter(|svc| svc["status"].as_str() == Some("running"))
+                                .count()
+                        })
+                        .unwrap_or(0);
+                    let status = if running == svc_count && svc_count > 0 {
+                        format!("{}/{} running", running, svc_count)
+                    } else if running > 0 {
+                        format!("{}/{} partial", running, svc_count)
+                    } else {
+                        "stopped".to_string()
+                    };
+                    result.push_str(&format!(
+                        "  {:<20} {:<10} {:<10} {}\n",
+                        s["project_name"].as_str().unwrap_or("N/A"),
+                        s["name"].as_str().unwrap_or("N/A"),
+                        svc_count,
+                        status,
+                    ));
+                }
+            }
+        }
+
+        Ok(result)
+    }
+
+    /// CP 経由でプロジェクトの詳細を取得
+    #[tool(
+        description = "指定プロジェクトの詳細情報を取得します。プロジェクト名、説明、作成日時を表示します。"
+    )]
+    async fn fleetflow_cp_project_detail(
+        &self,
+        params: Parameters<ProjectSlugParam>,
+    ) -> Result<String, String> {
+        let slug = &params.0.slug;
+        let (client, _creds) = cp::connect().await.map_err(|e| e.to_string())?;
+
+        let resp = cp::request(
+            &client,
+            "project",
+            "get",
+            serde_json::json!({ "slug": slug }),
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+
+        client.disconnect().await.ok();
+
+        if let Some(project) = resp.get("project") {
+            let mut result = format!("プロジェクト: {}\n\n", slug);
+            result.push_str(&format!(
+                "  Name:        {}\n",
+                project["name"].as_str().unwrap_or("N/A")
+            ));
+            result.push_str(&format!(
+                "  Slug:        {}\n",
+                project["slug"].as_str().unwrap_or("N/A")
+            ));
+            result.push_str(&format!(
+                "  Description: {}\n",
+                project["description"].as_str().unwrap_or("N/A")
+            ));
+            result.push_str(&format!(
+                "  Created:     {}\n",
+                project["created_at"].as_str().unwrap_or("N/A")
+            ));
+            Ok(result)
+        } else {
+            Err(format!("プロジェクト '{}' が見つかりません", slug))
+        }
+    }
+
+    /// CP 経由でコンテナを起動
+    #[tool(
+        description = "Control Plane 経由で指定プロジェクト/ステージ/サービスのコンテナを起動します。"
+    )]
+    async fn fleetflow_cp_container_start(
+        &self,
+        params: Parameters<CpContainerParam>,
+    ) -> Result<String, String> {
+        let p = &params.0;
+        let (client, _creds) = cp::connect().await.map_err(|e| e.to_string())?;
+
+        let container_name = format!("{}-{}-{}", p.project, p.stage, p.service);
+        let resp = cp::request(
+            &client,
+            "container",
+            "start",
+            serde_json::json!({ "container_name": container_name }),
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+
+        client.disconnect().await.ok();
+
+        if resp.get("error").is_some() {
+            Err(format!("起動失敗: {}", resp))
+        } else {
+            Ok(format!("コンテナ '{}' を起動しました", container_name))
+        }
+    }
+
+    /// CP 経由でコンテナを停止
+    #[tool(
+        description = "Control Plane 経由で指定プロジェクト/ステージ/サービスのコンテナを停止します。"
+    )]
+    async fn fleetflow_cp_container_stop(
+        &self,
+        params: Parameters<CpContainerParam>,
+    ) -> Result<String, String> {
+        let p = &params.0;
+        let (client, _creds) = cp::connect().await.map_err(|e| e.to_string())?;
+
+        let container_name = format!("{}-{}-{}", p.project, p.stage, p.service);
+        let resp = cp::request(
+            &client,
+            "container",
+            "stop",
+            serde_json::json!({ "container_name": container_name }),
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+
+        client.disconnect().await.ok();
+
+        if resp.get("error").is_some() {
+            Err(format!("停止失敗: {}", resp))
+        } else {
+            Ok(format!("コンテナ '{}' を停止しました", container_name))
+        }
+    }
+
+    /// CP 経由でコンテナを再起動
+    #[tool(
+        description = "Control Plane 経由で指定プロジェクト/ステージ/サービスのコンテナを再起動します。"
+    )]
+    async fn fleetflow_cp_container_restart(
+        &self,
+        params: Parameters<CpContainerParam>,
+    ) -> Result<String, String> {
+        let p = &params.0;
+        let (client, _creds) = cp::connect().await.map_err(|e| e.to_string())?;
+
+        let container_name = format!("{}-{}-{}", p.project, p.stage, p.service);
+        let resp = cp::request(
+            &client,
+            "container",
+            "restart",
+            serde_json::json!({ "container_name": container_name }),
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+
+        client.disconnect().await.ok();
+
+        if resp.get("error").is_some() {
+            Err(format!("再起動失敗: {}", resp))
+        } else {
+            Ok(format!("コンテナ '{}' を再起動しました", container_name))
+        }
+    }
+
+    /// CP 経由でコンテナログを取得
+    #[tool(
+        description = "Control Plane 経由で指定プロジェクト/ステージ/サービスのコンテナログを取得します。"
+    )]
+    async fn fleetflow_cp_container_logs(
+        &self,
+        params: Parameters<CpLogsParam>,
+    ) -> Result<String, String> {
+        let p = &params.0;
+        let tail = p.tail.unwrap_or(50);
+        let (client, _creds) = cp::connect().await.map_err(|e| e.to_string())?;
+
+        let container_name = format!("{}-{}-{}", p.project, p.stage, p.service);
+        let resp = cp::request(
+            &client,
+            "container",
+            "logs",
+            serde_json::json!({
+                "container_name": container_name,
+                "tail": tail,
+            }),
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+
+        client.disconnect().await.ok();
+
+        if let Some(logs) = resp["logs"].as_str() {
+            Ok(format!("Logs for {}:\n\n{}", container_name, logs))
+        } else {
+            Ok(format!("Logs for {}:\n\n(ログなし)", container_name))
+        }
+    }
 }
 
 impl ServerHandler for FleetFlowServer {
@@ -620,12 +1012,48 @@ mod tests {
         assert!(p.no_cache);
     }
 
+    // CP v2 パラメータテスト
+
+    #[test]
+    fn project_slug_param_deserialize() {
+        let v = json!({"slug": "my-project"});
+        let p: ProjectSlugParam = serde_json::from_value(v).unwrap();
+        assert_eq!(p.slug, "my-project");
+    }
+
+    #[test]
+    fn cp_container_param_deserialize() {
+        let v = json!({"project": "web", "stage": "prod", "service": "api"});
+        let p: CpContainerParam = serde_json::from_value(v).unwrap();
+        assert_eq!(p.project, "web");
+        assert_eq!(p.stage, "prod");
+        assert_eq!(p.service, "api");
+    }
+
+    #[test]
+    fn cp_logs_param_deserialize() {
+        let v = json!({"project": "web", "stage": "local", "service": "db"});
+        let p: CpLogsParam = serde_json::from_value(v).unwrap();
+        assert_eq!(p.project, "web");
+        assert_eq!(p.stage, "local");
+        assert_eq!(p.service, "db");
+        assert!(p.tail.is_none());
+    }
+
+    #[test]
+    fn cp_logs_param_with_tail() {
+        let v = json!({"project": "web", "stage": "prod", "service": "api", "tail": 200});
+        let p: CpLogsParam = serde_json::from_value(v).unwrap();
+        assert_eq!(p.tail, Some(200));
+    }
+
     // ------------------------------------------------------------------------
     // ツールルーター・ツール定義
     // ------------------------------------------------------------------------
 
     /// 期待する全ツール名
     const EXPECTED_TOOLS: &[&str] = &[
+        // v1: ローカル Docker 操作
         "fleetflow_inspect_project",
         "fleetflow_ps",
         "fleetflow_up",
@@ -634,6 +1062,16 @@ mod tests {
         "fleetflow_restart",
         "fleetflow_validate",
         "fleetflow_build",
+        // v2: CP 経由管理操作
+        "fleetflow_cp_status",
+        "fleetflow_cp_projects",
+        "fleetflow_cp_servers",
+        "fleetflow_cp_overview",
+        "fleetflow_cp_project_detail",
+        "fleetflow_cp_container_start",
+        "fleetflow_cp_container_stop",
+        "fleetflow_cp_container_restart",
+        "fleetflow_cp_container_logs",
     ];
 
     #[test]
@@ -712,6 +1150,10 @@ mod tests {
             "fleetflow_inspect_project",
             "fleetflow_ps",
             "fleetflow_validate",
+            "fleetflow_cp_status",
+            "fleetflow_cp_projects",
+            "fleetflow_cp_servers",
+            "fleetflow_cp_overview",
         ];
         for tool in &tools {
             if parameterless.contains(&tool.name.as_ref()) {
