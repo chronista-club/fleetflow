@@ -311,6 +311,15 @@ enum Commands {
     /// Control Plane デーモンを管理
     #[command(subcommand)]
     Daemon(DaemonCommands),
+    /// テナント管理（Control Plane）
+    #[command(subcommand)]
+    Tenant(TenantCommands),
+    /// プロジェクト管理（Control Plane）
+    #[command(subcommand)]
+    Project(ProjectCommands),
+    /// サーバー管理（Control Plane）
+    #[command(subcommand)]
+    Server(ServerCommands),
     /// Control Plane にログイン（Auth0 Device Authorization Flow）
     Login {
         /// API エンドポイント
@@ -340,6 +349,61 @@ enum DaemonCommands {
     Stop,
     /// デーモンの状態を表示
     Status,
+}
+
+/// テナント管理のサブコマンド
+#[derive(Subcommand)]
+enum TenantCommands {
+    /// テナント状態を表示
+    Status,
+}
+
+/// プロジェクト管理のサブコマンド
+#[derive(Subcommand)]
+enum ProjectCommands {
+    /// プロジェクト一覧
+    List,
+    /// プロジェクト作成
+    Create {
+        /// プロジェクトのスラッグ（一意識別子）
+        #[arg(long)]
+        slug: String,
+        /// プロジェクト名
+        #[arg(long)]
+        name: String,
+    },
+    /// プロジェクト詳細
+    Show {
+        /// プロジェクトのスラッグ
+        slug: String,
+    },
+}
+
+/// サーバー管理のサブコマンド
+#[derive(Subcommand)]
+enum ServerCommands {
+    /// サーバー一覧
+    List,
+    /// サーバー登録
+    Register {
+        /// サーバーのスラッグ
+        #[arg(long)]
+        slug: String,
+        /// プロバイダー（sakura-cloud, manual 等）
+        #[arg(long)]
+        provider: String,
+        /// SSH ホスト（IP or hostname）
+        #[arg(long)]
+        ssh_host: Option<String>,
+        /// デプロイ先パス
+        #[arg(long)]
+        deploy_path: Option<String>,
+    },
+    /// サーバー状態
+    Status {
+        /// サーバーのスラッグ
+        slug: String,
+    },
 }
 
 /// Fleet Registryのサブコマンド
@@ -524,6 +588,16 @@ async fn main() -> anyhow::Result<()> {
         Commands::Daemon(daemon_cmd) => {
             return commands::daemon::handle(daemon_cmd).await;
         }
+        // CP リソース管理（設定ファイル不要）
+        Commands::Tenant(tenant_cmd) => {
+            return commands::cp::handle_tenant(tenant_cmd).await;
+        }
+        Commands::Project(project_cmd) => {
+            return commands::cp::handle_project(project_cmd).await;
+        }
+        Commands::Server(server_cmd) => {
+            return commands::cp::handle_server(server_cmd).await;
+        }
         // Control Plane 横断クエリ（設定ファイル不要）
         Commands::Ps {
             project: Some(project),
@@ -662,8 +736,14 @@ async fn main() -> anyhow::Result<()> {
             CloudCommands::Down { stage, .. } => Some(stage.as_str()),
             CloudCommands::Status { stage } => stage.as_deref(),
         },
-        Commands::Login { .. } | Commands::Logout | Commands::Auth(_) | Commands::Daemon(_) => {
-            unreachable!("Auth/Daemon commands are handled before config loading");
+        Commands::Login { .. }
+        | Commands::Logout
+        | Commands::Auth(_)
+        | Commands::Daemon(_)
+        | Commands::Tenant(_)
+        | Commands::Project(_)
+        | Commands::Server(_) => {
+            unreachable!("CP commands are handled before config loading");
         }
         _ => stage_from_env.as_deref(),
     };
@@ -872,8 +952,14 @@ async fn main() -> anyhow::Result<()> {
         Commands::Registry(_) => {
             unreachable!("Registry is handled before config loading");
         }
-        Commands::Login { .. } | Commands::Logout | Commands::Auth(_) | Commands::Daemon(_) => {
-            unreachable!("Auth/Daemon commands are handled before config loading");
+        Commands::Login { .. }
+        | Commands::Logout
+        | Commands::Auth(_)
+        | Commands::Daemon(_)
+        | Commands::Tenant(_)
+        | Commands::Project(_)
+        | Commands::Server(_) => {
+            unreachable!("CP commands are handled before config loading");
         }
     }
 
