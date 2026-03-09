@@ -12,6 +12,7 @@ pub struct Database {
 }
 
 /// Connection configuration.
+#[derive(Debug)]
 pub struct DbConfig {
     pub endpoint: String,
     pub namespace: String,

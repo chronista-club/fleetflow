@@ -15,6 +15,7 @@ pub struct AppState {
 }
 
 /// Control Plane server configuration.
+#[derive(Debug)]
 pub struct ServerConfig {
     pub listen_addr: String,
     pub db: DbConfig,

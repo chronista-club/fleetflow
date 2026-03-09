@@ -12,6 +12,7 @@ members = [
   "crates/fleetflow-mcp",
   "crates/fleetflow-registry",
   "crates/fleetflow-controlplane",
+  "crates/fleetflowd",
 ]
 
 [workspace.package]

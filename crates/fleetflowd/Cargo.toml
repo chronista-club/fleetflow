@@ -1,0 +1,49 @@
+[package]
+name = "fleetflowd"
+description = "FleetFlow Control Plane daemon"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "fleetflowd"
+path = "src/main.rs"
+
+[dependencies]
+fleetflow-controlplane = { path = "../fleetflow-controlplane" }
+
+# CLI
+clap.workspace = true
+
+# KDL config
+kdl.workspace = true
+
+# Async
+tokio.workspace = true
+
+# Error handling
+anyhow.workspace = true
+
+# Logging
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+# Serialization
+serde.workspace = true
+
+# TLS (required for Unison/QUIC)
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
+
+# Utils
+dirs.workspace = true
+
+# Process management
+libc = "0.2"
+
+# Output
+colored = { workspace = true }
+
+[dev-dependencies]
+tempfile.workspace = true

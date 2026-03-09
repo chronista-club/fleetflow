@@ -308,6 +308,9 @@ enum Commands {
     /// クラウドインフラを管理（サーバー作成・削除・状態確認）
     #[command(subcommand)]
     Cloud(CloudCommands),
+    /// Control Plane デーモンを管理
+    #[command(subcommand)]
+    Daemon(DaemonCommands),
     /// Control Plane にログイン（Auth0 Device Authorization Flow）
     Login {
         /// API エンドポイント
@@ -325,6 +328,17 @@ enum Commands {
 #[derive(Subcommand)]
 enum AuthCommands {
     /// 認証状態を表示
+    Status,
+}
+
+/// デーモン管理のサブコマンド
+#[derive(Subcommand)]
+enum DaemonCommands {
+    /// デーモンを起動（フォアグラウンド）
+    Start,
+    /// デーモンを停止
+    Stop,
+    /// デーモンの状態を表示
     Status,
 }
 
@@ -506,6 +520,10 @@ async fn main() -> anyhow::Result<()> {
                 return commands::auth::handle_auth_status().await;
             }
         },
+        // デーモン管理（設定ファイル不要）
+        Commands::Daemon(daemon_cmd) => {
+            return commands::daemon::handle(daemon_cmd).await;
+        }
         // Control Plane 横断クエリ（設定ファイル不要）
         Commands::Ps {
             project: Some(project),
@@ -644,8 +662,8 @@ async fn main() -> anyhow::Result<()> {
             CloudCommands::Down { stage, .. } => Some(stage.as_str()),
             CloudCommands::Status { stage } => stage.as_deref(),
         },
-        Commands::Login { .. } | Commands::Logout | Commands::Auth(_) => {
-            unreachable!("Auth commands are handled before config loading");
+        Commands::Login { .. } | Commands::Logout | Commands::Auth(_) | Commands::Daemon(_) => {
+            unreachable!("Auth/Daemon commands are handled before config loading");
         }
         _ => stage_from_env.as_deref(),
     };
@@ -854,8 +872,8 @@ async fn main() -> anyhow::Result<()> {
         Commands::Registry(_) => {
             unreachable!("Registry is handled before config loading");
         }
-        Commands::Login { .. } | Commands::Logout | Commands::Auth(_) => {
-            unreachable!("Auth commands are handled before config loading");
+        Commands::Login { .. } | Commands::Logout | Commands::Auth(_) | Commands::Daemon(_) => {
+            unreachable!("Auth/Daemon commands are handled before config loading");
         }
     }
 

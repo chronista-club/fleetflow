@@ -61,6 +61,7 @@ pub struct Auth0Verifier {
 }
 
 /// Auth0 configuration.
+#[derive(Debug)]
 pub struct Auth0Config {
     pub domain: String,
     pub audience: String,

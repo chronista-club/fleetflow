@@ -55,6 +55,9 @@ regex = "1"
 # Timestamp for setup logging
 chrono.workspace = true
 
+# Process management (daemon stop)
+libc = "0.2"
+
 [dev-dependencies]
 assert_cmd = "2.0"
 predicates = "3.1"
