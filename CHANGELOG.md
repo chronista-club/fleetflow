@@ -2,6 +2,31 @@
 
 FleetFlow の変更履歴。[Conventional Commits](https://www.conventionalcommits.org) に準拠。
 
+## [0.9.1] - 2026-03-09
+
+### Documentation
+
+- Platform Vision 仕様書を追加 — Control Plane 進化ロードマップ (spec/18-platform-vision)
+- ドキュメント構造を docs/ 配下に統合 (spec/ → docs/spec/, design/ → docs/design/, guides/ → docs/guide/)
+- CLAUDE.md・skills・README 等のパス参照を一括更新
+
+## [0.9.0] - 2026-03-07
+
+### Features
+
+- ヘルスチェック強化 — fleet ps HEALTH 列 + readiness チェック (#113)
+- self-update 簡素化 + インストールスクリプト追加 (#112)
+
+### Bug Fixes
+
+- @modelcontextprotocol/sdk を v1.12.0 に更新 (Dependabot high x2)
+- Docker 統合テストのステージ名不整合を修正
+
+### CI
+
+- プラグインバージョン不一致でリリースをブロック
+- リリース時にプラグインバージョン同期チェック追加
+
 ## [0.8.1] - 2026-03-07
 
 ### Features
