@@ -71,10 +71,10 @@ service "db" {
         "{}",
         fs::read_to_string(project.path().join("fleet.kdl")).unwrap()
     );
-    println!("\n=== flow.prod.kdl ===");
+    println!("\n=== flow.live.kdl ===");
     println!(
         "{}",
-        fs::read_to_string(project.path().join("flow.prod.kdl")).unwrap()
+        fs::read_to_string(project.path().join("flow.live.kdl")).unwrap()
     );
     println!("\n=== flow.local.kdl ===");
     println!(
@@ -82,13 +82,13 @@ service "db" {
         fs::read_to_string(project.path().join("flow.local.kdl")).unwrap()
     );
 
-    // 6. 起動 (prodステージ)
+    // 6. 起動 (liveステージ)
     let mut cmd = Command::cargo_bin("fleet").unwrap();
     let output = cmd
         .current_dir(project.path())
         .arg("up")
         .arg("--stage")
-        .arg("prod")
+        .arg("live")
         .output()
         .unwrap();
 
@@ -101,10 +101,10 @@ service "db" {
     // 6. 検証
     let docker = bollard::Docker::connect_with_local_defaults().unwrap();
 
-    // DB のイメージが "surrealdb/surrealdb:v2" (flow.prod.kdl) になっているか
+    // DB のイメージが "surrealdb/surrealdb:v2" (flow.live.kdl) になっているか
     let db_inspect = docker
         .inspect_container(
-            "priority-test-prod-db",
+            "priority-test-live-db",
             None::<bollard::query_parameters::InspectContainerOptions>,
         )
         .await
@@ -148,7 +148,7 @@ service "db" {
     cmd.current_dir(project.path())
         .arg("down")
         .arg("-s")
-        .arg("prod")
+        .arg("live")
         .arg("--remove")
         .assert()
         .success();
