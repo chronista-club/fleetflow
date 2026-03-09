@@ -30,6 +30,7 @@ pub async fn start(
         .route("/api/projects", get(api_projects))
         .route("/api/servers", get(api_servers))
         .route("/api/overview", get(api_overview))
+        .route("/api/dns", get(api_dns))
         // Dashboard
         .route("/", get(dashboard_html))
         .with_state(state);
@@ -112,6 +113,30 @@ async fn api_overview(State(state): State<Arc<AppState>>) -> impl IntoResponse {
                 })
                 .collect();
             (StatusCode::OK, Json(json!({ "stages": items }))).into_response()
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": e.to_string() })),
+        )
+            .into_response(),
+    }
+}
+
+async fn api_dns(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    match state.db.list_dns_records_by_tenant("default").await {
+        Ok(records) => {
+            let items: Vec<Value> = records
+                .iter()
+                .map(|r| {
+                    json!({
+                        "name": r.name,
+                        "record_type": r.record_type,
+                        "content": r.content,
+                        "proxied": r.proxied,
+                    })
+                })
+                .collect();
+            (StatusCode::OK, Json(json!({ "dns_records": items }))).into_response()
         }
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,

@@ -331,6 +331,12 @@ enum Commands {
     /// 認証状態を確認
     #[command(subcommand)]
     Auth(AuthCommands),
+    /// コスト管理（Control Plane）
+    #[command(subcommand)]
+    Cost(CostCommands),
+    /// DNS/ドメイン管理（Control Plane）
+    #[command(subcommand)]
+    Dns(DnsCommands),
 }
 
 /// 認証管理のサブコマンド
@@ -403,6 +409,74 @@ enum ServerCommands {
     Status {
         /// サーバーのスラッグ
         slug: String,
+    },
+}
+
+/// コスト管理のサブコマンド
+#[derive(Subcommand)]
+enum CostCommands {
+    /// 月次コスト一覧
+    List {
+        /// 対象年月（例: 2026-03）
+        #[arg(long)]
+        month: String,
+    },
+    /// コスト集計（プロバイダ×プロジェクト別）
+    Summary {
+        /// 対象年月（例: 2026-03）
+        #[arg(long)]
+        month: String,
+    },
+    /// コストエントリ登録
+    Record {
+        /// プロバイダ種別（sakura, cloudflare, auth0, stripe, other）
+        #[arg(long)]
+        provider: String,
+        /// 金額（円）
+        #[arg(long)]
+        amount: i64,
+        /// 対象年月（例: 2026-03）
+        #[arg(long)]
+        month: String,
+        /// コスト説明
+        #[arg(long)]
+        description: String,
+        /// 帰属プロジェクト（オプション）
+        #[arg(long)]
+        project: Option<String>,
+        /// 帰属ステージ（オプション）
+        #[arg(long)]
+        stage: Option<String>,
+    },
+}
+
+/// DNS/ドメイン管理のサブコマンド
+#[derive(Subcommand)]
+enum DnsCommands {
+    /// DNS レコード一覧
+    List,
+    /// DNS レコード作成
+    Create {
+        /// ドメイン名（例: api.example.com）
+        #[arg(long)]
+        name: String,
+        /// レコードタイプ（A, AAAA, CNAME, TXT）
+        #[arg(long, default_value = "A")]
+        record_type: String,
+        /// レコード値
+        #[arg(long)]
+        content: String,
+        /// Cloudflare プロキシ有効
+        #[arg(long)]
+        proxied: bool,
+        /// 帰属プロジェクト（オプション）
+        #[arg(long)]
+        project: Option<String>,
+    },
+    /// DNS レコード削除
+    Delete {
+        /// ドメイン名
+        name: String,
     },
 }
 
@@ -600,6 +674,12 @@ async fn main() -> anyhow::Result<()> {
         Commands::Server(server_cmd) => {
             return commands::cp::handle_server(server_cmd).await;
         }
+        Commands::Cost(cost_cmd) => {
+            return commands::cp::handle_cost(cost_cmd).await;
+        }
+        Commands::Dns(dns_cmd) => {
+            return commands::cp::handle_dns(dns_cmd).await;
+        }
         // Control Plane 横断クエリ（設定ファイル不要）
         Commands::Ps {
             project: Some(project),
@@ -747,7 +827,9 @@ async fn main() -> anyhow::Result<()> {
         | Commands::Daemon(_)
         | Commands::Tenant(_)
         | Commands::Project(_)
-        | Commands::Server(_) => {
+        | Commands::Server(_)
+        | Commands::Cost(_)
+        | Commands::Dns(_) => {
             unreachable!("CP commands are handled before config loading");
         }
         _ => stage_from_env.as_deref(),
@@ -963,7 +1045,9 @@ async fn main() -> anyhow::Result<()> {
         | Commands::Daemon(_)
         | Commands::Tenant(_)
         | Commands::Project(_)
-        | Commands::Server(_) => {
+        | Commands::Server(_)
+        | Commands::Cost(_)
+        | Commands::Dns(_) => {
             unreachable!("CP commands are handled before config loading");
         }
     }

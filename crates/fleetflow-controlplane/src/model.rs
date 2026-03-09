@@ -126,3 +126,62 @@ pub struct Server {
     pub created_at: Option<DateTime<Utc>>,
     pub updated_at: Option<DateTime<Utc>>,
 }
+
+// ─────────────────────────────────────────────
+// CP-007: CostEntry（コスト管理）
+// ─────────────────────────────────────────────
+
+/// 月次コストエントリ
+#[derive(Debug, Clone, Serialize, Deserialize, SurrealValue)]
+pub struct CostEntry {
+    pub id: Option<RecordId>,
+    pub tenant: RecordId,
+    /// コスト帰属先プロジェクト（None = テナント共通費用）
+    pub project: Option<RecordId>,
+    /// コスト帰属先ステージ（None = プロジェクト共通）
+    pub stage: Option<String>,
+    /// プロバイダ種別: sakura, cloudflare, auth0, stripe, other
+    pub provider: String,
+    /// コスト説明
+    pub description: String,
+    /// 金額（円）
+    pub amount_jpy: i64,
+    /// 対象年月（例: "2026-03"）
+    pub month: String,
+    pub created_at: Option<DateTime<Utc>>,
+}
+
+/// 月次コスト集計結果
+#[derive(Debug, Clone, Serialize, Deserialize, SurrealValue)]
+pub struct MonthlyCostSummary {
+    pub month: String,
+    pub provider: String,
+    pub project_slug: Option<String>,
+    pub total_jpy: i64,
+}
+
+// ─────────────────────────────────────────────
+// CP-008: DnsRecord（DNS/ドメイン管理）
+// ─────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize, SurrealValue)]
+pub struct DnsRecord {
+    pub id: Option<RecordId>,
+    pub tenant: RecordId,
+    /// 対象プロジェクト
+    pub project: Option<RecordId>,
+    /// ドメイン名（例: "api.example.com"）
+    pub name: String,
+    /// レコードタイプ: A, AAAA, CNAME, TXT 等
+    pub record_type: String,
+    /// レコード値
+    pub content: String,
+    /// Cloudflare Zone ID
+    pub zone_id: Option<String>,
+    /// Cloudflare Record ID
+    pub cf_record_id: Option<String>,
+    /// プロキシ有効
+    pub proxied: bool,
+    pub created_at: Option<DateTime<Utc>>,
+    pub updated_at: Option<DateTime<Utc>>,
+}

@@ -8,7 +8,7 @@ use colored::Colorize;
 use serde_json::json;
 
 use super::cp_client;
-use crate::{ProjectCommands, ServerCommands, TenantCommands};
+use crate::{CostCommands, DnsCommands, ProjectCommands, ServerCommands, TenantCommands};
 
 pub async fn handle_tenant(cmd: &TenantCommands) -> Result<()> {
     match cmd {
@@ -232,6 +232,227 @@ pub async fn handle_server(cmd: &ServerCommands) -> Result<()> {
                 } else {
                     println!("{}", "サーバーが見つかりません。".yellow());
                 }
+            }
+        }
+    }
+
+    client.disconnect().await.ok();
+    Ok(())
+}
+
+pub async fn handle_cost(cmd: &CostCommands) -> Result<()> {
+    let (client, _creds) = cp_client::connect().await?;
+
+    match cmd {
+        CostCommands::List { month } => {
+            println!("{} {}", "月次コスト:".bold(), month.cyan());
+            println!();
+
+            let resp = cp_client::request(
+                &client,
+                "cost",
+                "list",
+                json!({ "tenant_slug": "default", "month": month }),
+            )
+            .await?;
+
+            if let Some(entries) = resp["entries"].as_array() {
+                if entries.is_empty() {
+                    println!("{}", "コストエントリがありません。".dimmed());
+                } else {
+                    println!(
+                        "{}",
+                        format!(
+                            "{:<15} {:<12} {:<15} {}",
+                            "PROVIDER", "AMOUNT(¥)", "PROJECT", "DESCRIPTION"
+                        )
+                        .bold()
+                    );
+                    println!("{}", "─".repeat(70).dimmed());
+                    for e in entries {
+                        let amount = e["amount_jpy"].as_i64().unwrap_or(0);
+                        println!(
+                            "{:<15} {:<12} {:<15} {}",
+                            e["provider"].as_str().unwrap_or("N/A"),
+                            format!("¥{}", amount),
+                            e["project"].as_str().unwrap_or("-"),
+                            e["description"].as_str().unwrap_or(""),
+                        );
+                    }
+                }
+            }
+        }
+        CostCommands::Summary { month } => {
+            println!("{} {}", "コスト集計:".bold(), month.cyan());
+            println!();
+
+            let resp = cp_client::request(
+                &client,
+                "cost",
+                "summary",
+                json!({ "tenant_slug": "default", "month": month }),
+            )
+            .await?;
+
+            if let Some(summaries) = resp["summaries"].as_array() {
+                if summaries.is_empty() {
+                    println!("{}", "集計データがありません。".dimmed());
+                } else {
+                    println!(
+                        "{}",
+                        format!("{:<15} {:<15} {}", "PROVIDER", "PROJECT", "TOTAL(¥)").bold()
+                    );
+                    println!("{}", "─".repeat(45).dimmed());
+                    let mut grand_total: i64 = 0;
+                    for s in summaries {
+                        let total = s["total_jpy"].as_i64().unwrap_or(0);
+                        grand_total += total;
+                        println!(
+                            "{:<15} {:<15} {}",
+                            s["provider"].as_str().unwrap_or("N/A"),
+                            s["project_slug"].as_str().unwrap_or("-"),
+                            format!("¥{}", total).cyan(),
+                        );
+                    }
+                    println!("{}", "─".repeat(45).dimmed());
+                    println!(
+                        "{:<31} {}",
+                        "合計".bold(),
+                        format!("¥{}", grand_total).green().bold(),
+                    );
+                }
+            }
+        }
+        CostCommands::Record {
+            provider,
+            amount,
+            month,
+            description,
+            project,
+            stage,
+        } => {
+            println!("{}", "コストエントリ登録".bold());
+
+            let mut payload = json!({
+                "tenant_slug": "default",
+                "provider": provider,
+                "amount_jpy": amount,
+                "month": month,
+                "description": description,
+            });
+            if let Some(proj) = project {
+                payload["project_slug"] = json!(proj);
+            }
+            if let Some(stg) = stage {
+                payload["stage"] = json!(stg);
+            }
+
+            let resp = cp_client::request(&client, "cost", "record", payload).await?;
+
+            if resp.get("cost_entry").is_some() {
+                println!(
+                    "{} {} ¥{} ({})",
+                    "登録完了:".green(),
+                    provider.cyan(),
+                    amount,
+                    month,
+                );
+            }
+        }
+    }
+
+    client.disconnect().await.ok();
+    Ok(())
+}
+
+pub async fn handle_dns(cmd: &DnsCommands) -> Result<()> {
+    let (client, _creds) = cp_client::connect().await?;
+
+    match cmd {
+        DnsCommands::List => {
+            println!("{}", "DNS レコード一覧".bold());
+            println!();
+
+            let resp = cp_client::request(
+                &client,
+                "dns",
+                "list",
+                json!({ "tenant_slug": "default" }),
+            )
+            .await?;
+
+            if let Some(records) = resp["dns_records"].as_array() {
+                if records.is_empty() {
+                    println!("{}", "DNS レコードがありません。".dimmed());
+                } else {
+                    println!(
+                        "{}",
+                        format!(
+                            "{:<30} {:<8} {:<30} {}",
+                            "NAME", "TYPE", "CONTENT", "PROXIED"
+                        )
+                        .bold()
+                    );
+                    println!("{}", "─".repeat(75).dimmed());
+                    for r in records {
+                        let proxied = if r["proxied"].as_bool().unwrap_or(false) {
+                            "yes".green().to_string()
+                        } else {
+                            "no".dimmed().to_string()
+                        };
+                        println!(
+                            "{:<30} {:<8} {:<30} {}",
+                            r["name"].as_str().unwrap_or("N/A").cyan(),
+                            r["record_type"].as_str().unwrap_or("N/A"),
+                            r["content"].as_str().unwrap_or("N/A"),
+                            proxied,
+                        );
+                    }
+                }
+            }
+        }
+        DnsCommands::Create {
+            name,
+            record_type,
+            content,
+            proxied,
+            project,
+        } => {
+            println!("{}", "DNS レコード作成".bold());
+
+            let mut payload = json!({
+                "tenant_slug": "default",
+                "name": name,
+                "record_type": record_type,
+                "content": content,
+                "proxied": proxied,
+            });
+            if let Some(proj) = project {
+                payload["project_slug"] = json!(proj);
+            }
+
+            let resp = cp_client::request(&client, "dns", "create", payload).await?;
+
+            if resp.get("dns_record").is_some() {
+                println!(
+                    "{} {} {} → {}",
+                    "作成完了:".green(),
+                    record_type,
+                    name.cyan(),
+                    content
+                );
+            }
+        }
+        DnsCommands::Delete { name } => {
+            println!("{}", "DNS レコード削除".bold());
+
+            let resp =
+                cp_client::request(&client, "dns", "delete", json!({ "name": name })).await?;
+
+            if resp["deleted"].as_bool().unwrap_or(false) {
+                println!("{} {}", "削除完了:".green(), name.cyan());
+            } else {
+                println!("{}", "レコードが見つかりません。".yellow());
             }
         }
     }

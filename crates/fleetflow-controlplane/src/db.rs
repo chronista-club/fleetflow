@@ -322,6 +322,106 @@ impl Database {
             .context("ハートビート更新失敗")?;
         Ok(())
     }
+
+    // ─────────────────────────────────────────
+    // CostEntry CRUD
+    // ─────────────────────────────────────────
+
+    pub async fn create_cost_entry(&self, entry: &CostEntry) -> Result<CostEntry> {
+        let mut result = self
+            .db
+            .query("CREATE cost_entry CONTENT { tenant: $tenant, project: $project, stage: $stage, provider: $provider, description: $description, amount_jpy: $amount_jpy, month: $month }")
+            .bind(("tenant", entry.tenant.clone()))
+            .bind(("project", entry.project.clone()))
+            .bind(("stage", entry.stage.clone()))
+            .bind(("provider", entry.provider.clone()))
+            .bind(("description", entry.description.clone()))
+            .bind(("amount_jpy", entry.amount_jpy))
+            .bind(("month", entry.month.clone()))
+            .await
+            .context("コストエントリ作成失敗")?;
+        let created: Option<CostEntry> = result.take(0)?;
+        created.context("コストエントリ作成結果が空")
+    }
+
+    pub async fn list_costs_by_month(
+        &self,
+        tenant_slug: &str,
+        month: &str,
+    ) -> Result<Vec<CostEntry>> {
+        let mut result = self
+            .db
+            .query("SELECT * FROM cost_entry WHERE tenant.slug = $tenant_slug AND month = $month ORDER BY provider, amount_jpy DESC")
+            .bind(("tenant_slug", tenant_slug.to_string()))
+            .bind(("month", month.to_string()))
+            .await
+            .context("月次コスト取得失敗")?;
+        let entries: Vec<CostEntry> = result.take(0)?;
+        Ok(entries)
+    }
+
+    pub async fn summarize_costs_by_month(
+        &self,
+        tenant_slug: &str,
+        month: &str,
+    ) -> Result<Vec<MonthlyCostSummary>> {
+        let mut result = self
+            .db
+            .query("SELECT month, provider, project.slug AS project_slug, math::sum(amount_jpy) AS total_jpy FROM cost_entry WHERE tenant.slug = $tenant_slug AND month = $month GROUP BY month, provider, project ORDER BY provider")
+            .bind(("tenant_slug", tenant_slug.to_string()))
+            .bind(("month", month.to_string()))
+            .await
+            .context("コスト集計失敗")?;
+        let summaries: Vec<MonthlyCostSummary> = result.take(0)?;
+        Ok(summaries)
+    }
+
+    // ─────────────────────────────────────────
+    // DnsRecord CRUD
+    // ─────────────────────────────────────────
+
+    pub async fn create_dns_record(&self, record: &DnsRecord) -> Result<DnsRecord> {
+        let mut result = self
+            .db
+            .query("CREATE dns_record CONTENT { tenant: $tenant, project: $project, name: $name, record_type: $record_type, content: $content, zone_id: $zone_id, cf_record_id: $cf_record_id, proxied: $proxied }")
+            .bind(("tenant", record.tenant.clone()))
+            .bind(("project", record.project.clone()))
+            .bind(("name", record.name.clone()))
+            .bind(("record_type", record.record_type.clone()))
+            .bind(("content", record.content.clone()))
+            .bind(("zone_id", record.zone_id.clone()))
+            .bind(("cf_record_id", record.cf_record_id.clone()))
+            .bind(("proxied", record.proxied))
+            .await
+            .context("DNSレコード作成失敗")?;
+        let created: Option<DnsRecord> = result.take(0)?;
+        created.context("DNSレコード作成結果が空")
+    }
+
+    pub async fn list_dns_records_by_tenant(
+        &self,
+        tenant_slug: &str,
+    ) -> Result<Vec<DnsRecord>> {
+        let mut result = self
+            .db
+            .query("SELECT * FROM dns_record WHERE tenant.slug = $tenant_slug ORDER BY name")
+            .bind(("tenant_slug", tenant_slug.to_string()))
+            .await
+            .context("DNSレコード一覧取得失敗")?;
+        let records: Vec<DnsRecord> = result.take(0)?;
+        Ok(records)
+    }
+
+    pub async fn delete_dns_record(&self, record_name: &str) -> Result<bool> {
+        let mut result = self
+            .db
+            .query("DELETE FROM dns_record WHERE name = $name RETURN BEFORE")
+            .bind(("name", record_name.to_string()))
+            .await
+            .context("DNSレコード削除失敗")?;
+        let deleted: Vec<DnsRecord> = result.take(0)?;
+        Ok(!deleted.is_empty())
+    }
 }
 
 /// SurrealDB schema definition.
@@ -388,6 +488,30 @@ DEFINE FIELD IF NOT EXISTS last_heartbeat_at ON server TYPE option<datetime>;
 DEFINE FIELD IF NOT EXISTS created_at ON server TYPE option<datetime> DEFAULT time::now();
 DEFINE FIELD IF NOT EXISTS updated_at ON server TYPE option<datetime> DEFAULT time::now();
 DEFINE INDEX IF NOT EXISTS idx_server_tenant_slug ON server FIELDS tenant, slug UNIQUE;
+
+DEFINE TABLE IF NOT EXISTS cost_entry SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS tenant ON cost_entry TYPE record<tenant>;
+DEFINE FIELD IF NOT EXISTS project ON cost_entry TYPE option<record<project>>;
+DEFINE FIELD IF NOT EXISTS stage ON cost_entry TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS provider ON cost_entry TYPE string;
+DEFINE FIELD IF NOT EXISTS description ON cost_entry TYPE string;
+DEFINE FIELD IF NOT EXISTS amount_jpy ON cost_entry TYPE int;
+DEFINE FIELD IF NOT EXISTS month ON cost_entry TYPE string;
+DEFINE FIELD IF NOT EXISTS created_at ON cost_entry TYPE option<datetime> DEFAULT time::now();
+DEFINE INDEX IF NOT EXISTS idx_cost_entry_tenant_month ON cost_entry FIELDS tenant, month;
+
+DEFINE TABLE IF NOT EXISTS dns_record SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS tenant ON dns_record TYPE record<tenant>;
+DEFINE FIELD IF NOT EXISTS project ON dns_record TYPE option<record<project>>;
+DEFINE FIELD IF NOT EXISTS name ON dns_record TYPE string;
+DEFINE FIELD IF NOT EXISTS record_type ON dns_record TYPE string;
+DEFINE FIELD IF NOT EXISTS content ON dns_record TYPE string;
+DEFINE FIELD IF NOT EXISTS zone_id ON dns_record TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS cf_record_id ON dns_record TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS proxied ON dns_record TYPE bool DEFAULT false;
+DEFINE FIELD IF NOT EXISTS created_at ON dns_record TYPE option<datetime> DEFAULT time::now();
+DEFINE FIELD IF NOT EXISTS updated_at ON dns_record TYPE option<datetime> DEFAULT time::now();
+DEFINE INDEX IF NOT EXISTS idx_dns_record_name ON dns_record FIELDS name UNIQUE;
 "#;
 
 #[cfg(test)]
