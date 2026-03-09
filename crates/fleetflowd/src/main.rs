@@ -1,5 +1,6 @@
 mod config;
 mod daemon;
+mod web;
 
 use std::path::PathBuf;
 
@@ -118,7 +119,12 @@ async fn main() -> anyhow::Result<()> {
     println!();
 
     // Control Plane サーバー起動
-    let handle = fleetflow_controlplane::server::start(cfg.server).await?;
+    let web_addr = cfg.web_addr.clone();
+    let (handle, state) = fleetflow_controlplane::server::start(cfg.server).await?;
+
+    // WebUI Dashboard 起動
+    let web_handle = web::start(state, &web_addr).await?;
+    println!("  Web:    {}", format!("http://{}", web_addr).cyan());
 
     println!("{}", "Control Plane 起動完了。Ctrl+C で停止。".green());
 
@@ -129,6 +135,7 @@ async fn main() -> anyhow::Result<()> {
     info!("シャットダウン開始");
 
     // クリーンアップ
+    drop(web_handle);
     drop(handle);
     daemon::remove_pid_file(&cfg.pid_file);
 

@@ -41,7 +41,7 @@ impl Default for ServerConfig {
 /// 2. Initialize Auth0 verifier
 /// 3. Register Unison channels
 /// 4. Start QUIC listener
-pub async fn start(config: ServerConfig) -> Result<ServerHandle> {
+pub async fn start(config: ServerConfig) -> Result<(ServerHandle, Arc<AppState>)> {
     // Initialize dependencies
     let db = Database::connect(&config.db).await?;
     let auth = Auth0Verifier::new(&config.auth);
@@ -68,5 +68,5 @@ pub async fn start(config: ServerConfig) -> Result<ServerHandle> {
 
     info!(addr = %config.listen_addr, "Control Plane 起動完了");
 
-    Ok(handle)
+    Ok((handle, state))
 }

@@ -10,6 +10,7 @@ pub struct DaemonConfig {
     pub log_file: Option<PathBuf>,
     pub log_level: String,
     pub server: ServerConfig,
+    pub web_addr: String,
 }
 
 impl Default for DaemonConfig {
@@ -23,6 +24,7 @@ impl Default for DaemonConfig {
             log_file: None,
             log_level: "info".into(),
             server: ServerConfig::default(),
+            web_addr: "127.0.0.1:32080".into(),
         }
     }
 }
@@ -131,6 +133,17 @@ pub fn load_config(path: &Path) -> Result<DaemonConfig> {
         }
     }
 
+    // web ノード
+    if let Some(web) = doc.get("web") {
+        if let Some(children) = web.children() {
+            if let Some(node) = children.get("listen") {
+                if let Some(val) = node_str(node) {
+                    config.web_addr = val.to_string();
+                }
+            }
+        }
+    }
+
     // auth ノード
     if let Some(auth) = doc.get("auth") {
         if let Some(children) = auth.children() {
@@ -178,6 +191,7 @@ mod tests {
         let config = DaemonConfig::default();
         assert_eq!(config.log_level, "info");
         assert_eq!(config.server.listen_addr, "[::1]:4510");
+        assert_eq!(config.web_addr, "127.0.0.1:32080");
     }
 
     #[test]

@@ -215,6 +215,23 @@ impl Database {
         Ok(stages)
     }
 
+    /// List all stages across all projects in a tenant (for dashboard overview)
+    pub async fn list_all_stages_by_tenant(
+        &self,
+        tenant_slug: &str,
+    ) -> Result<Vec<StageWithProject>> {
+        let mut result = self
+            .db
+            .query(
+                "SELECT id, slug, description, project.slug AS project_slug, project.name AS project_name, project.tenant.slug AS tenant_slug FROM stage WHERE project.tenant.slug = $tenant_slug ORDER BY project_slug, slug",
+            )
+            .bind(("tenant_slug", tenant_slug.to_string()))
+            .await
+            .context("テナント全ステージ取得失敗")?;
+        let stages: Vec<StageWithProject> = result.take(0)?;
+        Ok(stages)
+    }
+
     /// Cross-project query: find stages with same slug across all projects
     pub async fn list_stages_across_projects(
         &self,

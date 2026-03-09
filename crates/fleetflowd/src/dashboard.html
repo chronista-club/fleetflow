@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FleetFlow Dashboard</title>
+<style>
+  :root {
+    --bg: #0d1117; --card: #161b22; --border: #30363d;
+    --text: #e6edf3; --text2: #8b949e; --accent: #58a6ff;
+    --green: #3fb950; --yellow: #d29922; --red: #f85149;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+         background: var(--bg); color: var(--text); padding: 24px; }
+  h1 { font-size: 24px; margin-bottom: 8px; }
+  .subtitle { color: var(--text2); margin-bottom: 24px; font-size: 14px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; margin-bottom: 32px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+  .card h2 { font-size: 16px; margin-bottom: 12px; color: var(--accent); }
+  .card h3 { font-size: 13px; color: var(--text2); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); color: var(--text2); font-weight: 500; }
+  td { padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+  .badge-green { background: rgba(63,185,80,0.15); color: var(--green); }
+  .badge-yellow { background: rgba(210,153,34,0.15); color: var(--yellow); }
+  .badge-red { background: rgba(248,81,73,0.15); color: var(--red); }
+  .badge-gray { background: rgba(139,148,158,0.15); color: var(--text2); }
+  .stat { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; }
+  .stat-value { font-size: 28px; font-weight: 700; }
+  .stat-label { color: var(--text2); font-size: 13px; }
+  .loading { color: var(--text2); font-style: italic; }
+  .error { color: var(--red); }
+  .refresh-btn { background: var(--card); border: 1px solid var(--border); color: var(--text2);
+                 padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+  .refresh-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+</style>
+</head>
+<body>
+<div class="header">
+  <div>
+    <h1>FleetFlow Dashboard</h1>
+    <div class="subtitle">Control Plane Overview</div>
+  </div>
+  <button class="refresh-btn" onclick="loadAll()">Refresh</button>
+</div>
+
+<!-- Stats -->
+<div class="grid" id="stats">
+  <div class="card">
+    <h3>Projects</h3>
+    <div class="stat"><span class="stat-value" id="project-count">-</span><span class="stat-label">registered</span></div>
+  </div>
+  <div class="card">
+    <h3>Servers</h3>
+    <div class="stat"><span class="stat-value" id="server-count">-</span><span class="stat-label">registered</span></div>
+  </div>
+  <div class="card">
+    <h3>Stages</h3>
+    <div class="stat"><span class="stat-value" id="stage-count">-</span><span class="stat-label">active</span></div>
+  </div>
+</div>
+
+<!-- Overview matrix -->
+<div class="card" style="margin-bottom: 24px;">
+  <h2>Project x Stage Matrix</h2>
+  <div id="overview-content" class="loading">Loading...</div>
+</div>
+
+<!-- Projects -->
+<div class="grid">
+  <div class="card">
+    <h2>Projects</h2>
+    <div id="projects-content" class="loading">Loading...</div>
+  </div>
+  <div class="card">
+    <h2>Servers</h2>
+    <div id="servers-content" class="loading">Loading...</div>
+  </div>
+</div>
+
+<script>
+async function fetchJSON(path) {
+  const res = await fetch(path);
+  return res.json();
+}
+
+function escapeText(str) {
+  if (!str) return '-';
+  const el = document.createElement('span');
+  el.textContent = str;
+  return el.innerHTML;
+}
+
+function statusBadge(status) {
+  const safe = escapeText(status);
+  const cls = status === 'online' || status === 'running' ? 'badge-green'
+    : status === 'offline' || status === 'stopped' ? 'badge-red'
+    : status === 'partial' ? 'badge-yellow'
+    : 'badge-gray';
+  return '<span class="badge ' + cls + '">' + safe + '</span>';
+}
+
+async function loadProjects() {
+  try {
+    const data = await fetchJSON('/api/projects');
+    const projects = data.projects || [];
+    document.getElementById('project-count').textContent = projects.length;
+    if (projects.length === 0) {
+      document.getElementById('projects-content').textContent = 'No projects';
+      return;
+    }
+    const table = document.createElement('table');
+    const thead = document.createElement('tr');
+    ['Slug', 'Name'].forEach(h => { const th = document.createElement('th'); th.textContent = h; thead.appendChild(th); });
+    table.appendChild(thead);
+    projects.forEach(p => {
+      const tr = document.createElement('tr');
+      [p.slug, p.name].forEach(val => { const td = document.createElement('td'); td.textContent = val || '-'; tr.appendChild(td); });
+      table.appendChild(tr);
+    });
+    const el = document.getElementById('projects-content');
+    el.textContent = '';
+    el.appendChild(table);
+  } catch(e) {
+    const el = document.getElementById('projects-content');
+    el.textContent = e.message;
+    el.className = 'error';
+  }
+}
+
+async function loadServers() {
+  try {
+    const data = await fetchJSON('/api/servers');
+    const servers = data.servers || [];
+    document.getElementById('server-count').textContent = servers.length;
+    if (servers.length === 0) {
+      document.getElementById('servers-content').textContent = 'No servers';
+      return;
+    }
+    const table = document.createElement('table');
+    const thead = document.createElement('tr');
+    ['Slug', 'Provider', 'Host', 'Status'].forEach(h => { const th = document.createElement('th'); th.textContent = h; thead.appendChild(th); });
+    table.appendChild(thead);
+    servers.forEach(s => {
+      const tr = document.createElement('tr');
+      [s.slug, s.provider, s.ssh_host].forEach(val => { const td = document.createElement('td'); td.textContent = val || '-'; tr.appendChild(td); });
+      const statusTd = document.createElement('td');
+      const badge = document.createElement('span');
+      badge.textContent = s.status || 'unknown';
+      badge.className = 'badge ' + (s.status === 'online' ? 'badge-green' : s.status === 'offline' ? 'badge-red' : 'badge-gray');
+      statusTd.appendChild(badge);
+      tr.appendChild(statusTd);
+      table.appendChild(tr);
+    });
+    const el = document.getElementById('servers-content');
+    el.textContent = '';
+    el.appendChild(table);
+  } catch(e) {
+    const el = document.getElementById('servers-content');
+    el.textContent = e.message;
+    el.className = 'error';
+  }
+}
+
+async function loadOverview() {
+  try {
+    const data = await fetchJSON('/api/overview');
+    const stages = data.stages || [];
+    document.getElementById('stage-count').textContent = stages.length;
+    if (stages.length === 0) {
+      document.getElementById('overview-content').textContent = 'No stages deployed';
+      return;
+    }
+    const table = document.createElement('table');
+    const thead = document.createElement('tr');
+    ['Project', 'Stage'].forEach(h => { const th = document.createElement('th'); th.textContent = h; thead.appendChild(th); });
+    table.appendChild(thead);
+    stages.forEach(s => {
+      const tr = document.createElement('tr');
+      [s.project_name || '-', s.stage || '-'].forEach(val => {
+        const td = document.createElement('td'); td.textContent = val; tr.appendChild(td);
+      });
+      table.appendChild(tr);
+    });
+    const el = document.getElementById('overview-content');
+    el.textContent = '';
+    el.appendChild(table);
+  } catch(e) {
+    const el = document.getElementById('overview-content');
+    el.textContent = e.message;
+    el.className = 'error';
+  }
+}
+
+function loadAll() {
+  loadProjects();
+  loadServers();
+  loadOverview();
+}
+
+// Auto-refresh every 30 seconds
+loadAll();
+setInterval(loadAll, 30000);
+</script>
+</body>
+</html>
