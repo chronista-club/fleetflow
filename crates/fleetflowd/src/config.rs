@@ -11,6 +11,8 @@ pub struct DaemonConfig {
     pub log_level: String,
     pub server: ServerConfig,
     pub web_addr: String,
+    /// ヘルスチェック間隔（秒）。0 で無効化。
+    pub health_check_interval: u64,
 }
 
 impl Default for DaemonConfig {
@@ -25,6 +27,7 @@ impl Default for DaemonConfig {
             log_level: "info".into(),
             server: ServerConfig::default(),
             web_addr: "127.0.0.1:32080".into(),
+            health_check_interval: 60,
         }
     }
 }
@@ -152,6 +155,16 @@ pub fn load_config(path: &Path) -> Result<DaemonConfig> {
         {
             a.audience = val.to_string();
         }
+    }
+
+    // health ノード
+    if let Some(health) = doc.get("health")
+        && let Some(children) = health.children()
+        && let Some(node) = children.get("check-interval")
+        && let Some(entry) = node.entries().first()
+        && let Some(val) = entry.value().as_integer()
+    {
+        config.health_check_interval = val as u64;
     }
 
     Ok(config)

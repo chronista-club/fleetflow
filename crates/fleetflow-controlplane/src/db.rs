@@ -328,6 +328,37 @@ impl Database {
         Ok(())
     }
 
+    /// サーバーステータスを一括更新（Tailscale ヘルスチェック結果を反映）
+    pub async fn bulk_update_server_status(&self, updates: &[ServerStatusUpdate]) -> Result<usize> {
+        let mut updated = 0;
+        for u in updates {
+            let mut result = self
+                .db
+                .query("UPDATE server SET status = $status, last_heartbeat_at = $heartbeat, updated_at = time::now() WHERE slug = $slug")
+                .bind(("slug", u.slug.clone()))
+                .bind(("status", u.status.clone()))
+                .bind(("heartbeat", u.last_heartbeat_at))
+                .await
+                .context("サーバーステータス一括更新失敗")?;
+            let rows: Vec<Server> = result.take(0)?;
+            if !rows.is_empty() {
+                updated += 1;
+            }
+        }
+        Ok(updated)
+    }
+
+    /// 全テナントのサーバー一覧を取得
+    pub async fn list_all_servers(&self) -> Result<Vec<Server>> {
+        let mut result = self
+            .db
+            .query("SELECT * FROM server ORDER BY slug")
+            .await
+            .context("全サーバー一覧取得失敗")?;
+        let servers: Vec<Server> = result.take(0)?;
+        Ok(servers)
+    }
+
     // ─────────────────────────────────────────
     // CostEntry CRUD
     // ─────────────────────────────────────────

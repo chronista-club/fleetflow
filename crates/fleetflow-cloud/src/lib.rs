@@ -37,6 +37,7 @@ pub mod action;
 pub mod error;
 pub mod provider;
 pub mod state;
+pub mod tailscale;
 
 // Re-exports
 pub use action::{Action, ActionType, ApplyResult, Plan, PlanSummary};

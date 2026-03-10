@@ -11,6 +11,7 @@ repository.workspace = true
 # Internal crates
 fleetflow-core.workspace = true
 fleetflow-container.workspace = true
+fleetflow-cloud.workspace = true
 
 # Communication
 unison = { path = "../../../unison/crates/unison-protocol" }

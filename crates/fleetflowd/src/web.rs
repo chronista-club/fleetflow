@@ -13,7 +13,7 @@ use axum::{
     extract::State,
     http::{StatusCode, header},
     response::{Html, IntoResponse},
-    routing::get,
+    routing::{get, post},
 };
 use fleetflow_controlplane::server::AppState;
 use serde_json::{Value, json};
@@ -28,6 +28,7 @@ pub async fn start(state: Arc<AppState>, addr: &str) -> anyhow::Result<JoinHandl
         .route("/api/servers", get(api_servers))
         .route("/api/overview", get(api_overview))
         .route("/api/dns", get(api_dns))
+        .route("/api/health-check", post(api_health_check))
         // Dashboard
         .route("/", get(dashboard_html))
         .with_state(state);
@@ -83,6 +84,7 @@ async fn api_servers(State(state): State<Arc<AppState>>) -> impl IntoResponse {
                         "provider": s.provider,
                         "ssh_host": s.ssh_host,
                         "status": s.status,
+                        "last_heartbeat_at": s.last_heartbeat_at.map(|d| d.to_rfc3339()),
                     })
                 })
                 .collect();
@@ -135,6 +137,72 @@ async fn api_dns(State(state): State<Arc<AppState>>) -> impl IntoResponse {
                 .collect();
             (StatusCode::OK, Json(json!({ "dns_records": items }))).into_response()
         }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": e.to_string() })),
+        )
+            .into_response(),
+    }
+}
+
+async fn api_health_check(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    use chrono::Utc;
+    use fleetflow_cloud::tailscale;
+    use fleetflow_controlplane::model::ServerStatusUpdate;
+
+    let peers = match tailscale::get_peers().await {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": e.to_string() })),
+            )
+                .into_response();
+        }
+    };
+
+    let servers = match state.db.list_all_servers().await {
+        Ok(s) => s,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": e.to_string() })),
+            )
+                .into_response();
+        }
+    };
+
+    let now = Utc::now();
+    let updates: Vec<ServerStatusUpdate> = servers
+        .iter()
+        .map(|s| {
+            let peer = peers
+                .iter()
+                .find(|p| p.hostname.eq_ignore_ascii_case(&s.slug));
+            let (status, heartbeat) = match peer {
+                Some(p) if p.online => ("online".to_string(), Some(now)),
+                Some(_) => ("offline".to_string(), s.last_heartbeat_at),
+                None => ("unknown".to_string(), s.last_heartbeat_at),
+            };
+            ServerStatusUpdate {
+                slug: s.slug.clone(),
+                status,
+                last_heartbeat_at: heartbeat,
+            }
+        })
+        .collect();
+
+    let results: Vec<Value> = updates
+        .iter()
+        .map(|u| json!({ "slug": u.slug, "status": u.status }))
+        .collect();
+
+    match state.db.bulk_update_server_status(&updates).await {
+        Ok(count) => (
+            StatusCode::OK,
+            Json(json!({ "updated": count, "results": results })),
+        )
+            .into_response(),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({ "error": e.to_string() })),

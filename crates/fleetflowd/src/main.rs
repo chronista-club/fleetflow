@@ -1,5 +1,6 @@
 mod config;
 mod daemon;
+mod health;
 mod web;
 
 use std::path::PathBuf;
@@ -123,8 +124,20 @@ async fn main() -> anyhow::Result<()> {
     let (handle, state) = fleetflow_controlplane::server::start(cfg.server).await?;
 
     // WebUI Dashboard 起動
-    let web_handle = web::start(state, &web_addr).await?;
+    let web_handle = web::start(state.clone(), &web_addr).await?;
     println!("  Web:    {}", format!("http://{}", web_addr).cyan());
+
+    // バックグラウンド ヘルスチェッカー起動
+    let _health_handle = if cfg.health_check_interval > 0 {
+        println!(
+            "  Health: {} 秒間隔",
+            cfg.health_check_interval.to_string().cyan()
+        );
+        Some(health::spawn(state, cfg.health_check_interval))
+    } else {
+        println!("  Health: {}", "無効".dimmed());
+        None
+    };
 
     println!("{}", "Control Plane 起動完了。Ctrl+C で停止。".green());
 

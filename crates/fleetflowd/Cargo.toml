@@ -13,6 +13,7 @@ path = "src/main.rs"
 
 [dependencies]
 fleetflow-controlplane = { path = "../fleetflow-controlplane" }
+fleetflow-cloud.workspace = true
 
 # CLI
 clap.workspace = true
@@ -38,6 +39,7 @@ rustls = { version = "0.23", default-features = false, features = ["ring"] }
 
 # Utils
 dirs.workspace = true
+chrono.workspace = true
 
 # Process management
 libc = "0.2"

@@ -424,6 +424,13 @@ enum ServerCommands {
         /// サーバーのスラッグ
         slug: String,
     },
+    /// 全サーバーのヘルスチェック（Tailscale 経由）
+    Check,
+    /// 指定サーバーに Tailscale ping
+    Ping {
+        /// サーバーのホスト名（Tailscale ノード名）
+        hostname: String,
+    },
 }
 
 /// コスト管理のサブコマンド

@@ -127,6 +127,14 @@ pub struct Server {
     pub updated_at: Option<DateTime<Utc>>,
 }
 
+/// サーバーステータス一括更新用
+#[derive(Debug, Clone)]
+pub struct ServerStatusUpdate {
+    pub slug: String,
+    pub status: String,
+    pub last_heartbeat_at: Option<DateTime<Utc>>,
+}
+
 // ─────────────────────────────────────────────
 // CP-007: CostEntry（コスト管理）
 // ─────────────────────────────────────────────

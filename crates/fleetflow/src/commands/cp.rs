@@ -283,6 +283,59 @@ pub async fn handle_server(cmd: &ServerCommands) -> Result<()> {
                 }
             }
         }
+        ServerCommands::Check => {
+            println!("{}", "全サーバー ヘルスチェック（Tailscale）".bold());
+            println!();
+
+            let resp = cp_client::request(&client, "server", "check-all", json!({})).await?;
+
+            if let Some(results) = resp["results"].as_array() {
+                let updated = resp["updated"].as_u64().unwrap_or(0);
+                println!("{}", format!("{:<20} {:<10}", "SERVER", "STATUS").bold());
+                println!("{}", "─".repeat(30).dimmed());
+                for r in results {
+                    let status = r["status"].as_str().unwrap_or("unknown");
+                    let status_colored = match status {
+                        "online" => status.green(),
+                        "offline" => status.red(),
+                        _ => status.yellow(),
+                    };
+                    println!(
+                        "{:<20} {}",
+                        r["slug"].as_str().unwrap_or("N/A").cyan(),
+                        status_colored,
+                    );
+                }
+                println!();
+                println!("{} サーバー更新済み", updated.to_string().green());
+            } else if let Some(err) = resp["error"].as_str() {
+                println!("{} {}", "エラー:".red(), err);
+            }
+        }
+        ServerCommands::Ping { hostname } => {
+            println!("{} {}", "Tailscale ping:".bold(), hostname.cyan());
+            println!();
+
+            let resp =
+                cp_client::request(&client, "server", "ping", json!({ "hostname": hostname }))
+                    .await?;
+
+            if let Some(true) = resp["reachable"].as_bool() {
+                let latency = resp["latency_ms"]
+                    .as_f64()
+                    .map(|l| format!("{l:.1}ms"))
+                    .unwrap_or_else(|| "N/A".to_string());
+                let via = resp["via"].as_str().unwrap_or("N/A");
+                println!("  到達可能: {}", "YES".green());
+                println!("  レイテンシ: {}", latency.cyan());
+                println!("  経路: {}", via);
+            } else {
+                println!("  到達可能: {}", "NO".red());
+                if let Some(err) = resp["error"].as_str() {
+                    println!("  エラー: {}", err);
+                }
+            }
+        }
     }
 
     client.disconnect().await.ok();

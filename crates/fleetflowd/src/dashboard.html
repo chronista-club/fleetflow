@@ -44,7 +44,10 @@
     <h1>FleetFlow Dashboard</h1>
     <div class="subtitle">Control Plane Overview</div>
   </div>
-  <button class="refresh-btn" onclick="loadAll()">Refresh</button>
+  <div style="display:flex; gap:8px;">
+    <button class="refresh-btn" onclick="runHealthCheck()" id="health-btn">Health Check</button>
+    <button class="refresh-btn" onclick="loadAll()">Refresh</button>
+  </div>
 </div>
 
 <!-- Stats -->
@@ -56,6 +59,7 @@
   <div class="card">
     <h3>Servers</h3>
     <div class="stat"><span class="stat-value" id="server-count">-</span><span class="stat-label">registered</span></div>
+    <div class="stat"><span class="stat-value" id="server-online" style="font-size:18px; color:var(--green)">-</span><span class="stat-label">online</span></div>
   </div>
   <div class="card">
     <h3>Stages</h3>
@@ -69,15 +73,17 @@
   <div id="overview-content" class="loading">Loading...</div>
 </div>
 
+<!-- Servers -->
+<div class="card" style="margin-bottom: 24px;">
+  <h2>Servers</h2>
+  <div id="servers-content" class="loading">Loading...</div>
+</div>
+
 <!-- Projects -->
 <div class="grid">
   <div class="card">
     <h2>Projects</h2>
     <div id="projects-content" class="loading">Loading...</div>
-  </div>
-  <div class="card">
-    <h2>Servers</h2>
-    <div id="servers-content" class="loading">Loading...</div>
   </div>
 </div>
 
@@ -137,18 +143,28 @@ async function loadProjects() {
   }
 }
 
+function timeAgo(isoStr) {
+  if (!isoStr) return '-';
+  const diff = Date.now() - new Date(isoStr).getTime();
+  if (diff < 60000) return Math.floor(diff / 1000) + 's ago';
+  if (diff < 3600000) return Math.floor(diff / 60000) + 'm ago';
+  if (diff < 86400000) return Math.floor(diff / 3600000) + 'h ago';
+  return Math.floor(diff / 86400000) + 'd ago';
+}
+
 async function loadServers() {
   try {
     const data = await fetchJSON('/api/servers');
     const servers = data.servers || [];
     document.getElementById('server-count').textContent = servers.length;
+    document.getElementById('server-online').textContent = servers.filter(s => s.status === 'online').length;
     if (servers.length === 0) {
       document.getElementById('servers-content').textContent = 'No servers';
       return;
     }
     const table = document.createElement('table');
     const thead = document.createElement('tr');
-    ['Slug', 'Provider', 'Host', 'Status'].forEach(h => { const th = document.createElement('th'); th.textContent = h; thead.appendChild(th); });
+    ['Slug', 'Provider', 'Host', 'Status', 'Last Seen'].forEach(h => { const th = document.createElement('th'); th.textContent = h; thead.appendChild(th); });
     table.appendChild(thead);
     servers.forEach(s => {
       const tr = document.createElement('tr');
@@ -159,6 +175,10 @@ async function loadServers() {
       badge.className = 'badge ' + (s.status === 'online' ? 'badge-green' : s.status === 'offline' ? 'badge-red' : 'badge-gray');
       statusTd.appendChild(badge);
       tr.appendChild(statusTd);
+      const seenTd = document.createElement('td');
+      seenTd.textContent = timeAgo(s.last_heartbeat_at);
+      seenTd.style.color = 'var(--text2)';
+      tr.appendChild(seenTd);
       table.appendChild(tr);
     });
     const el = document.getElementById('servers-content');
@@ -168,6 +188,21 @@ async function loadServers() {
     const el = document.getElementById('servers-content');
     el.textContent = e.message;
     el.className = 'error';
+  }
+}
+
+async function runHealthCheck() {
+  const btn = document.getElementById('health-btn');
+  btn.textContent = 'Checking...';
+  btn.disabled = true;
+  try {
+    await fetch('/api/health-check', { method: 'POST' });
+    await loadServers();
+  } catch(e) {
+    console.error('Health check failed:', e);
+  } finally {
+    btn.textContent = 'Health Check';
+    btn.disabled = false;
   }
 }
 

@@ -1,11 +1,12 @@
 use std::sync::Arc;
 
+use chrono::Utc;
 use serde_json::json;
 use tracing::{error, info};
 use unison::network::channel::UnisonChannel;
 use unison::network::server::ProtocolServer;
 
-use crate::model::Server;
+use crate::model::{Server, ServerStatusUpdate};
 use crate::server::AppState;
 
 pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
@@ -128,6 +129,119 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                         .send_response(
                                             msg.id,
                                             "heartbeat",
+                                            json!({ "error": e.to_string() }),
+                                        )
+                                        .await?;
+                                }
+                            }
+                        }
+                        "check-all" => {
+                            // Tailscale ステータスを取得し、DB 上のサーバーとマッチング
+                            let peers = match fleetflow_cloud::tailscale::get_peers().await {
+                                Ok(p) => p,
+                                Err(e) => {
+                                    error!(error = %e, "tailscale status 取得失敗");
+                                    channel
+                                        .send_response(
+                                            msg.id,
+                                            "check-all",
+                                            json!({ "error": e.to_string() }),
+                                        )
+                                        .await?;
+                                    continue;
+                                }
+                            };
+
+                            let servers = match state.db.list_all_servers().await {
+                                Ok(s) => s,
+                                Err(e) => {
+                                    error!(error = %e, "サーバー一覧取得失敗");
+                                    channel
+                                        .send_response(
+                                            msg.id,
+                                            "check-all",
+                                            json!({ "error": e.to_string() }),
+                                        )
+                                        .await?;
+                                    continue;
+                                }
+                            };
+
+                            let now = Utc::now();
+                            let updates: Vec<ServerStatusUpdate> = servers
+                                .iter()
+                                .map(|s| {
+                                    let peer = peers
+                                        .iter()
+                                        .find(|p| p.hostname.eq_ignore_ascii_case(&s.slug));
+                                    let (status, heartbeat) = match peer {
+                                        Some(p) if p.online => ("online".to_string(), Some(now)),
+                                        Some(_) => ("offline".to_string(), s.last_heartbeat_at),
+                                        None => ("unknown".to_string(), s.last_heartbeat_at),
+                                    };
+                                    ServerStatusUpdate {
+                                        slug: s.slug.clone(),
+                                        status,
+                                        last_heartbeat_at: heartbeat,
+                                    }
+                                })
+                                .collect();
+
+                            match state.db.bulk_update_server_status(&updates).await {
+                                Ok(count) => {
+                                    let results: Vec<serde_json::Value> = updates
+                                        .iter()
+                                        .map(|u| {
+                                            json!({
+                                                "slug": u.slug,
+                                                "status": u.status,
+                                            })
+                                        })
+                                        .collect();
+                                    channel
+                                        .send_response(
+                                            msg.id,
+                                            "check-all",
+                                            json!({ "updated": count, "results": results }),
+                                        )
+                                        .await?;
+                                }
+                                Err(e) => {
+                                    error!(error = %e, "server.check-all 失敗");
+                                    channel
+                                        .send_response(
+                                            msg.id,
+                                            "check-all",
+                                            json!({ "error": e.to_string() }),
+                                        )
+                                        .await?;
+                                }
+                            }
+                        }
+                        "ping" => {
+                            let hostname = payload["hostname"].as_str().unwrap_or_default();
+
+                            match fleetflow_cloud::tailscale::ping(hostname).await {
+                                Ok(result) => {
+                                    channel
+                                        .send_response(
+                                            msg.id,
+                                            "ping",
+                                            json!({
+                                                "hostname": result.hostname,
+                                                "reachable": result.reachable,
+                                                "latency_ms": result.latency_ms,
+                                                "via": result.via,
+                                            }),
+                                        )
+                                        .await?;
+                                }
+                                Err(e) => {
+                                    error!(error = %e, "server.ping 失敗");
+                                    channel
+                                        .send_response(
+                                            msg.id,
+                                            "ping",
                                             json!({ "error": e.to_string() }),
                                         )
                                         .await?;
