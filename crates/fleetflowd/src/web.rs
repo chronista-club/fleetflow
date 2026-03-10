@@ -30,6 +30,7 @@ pub async fn start(state: Arc<AppState>, addr: &str) -> anyhow::Result<JoinHandl
         .route("/api/dns", get(api_dns))
         .route("/api/health-check", post(api_health_check))
         .route("/api/deployments", get(api_deployments))
+        .route("/api/dns/sync", post(api_dns_sync))
         // Dashboard
         .route("/", get(dashboard_html))
         .with_state(state);
@@ -236,6 +237,96 @@ async fn api_health_check(State(state): State<Arc<AppState>>) -> impl IntoRespon
         )
             .into_response(),
     }
+}
+
+async fn api_dns_sync(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    // Cloudflare DNS との同期
+    let cf_config = match fleetflow_cloud_cloudflare::dns::DnsConfig::from_env() {
+        Ok(c) => c,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": format!("Cloudflare 設定エラー: {e}") })),
+            )
+                .into_response();
+        }
+    };
+
+    let cf = fleetflow_cloud_cloudflare::dns::CloudflareDns::new(cf_config);
+
+    let cf_records = match cf.list_records().await {
+        Ok(r) => r,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": e.to_string() })),
+            )
+                .into_response();
+        }
+    };
+
+    let db_records = match state.db.list_dns_records_by_tenant("default").await {
+        Ok(r) => r,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": e.to_string() })),
+            )
+                .into_response();
+        }
+    };
+
+    let tenant = match state.db.get_tenant_by_slug("default").await {
+        Ok(Some(t)) => t,
+        _ => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": "tenant not found" })),
+            )
+                .into_response();
+        }
+    };
+
+    let mut imported = 0u32;
+    for cf_rec in &cf_records {
+        let exists = db_records.iter().any(|db| db.name == cf_rec.name);
+        if !exists {
+            let record = fleetflow_controlplane::model::DnsRecord {
+                id: None,
+                tenant: tenant.id.clone().unwrap(),
+                project: None,
+                name: cf_rec.name.clone(),
+                record_type: cf_rec.record_type.clone(),
+                content: cf_rec.content.clone(),
+                zone_id: None,
+                cf_record_id: Some(cf_rec.id.clone()),
+                proxied: cf_rec.proxied,
+                created_at: None,
+                updated_at: None,
+            };
+            if state.db.create_dns_record(&record).await.is_ok() {
+                imported += 1;
+            }
+        }
+    }
+
+    let mut not_in_cf = Vec::new();
+    for db_rec in &db_records {
+        if !cf_records.iter().any(|cf| cf.name == db_rec.name) {
+            not_in_cf.push(db_rec.name.clone());
+        }
+    }
+
+    (
+        StatusCode::OK,
+        Json(json!({
+            "imported": imported,
+            "cf_total": cf_records.len(),
+            "db_total": db_records.len() + imported as usize,
+            "not_in_cloudflare": not_in_cf,
+        })),
+    )
+        .into_response()
 }
 
 // ============================================================================

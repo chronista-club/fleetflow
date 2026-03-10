@@ -95,8 +95,12 @@
 
 <!-- DNS Records -->
 <div class="card" style="margin-bottom: 24px;">
-  <h2>DNS Records</h2>
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+    <h2 style="margin:0;">DNS Records</h2>
+    <button class="refresh-btn" onclick="runDnsSync()" id="dns-sync-btn">Sync Cloudflare</button>
+  </div>
   <div id="dns-content" class="loading">Loading...</div>
+  <div id="dns-sync-result" style="margin-top:8px;"></div>
 </div>
 
 <script>
@@ -208,6 +212,32 @@ async function runHealthCheck() {
     console.error('Health check failed:', e);
   } finally {
     btn.textContent = 'Health Check';
+    btn.disabled = false;
+  }
+}
+
+async function runDnsSync() {
+  const btn = document.getElementById('dns-sync-btn');
+  btn.textContent = 'Syncing...';
+  btn.disabled = true;
+  const resultEl = document.getElementById('dns-sync-result');
+  resultEl.textContent = '';
+  try {
+    const res = await fetch('/api/dns/sync', { method: 'POST' });
+    const data = await res.json();
+    if (data.error) {
+      resultEl.textContent = data.error;
+      resultEl.style.color = 'var(--red)';
+    } else {
+      resultEl.textContent = 'CF: ' + data.cf_total + ' records, DB: ' + data.db_total + ' records, imported: ' + data.imported;
+      resultEl.style.color = 'var(--green)';
+      await loadDns();
+    }
+  } catch(e) {
+    resultEl.textContent = e.message;
+    resultEl.style.color = 'var(--red)';
+  } finally {
+    btn.textContent = 'Sync Cloudflare';
     btn.disabled = false;
   }
 }

@@ -502,6 +502,8 @@ enum DnsCommands {
         /// ドメイン名
         name: String,
     },
+    /// Cloudflare DNS と同期
+    Sync,
 }
 
 /// リモートデプロイのサブコマンド

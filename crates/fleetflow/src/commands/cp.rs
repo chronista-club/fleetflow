@@ -555,6 +555,40 @@ pub async fn handle_dns(cmd: &DnsCommands) -> Result<()> {
                 println!("{}", "レコードが見つかりません。".yellow());
             }
         }
+        DnsCommands::Sync => {
+            println!("{}", "Cloudflare DNS 同期".bold());
+
+            let resp =
+                cp_client::request(&client, "dns", "sync", json!({ "tenant_slug": "default" }))
+                    .await?;
+
+            if let Some(err) = resp["error"].as_str() {
+                println!("{} {}", "エラー:".red(), err);
+            } else {
+                let imported = resp["imported"].as_u64().unwrap_or(0);
+                let updated = resp["updated"].as_u64().unwrap_or(0);
+                let cf_total = resp["cf_total"].as_u64().unwrap_or(0);
+                let db_total = resp["db_total"].as_u64().unwrap_or(0);
+
+                println!("{} Cloudflare: {} レコード", "CF:".cyan(), cf_total);
+                println!("{} DB: {} レコード", "DB:".cyan(), db_total);
+                println!(
+                    "{} インポート: {}, 更新: {}",
+                    "結果:".green(),
+                    imported,
+                    updated
+                );
+
+                if let Some(not_in_cf) = resp["not_in_cloudflare"].as_array()
+                    && !not_in_cf.is_empty()
+                {
+                    println!("\n{} Cloudflare に存在しないレコード:", "注意:".yellow());
+                    for name in not_in_cf {
+                        println!("  - {}", name.as_str().unwrap_or("-"));
+                    }
+                }
+            }
+        }
     }
 
     client.disconnect().await.ok();
