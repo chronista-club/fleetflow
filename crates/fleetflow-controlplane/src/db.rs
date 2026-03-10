@@ -35,18 +35,23 @@ impl Default for DbConfig {
 
 impl Database {
     /// Connect to SurrealDB and apply schema.
+    ///
+    /// `mem://` エンドポイントの場合は認証をスキップ（インメモリDB）。
     pub async fn connect(config: &DbConfig) -> Result<Self> {
         let db = surrealdb::engine::any::connect(&config.endpoint)
             .await
             .context("SurrealDB 接続失敗")?;
 
-        db.signin(surrealdb::opt::auth::Namespace {
-            namespace: config.namespace.clone(),
-            username: config.username.clone(),
-            password: config.password.clone(),
-        })
-        .await
-        .context("SurrealDB 認証失敗")?;
+        // mem:// (インメモリ) では認証不要
+        if !config.endpoint.starts_with("mem://") {
+            db.signin(surrealdb::opt::auth::Namespace {
+                namespace: config.namespace.clone(),
+                username: config.username.clone(),
+                password: config.password.clone(),
+            })
+            .await
+            .context("SurrealDB 認証失敗")?;
+        }
 
         db.use_ns(&config.namespace)
             .use_db(&config.database)
@@ -398,10 +403,7 @@ impl Database {
         created.context("DNSレコード作成結果が空")
     }
 
-    pub async fn list_dns_records_by_tenant(
-        &self,
-        tenant_slug: &str,
-    ) -> Result<Vec<DnsRecord>> {
+    pub async fn list_dns_records_by_tenant(&self, tenant_slug: &str) -> Result<Vec<DnsRecord>> {
         let mut result = self
             .db
             .query("SELECT * FROM dns_record WHERE tenant.slug = $tenant_slug ORDER BY name")

@@ -130,7 +130,10 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
 async fn start_container(_state: &AppState, container_name: &str) -> anyhow::Result<()> {
     let docker = bollard::Docker::connect_with_local_defaults()?;
     docker
-        .start_container(container_name, None::<bollard::query_parameters::StartContainerOptions>)
+        .start_container(
+            container_name,
+            None::<bollard::query_parameters::StartContainerOptions>,
+        )
         .await
         .map_err(|e| anyhow::anyhow!("コンテナ起動失敗 ({}): {}", container_name, e))?;
     info!(container = container_name, "コンテナ起動");
@@ -141,7 +144,10 @@ async fn start_container(_state: &AppState, container_name: &str) -> anyhow::Res
 async fn stop_container(_state: &AppState, container_name: &str) -> anyhow::Result<()> {
     let docker = bollard::Docker::connect_with_local_defaults()?;
     docker
-        .stop_container(container_name, None::<bollard::query_parameters::StopContainerOptions>)
+        .stop_container(
+            container_name,
+            None::<bollard::query_parameters::StopContainerOptions>,
+        )
         .await
         .map_err(|e| anyhow::anyhow!("コンテナ停止失敗 ({}): {}", container_name, e))?;
     info!(container = container_name, "コンテナ停止");
@@ -152,7 +158,10 @@ async fn stop_container(_state: &AppState, container_name: &str) -> anyhow::Resu
 async fn restart_container(_state: &AppState, container_name: &str) -> anyhow::Result<()> {
     let docker = bollard::Docker::connect_with_local_defaults()?;
     docker
-        .restart_container(container_name, None::<bollard::query_parameters::RestartContainerOptions>)
+        .restart_container(
+            container_name,
+            None::<bollard::query_parameters::RestartContainerOptions>,
+        )
         .await
         .map_err(|e| anyhow::anyhow!("コンテナ再起動失敗 ({}): {}", container_name, e))?;
     info!(container = container_name, "コンテナ再起動");

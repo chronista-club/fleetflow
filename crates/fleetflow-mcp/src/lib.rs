@@ -582,10 +582,7 @@ impl FleetFlowServer {
             if projects.is_empty() {
                 result.push_str("  (プロジェクトなし)");
             } else {
-                result.push_str(&format!(
-                    "  {:<20} {:<25} {}\n",
-                    "SLUG", "NAME", "CREATED"
-                ));
+                result.push_str(&format!("  {:<20} {:<25} {}\n", "SLUG", "NAME", "CREATED"));
                 result.push_str(&format!("  {}\n", "─".repeat(65)));
                 for p in projects {
                     result.push_str(&format!(
@@ -622,7 +619,7 @@ impl FleetFlowServer {
             } else {
                 result.push_str(&format!(
                     "  {:<15} {:<15} {:<15} {:<10}\n",
-                    "SLUG", "PROVIDER", "IP", "STATUS"
+                    "SLUG", "PROVIDER", "SSH HOST", "STATUS"
                 ));
                 result.push_str(&format!("  {}\n", "─".repeat(55)));
                 for s in servers {
@@ -630,7 +627,7 @@ impl FleetFlowServer {
                         "  {:<15} {:<15} {:<15} {:<10}\n",
                         s["slug"].as_str().unwrap_or("N/A"),
                         s["provider"].as_str().unwrap_or("N/A"),
-                        s["ip_address"].as_str().unwrap_or("N/A"),
+                        s["ssh_host"].as_str().unwrap_or("N/A"),
                         s["status"].as_str().unwrap_or("unknown"),
                     ));
                 }
@@ -670,10 +667,7 @@ impl FleetFlowServer {
                 ));
                 result.push_str(&format!("  {}\n", "─".repeat(55)));
                 for s in stages {
-                    let svc_count = s["services"]
-                        .as_array()
-                        .map(|arr| arr.len())
-                        .unwrap_or(0);
+                    let svc_count = s["services"].as_array().map(|arr| arr.len()).unwrap_or(0);
                     let running = s["services"]
                         .as_array()
                         .map(|arr| {

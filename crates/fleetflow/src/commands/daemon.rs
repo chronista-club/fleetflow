@@ -24,9 +24,7 @@ async fn handle_start() -> Result<()> {
             println!();
 
             // フォアグラウンドで起動（Ctrl+C で停止）
-            let status = tokio::process::Command::new(&path)
-                .status()
-                .await?;
+            let status = tokio::process::Command::new(&path).status().await?;
 
             if !status.success() {
                 eprintln!(
@@ -130,12 +128,12 @@ async fn handle_status() -> Result<()> {
 /// fleetflowd バイナリの探索
 fn which_fleetflowd() -> Option<std::path::PathBuf> {
     // 1. 同じディレクトリ (cargo target, インストール先)
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            let candidate = dir.join("fleetflowd");
-            if candidate.exists() {
-                return Some(candidate);
-            }
+    if let Ok(exe) = std::env::current_exe()
+        && let Some(dir) = exe.parent()
+    {
+        let candidate = dir.join("fleetflowd");
+        if candidate.exists() {
+            return Some(candidate);
         }
     }
 

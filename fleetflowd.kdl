@@ -1,0 +1,19 @@
+// FleetFlow Control Plane — ローカル開発設定
+daemon {
+    pid-file "/tmp/fleetflowd-dev.pid"
+    log-level "info"
+}
+
+api {
+    listen "[::1]:4510"
+}
+
+database {
+    endpoint "mem://"
+    namespace "fleetflow"
+    database "control_plane"
+}
+
+web {
+    listen "127.0.0.1:32080"
+}

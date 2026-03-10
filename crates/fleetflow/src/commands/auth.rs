@@ -88,11 +88,7 @@ pub async fn handle_login(api_endpoint: Option<String>) -> Result<()> {
     if !resp.status().is_success() {
         let status = resp.status();
         let body = resp.text().await.unwrap_or_default();
-        anyhow::bail!(
-            "Auth0 Device Code リクエスト失敗 ({}): {}",
-            status,
-            body
-        );
+        anyhow::bail!("Auth0 Device Code リクエスト失敗 ({}): {}", status, body);
     }
 
     let device: DeviceCodeResponse = resp
@@ -114,7 +110,10 @@ pub async fn handle_login(api_endpoint: Option<String>) -> Result<()> {
     if open::that(&device.verification_uri_complete).is_ok() {
         println!("{}", "ブラウザを開きました。".dimmed());
     } else {
-        println!("{}", "ブラウザを自動的に開けませんでした。手動で上記URLを開いてください。".yellow());
+        println!(
+            "{}",
+            "ブラウザを自動的に開けませんでした。手動で上記URLを開いてください。".yellow()
+        );
     }
 
     println!();
@@ -126,8 +125,7 @@ pub async fn handle_login(api_endpoint: Option<String>) -> Result<()> {
     // Step 3: Poll for token
     let token_url = format!("https://{}/oauth/token", auth0_domain);
     let poll_interval = std::time::Duration::from_secs(device.interval.max(5));
-    let deadline =
-        std::time::Instant::now() + std::time::Duration::from_secs(device.expires_in);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(device.expires_in);
 
     let token = loop {
         if std::time::Instant::now() > deadline {
@@ -148,8 +146,7 @@ pub async fn handle_login(api_endpoint: Option<String>) -> Result<()> {
             .context("Token ポーリング失敗")?;
 
         if resp.status().is_success() {
-            let token: TokenResponse =
-                resp.json().await.context("Token レスポンスのパース失敗")?;
+            let token: TokenResponse = resp.json().await.context("Token レスポンスのパース失敗")?;
             break token;
         }
 

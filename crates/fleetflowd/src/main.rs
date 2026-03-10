@@ -163,10 +163,7 @@ fn handle_stop(cfg: &DaemonConfig) -> anyhow::Result<()> {
             std::process::exit(1);
         }
         DaemonStatus::Stale(pid) => {
-            println!(
-                "stale PID ファイルを削除 (PID: {} は既に停止済み)",
-                pid
-            );
+            println!("stale PID ファイルを削除 (PID: {} は既に停止済み)", pid);
             daemon::remove_pid_file(&cfg.pid_file);
             Ok(())
         }

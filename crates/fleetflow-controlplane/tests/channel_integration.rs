@@ -185,13 +185,8 @@ async fn test_unknown_method_returns_error() -> anyhow::Result<()> {
 
     let channel = client.open_channel("tenant").await?;
 
-    let resp = channel
-        .request("nonexistent_method", json!({}))
-        .await?;
-    assert!(
-        resp.get("error").is_some(),
-        "不明なメソッドはエラーを返す"
-    );
+    let resp = channel.request("nonexistent_method", json!({})).await?;
+    assert!(resp.get("error").is_some(), "不明なメソッドはエラーを返す");
 
     channel.close().await?;
     client.disconnect().await?;

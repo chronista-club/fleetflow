@@ -35,10 +35,10 @@ impl Default for DaemonConfig {
 /// 3. ~/.config/fleetflow/fleetflowd.kdl
 /// 4. /etc/fleetflow/fleetflowd.kdl
 pub fn find_config_file(explicit: Option<&Path>) -> Option<PathBuf> {
-    if let Some(path) = explicit {
-        if path.exists() {
-            return Some(path.to_path_buf());
-        }
+    if let Some(path) = explicit
+        && path.exists()
+    {
+        return Some(path.to_path_buf());
     }
 
     let candidates = [
@@ -47,14 +47,11 @@ pub fn find_config_file(explicit: Option<&Path>) -> Option<PathBuf> {
         Some(PathBuf::from("/etc/fleetflow/fleetflowd.kdl")),
     ];
 
-    candidates
-        .into_iter()
-        .flatten()
-        .find(|p| p.exists())
+    candidates.into_iter().flatten().find(|p| p.exists())
 }
 
 /// KDL ノードから最初の文字列引数を取得するヘルパー
-fn node_str<'a>(node: &'a kdl::KdlNode) -> Option<&'a str> {
+fn node_str(node: &kdl::KdlNode) -> Option<&str> {
     node.entries().first().and_then(|e| e.value().as_string())
 }
 
@@ -70,94 +67,90 @@ pub fn load_config(path: &Path) -> Result<DaemonConfig> {
     let mut config = DaemonConfig::default();
 
     // daemon ノード
-    if let Some(daemon) = doc.get("daemon") {
-        if let Some(children) = daemon.children() {
-            if let Some(node) = children.get("pid-file") {
-                if let Some(val) = node_str(node) {
-                    config.pid_file = PathBuf::from(resolve_env(val));
-                }
-            }
-            if let Some(node) = children.get("log-file") {
-                if let Some(val) = node_str(node) {
-                    config.log_file = Some(PathBuf::from(resolve_env(val)));
-                }
-            }
-            if let Some(node) = children.get("log-level") {
-                if let Some(val) = node_str(node) {
-                    config.log_level = val.to_string();
-                }
-            }
+    if let Some(daemon) = doc.get("daemon")
+        && let Some(children) = daemon.children()
+    {
+        if let Some(node) = children.get("pid-file")
+            && let Some(val) = node_str(node)
+        {
+            config.pid_file = PathBuf::from(resolve_env(val));
+        }
+        if let Some(node) = children.get("log-file")
+            && let Some(val) = node_str(node)
+        {
+            config.log_file = Some(PathBuf::from(resolve_env(val)));
+        }
+        if let Some(node) = children.get("log-level")
+            && let Some(val) = node_str(node)
+        {
+            config.log_level = val.to_string();
         }
     }
 
     // api ノード
-    if let Some(api) = doc.get("api") {
-        if let Some(children) = api.children() {
-            if let Some(node) = children.get("listen") {
-                if let Some(val) = node_str(node) {
-                    config.server.listen_addr = val.to_string();
-                }
-            }
-        }
+    if let Some(api) = doc.get("api")
+        && let Some(children) = api.children()
+        && let Some(node) = children.get("listen")
+        && let Some(val) = node_str(node)
+    {
+        config.server.listen_addr = val.to_string();
     }
 
     // database ノード
-    if let Some(database) = doc.get("database") {
-        if let Some(children) = database.children() {
-            let db = &mut config.server.db;
-            if let Some(node) = children.get("endpoint") {
-                if let Some(val) = node_str(node) {
-                    db.endpoint = resolve_env(val);
-                }
-            }
-            if let Some(node) = children.get("namespace") {
-                if let Some(val) = node_str(node) {
-                    db.namespace = val.to_string();
-                }
-            }
-            if let Some(node) = children.get("database") {
-                if let Some(val) = node_str(node) {
-                    db.database = val.to_string();
-                }
-            }
-            if let Some(node) = children.get("username") {
-                if let Some(val) = node_str(node) {
-                    db.username = val.to_string();
-                }
-            }
-            if let Some(node) = children.get("password") {
-                if let Some(val) = node_str(node) {
-                    db.password = resolve_env(val);
-                }
-            }
+    if let Some(database) = doc.get("database")
+        && let Some(children) = database.children()
+    {
+        let db = &mut config.server.db;
+        if let Some(node) = children.get("endpoint")
+            && let Some(val) = node_str(node)
+        {
+            db.endpoint = resolve_env(val);
+        }
+        if let Some(node) = children.get("namespace")
+            && let Some(val) = node_str(node)
+        {
+            db.namespace = val.to_string();
+        }
+        if let Some(node) = children.get("database")
+            && let Some(val) = node_str(node)
+        {
+            db.database = val.to_string();
+        }
+        if let Some(node) = children.get("username")
+            && let Some(val) = node_str(node)
+        {
+            db.username = val.to_string();
+        }
+        if let Some(node) = children.get("password")
+            && let Some(val) = node_str(node)
+        {
+            db.password = resolve_env(val);
         }
     }
 
     // web ノード
-    if let Some(web) = doc.get("web") {
-        if let Some(children) = web.children() {
-            if let Some(node) = children.get("listen") {
-                if let Some(val) = node_str(node) {
-                    config.web_addr = val.to_string();
-                }
-            }
-        }
+    if let Some(web) = doc.get("web")
+        && let Some(children) = web.children()
+        && let Some(node) = children.get("listen")
+        && let Some(val) = node_str(node)
+    {
+        config.web_addr = val.to_string();
     }
 
     // auth ノード
-    if let Some(auth) = doc.get("auth") {
-        if let Some(children) = auth.children() {
-            let a = &mut config.server.auth;
-            if let Some(node) = children.get("domain") {
-                if let Some(val) = node_str(node) {
-                    a.domain = val.to_string();
-                }
-            }
-            if let Some(node) = children.get("audience") {
-                if let Some(val) = node_str(node) {
-                    a.audience = val.to_string();
-                }
-            }
+    if let Some(auth) = doc.get("auth")
+        && let Some(children) = auth.children()
+    {
+        let a = &mut config.server.auth;
+        if let Some(node) = children.get("domain")
+            && let Some(val) = node_str(node)
+        {
+            a.domain = val.to_string();
+        }
+        if let Some(node) = children.get("audience")
+            && let Some(val) = node_str(node)
+        {
+            a.audience = val.to_string();
         }
     }
 

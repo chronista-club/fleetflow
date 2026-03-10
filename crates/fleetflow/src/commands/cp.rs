@@ -19,17 +19,18 @@ pub async fn handle_tenant(cmd: &TenantCommands) -> Result<()> {
             println!();
 
             let slug = creds.tenant_slug.as_deref().unwrap_or("default");
-            let resp = cp_client::request(
-                &client,
-                "tenant",
-                "get",
-                json!({ "slug": slug }),
-            )
-            .await?;
+            let resp =
+                cp_client::request(&client, "tenant", "get", json!({ "slug": slug })).await?;
 
             if let Some(tenant) = resp.get("tenant") {
-                println!("  Name: {}", tenant["name"].as_str().unwrap_or("N/A").cyan());
-                println!("  Slug: {}", tenant["slug"].as_str().unwrap_or("N/A").cyan());
+                println!(
+                    "  Name: {}",
+                    tenant["name"].as_str().unwrap_or("N/A").cyan()
+                );
+                println!(
+                    "  Slug: {}",
+                    tenant["slug"].as_str().unwrap_or("N/A").cyan()
+                );
             } else {
                 println!("{}", "テナント情報が見つかりません。".yellow());
             }
@@ -42,8 +43,7 @@ pub async fn handle_tenant(cmd: &TenantCommands) -> Result<()> {
             println!("{}", "テナント一覧".bold());
             println!();
 
-            let resp =
-                cp_client::request(&client, "tenant", "list", json!({})).await?;
+            let resp = cp_client::request(&client, "tenant", "list", json!({})).await?;
 
             if let Some(tenants) = resp["tenants"].as_array() {
                 if tenants.is_empty() {
@@ -103,13 +103,7 @@ pub async fn handle_project(cmd: &ProjectCommands) -> Result<()> {
             println!("{}", "プロジェクト一覧".bold());
             println!();
 
-            let resp = cp_client::request(
-                &client,
-                "project",
-                "list",
-                json!({}),
-            )
-            .await?;
+            let resp = cp_client::request(&client, "project", "list", json!({})).await?;
 
             if let Some(projects) = resp["projects"].as_array() {
                 if projects.is_empty() {
@@ -117,8 +111,7 @@ pub async fn handle_project(cmd: &ProjectCommands) -> Result<()> {
                 } else {
                     println!(
                         "{}",
-                        format!("{:<25} {:<30} {:<20}", "SLUG", "NAME", "CREATED")
-                            .bold()
+                        format!("{:<25} {:<30} {:<20}", "SLUG", "NAME", "CREATED").bold()
                     );
                     println!("{}", "─".repeat(75).dimmed());
                     for p in projects {
@@ -155,19 +148,26 @@ pub async fn handle_project(cmd: &ProjectCommands) -> Result<()> {
             println!("{} {}", "プロジェクト詳細:".bold(), slug.cyan());
             println!();
 
-            let resp = cp_client::request(
-                &client,
-                "project",
-                "get",
-                json!({ "slug": slug }),
-            )
-            .await?;
+            let resp =
+                cp_client::request(&client, "project", "get", json!({ "slug": slug })).await?;
 
             if let Some(project) = resp.get("project") {
-                println!("  Name:        {}", project["name"].as_str().unwrap_or("N/A").cyan());
-                println!("  Slug:        {}", project["slug"].as_str().unwrap_or("N/A").cyan());
-                println!("  Description: {}", project["description"].as_str().unwrap_or("N/A"));
-                println!("  Created:     {}", project["created_at"].as_str().unwrap_or("N/A").dimmed());
+                println!(
+                    "  Name:        {}",
+                    project["name"].as_str().unwrap_or("N/A").cyan()
+                );
+                println!(
+                    "  Slug:        {}",
+                    project["slug"].as_str().unwrap_or("N/A").cyan()
+                );
+                println!(
+                    "  Description: {}",
+                    project["description"].as_str().unwrap_or("N/A")
+                );
+                println!(
+                    "  Created:     {}",
+                    project["created_at"].as_str().unwrap_or("N/A").dimmed()
+                );
             } else {
                 println!("{}", "プロジェクトが見つかりません。".yellow());
             }
@@ -186,13 +186,7 @@ pub async fn handle_server(cmd: &ServerCommands) -> Result<()> {
             println!("{}", "サーバー一覧".bold());
             println!();
 
-            let resp = cp_client::request(
-                &client,
-                "server",
-                "list",
-                json!({}),
-            )
-            .await?;
+            let resp = cp_client::request(&client, "server", "list", json!({})).await?;
 
             if let Some(servers) = resp["servers"].as_array() {
                 if servers.is_empty() {
@@ -200,10 +194,13 @@ pub async fn handle_server(cmd: &ServerCommands) -> Result<()> {
                 } else {
                     println!(
                         "{}",
-                        format!("{:<15} {:<20} {:<15} {:<15} {:<10}", "SLUG", "HOSTNAME", "PROVIDER", "IP", "STATUS")
-                            .bold()
+                        format!(
+                            "{:<15} {:<20} {:<15} {:<10}",
+                            "SLUG", "PROVIDER", "SSH HOST", "STATUS"
+                        )
+                        .bold()
                     );
-                    println!("{}", "─".repeat(75).dimmed());
+                    println!("{}", "─".repeat(60).dimmed());
                     for s in servers {
                         let status = s["status"].as_str().unwrap_or("unknown");
                         let status_colored = match status {
@@ -212,11 +209,10 @@ pub async fn handle_server(cmd: &ServerCommands) -> Result<()> {
                             _ => status.yellow(),
                         };
                         println!(
-                            "{:<15} {:<20} {:<15} {:<15} {:<10}",
+                            "{:<15} {:<15} {:<20} {:<10}",
                             s["slug"].as_str().unwrap_or("N/A").cyan(),
-                            s["hostname"].as_str().unwrap_or("N/A"),
                             s["provider"].as_str().unwrap_or("N/A"),
-                            s["ip_address"].as_str().unwrap_or("N/A"),
+                            s["ssh_host"].as_str().unwrap_or("N/A"),
                             status_colored,
                         );
                     }
@@ -239,19 +235,13 @@ pub async fn handle_server(cmd: &ServerCommands) -> Result<()> {
             });
 
             if let Some(host) = ssh_host {
-                payload["ip_address"] = json!(host);
+                payload["ssh_host"] = json!(host);
             }
             if let Some(path) = deploy_path {
                 payload["deploy_path"] = json!(path);
             }
 
-            let resp = cp_client::request(
-                &client,
-                "server",
-                "register",
-                payload,
-            )
-            .await?;
+            let resp = cp_client::request(&client, "server", "register", payload).await?;
 
             if resp.get("server").is_some() {
                 println!("{} {}", "登録完了:".green(), slug.cyan());
@@ -262,20 +252,25 @@ pub async fn handle_server(cmd: &ServerCommands) -> Result<()> {
             println!();
 
             // server チャネルには get メソッドがないので list から検索
-            let resp = cp_client::request(
-                &client,
-                "server",
-                "list",
-                json!({}),
-            )
-            .await?;
+            let resp = cp_client::request(&client, "server", "list", json!({})).await?;
 
             if let Some(servers) = resp["servers"].as_array() {
-                if let Some(server) = servers.iter().find(|s| s["slug"].as_str() == Some(slug.as_str())) {
-                    println!("  Slug:      {}", server["slug"].as_str().unwrap_or("N/A").cyan());
-                    println!("  Hostname:  {}", server["hostname"].as_str().unwrap_or("N/A"));
-                    println!("  Provider:  {}", server["provider"].as_str().unwrap_or("N/A"));
-                    println!("  IP:        {}", server["ip_address"].as_str().unwrap_or("N/A"));
+                if let Some(server) = servers
+                    .iter()
+                    .find(|s| s["slug"].as_str() == Some(slug.as_str()))
+                {
+                    println!(
+                        "  Slug:      {}",
+                        server["slug"].as_str().unwrap_or("N/A").cyan()
+                    );
+                    println!(
+                        "  Provider:  {}",
+                        server["provider"].as_str().unwrap_or("N/A")
+                    );
+                    println!(
+                        "  SSH Host:  {}",
+                        server["ssh_host"].as_str().unwrap_or("N/A")
+                    );
                     let status = server["status"].as_str().unwrap_or("unknown");
                     let status_colored = match status {
                         "online" => status.green(),
@@ -427,13 +422,9 @@ pub async fn handle_dns(cmd: &DnsCommands) -> Result<()> {
             println!("{}", "DNS レコード一覧".bold());
             println!();
 
-            let resp = cp_client::request(
-                &client,
-                "dns",
-                "list",
-                json!({ "tenant_slug": "default" }),
-            )
-            .await?;
+            let resp =
+                cp_client::request(&client, "dns", "list", json!({ "tenant_slug": "default" }))
+                    .await?;
 
             if let Some(records) = resp["dns_records"].as_array() {
                 if records.is_empty() {

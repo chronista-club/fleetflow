@@ -81,6 +81,12 @@
   </div>
 </div>
 
+<!-- DNS Records -->
+<div class="card" style="margin-bottom: 24px;">
+  <h2>DNS Records</h2>
+  <div id="dns-content" class="loading">Loading...</div>
+</div>
+
 <script>
 async function fetchJSON(path) {
   const res = await fetch(path);
@@ -195,10 +201,44 @@ async function loadOverview() {
   }
 }
 
+async function loadDns() {
+  try {
+    const data = await fetchJSON('/api/dns');
+    const records = data.dns_records || [];
+    if (records.length === 0) {
+      document.getElementById('dns-content').textContent = 'No DNS records';
+      return;
+    }
+    const table = document.createElement('table');
+    const thead = document.createElement('tr');
+    ['Name', 'Type', 'Content', 'Proxied'].forEach(h => { const th = document.createElement('th'); th.textContent = h; thead.appendChild(th); });
+    table.appendChild(thead);
+    records.forEach(r => {
+      const tr = document.createElement('tr');
+      [r.name, r.record_type, r.content].forEach(val => { const td = document.createElement('td'); td.textContent = val || '-'; tr.appendChild(td); });
+      const proxiedTd = document.createElement('td');
+      const badge = document.createElement('span');
+      badge.textContent = r.proxied ? 'yes' : 'no';
+      badge.className = 'badge ' + (r.proxied ? 'badge-green' : 'badge-gray');
+      proxiedTd.appendChild(badge);
+      tr.appendChild(proxiedTd);
+      table.appendChild(tr);
+    });
+    const el = document.getElementById('dns-content');
+    el.textContent = '';
+    el.appendChild(table);
+  } catch(e) {
+    const el = document.getElementById('dns-content');
+    el.textContent = e.message;
+    el.className = 'error';
+  }
+}
+
 function loadAll() {
   loadProjects();
   loadServers();
   loadOverview();
+  loadDns();
 }
 
 // Auto-refresh every 30 seconds

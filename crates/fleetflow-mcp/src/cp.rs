@@ -36,14 +36,13 @@ pub async fn connect() -> Result<(ProtocolClient, Credentials)> {
         serde_json::from_str(&content).context("credentials.json のパース失敗")?;
 
     // 有効期限チェック
-    if let Ok(expires) = chrono::DateTime::parse_from_rfc3339(&creds.expires_at) {
-        if expires < chrono::Utc::now() {
-            anyhow::bail!("認証トークンの有効期限切れ。`fleet login` で再認証してください。");
-        }
+    if let Ok(expires) = chrono::DateTime::parse_from_rfc3339(&creds.expires_at)
+        && expires < chrono::Utc::now()
+    {
+        anyhow::bail!("認証トークンの有効期限切れ。`fleet login` で再認証してください。");
     }
 
-    let client =
-        ProtocolClient::new_default().context("Unison ProtocolClient 作成失敗")?;
+    let client = ProtocolClient::new_default().context("Unison ProtocolClient 作成失敗")?;
 
     client
         .connect(&creds.api_endpoint)

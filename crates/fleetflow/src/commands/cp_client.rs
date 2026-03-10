@@ -32,27 +32,21 @@ pub async fn connect() -> Result<(ProtocolClient, Credentials)> {
         serde_json::from_str(&content).context("credentials.json のパース失敗")?;
 
     // 有効期限チェック
-    if let Ok(expires) = chrono::DateTime::parse_from_rfc3339(&creds.expires_at) {
-        if expires < chrono::Utc::now() {
-            eprintln!("{}", "認証トークンの有効期限が切れています。".red().bold());
-            eprintln!();
-            eprintln!("  {} で再認証してください。", "fleet login".cyan());
-            std::process::exit(1);
-        }
+    if let Ok(expires) = chrono::DateTime::parse_from_rfc3339(&creds.expires_at)
+        && expires < chrono::Utc::now()
+    {
+        eprintln!("{}", "認証トークンの有効期限が切れています。".red().bold());
+        eprintln!();
+        eprintln!("  {} で再認証してください。", "fleet login".cyan());
+        std::process::exit(1);
     }
 
-    let client = ProtocolClient::new_default()
-        .context("Unison ProtocolClient 作成失敗")?;
+    let client = ProtocolClient::new_default().context("Unison ProtocolClient 作成失敗")?;
 
     client
         .connect(&creds.api_endpoint)
         .await
-        .with_context(|| {
-            format!(
-                "CP サーバーへの接続失敗: {}",
-                creds.api_endpoint
-            )
-        })?;
+        .with_context(|| format!("CP サーバーへの接続失敗: {}", creds.api_endpoint))?;
 
     // Identity handshake を待機
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;

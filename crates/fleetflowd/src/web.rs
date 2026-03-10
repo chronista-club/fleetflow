@@ -16,14 +16,11 @@ use axum::{
     routing::get,
 };
 use fleetflow_controlplane::server::AppState;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tokio::task::JoinHandle;
 
 /// WebUI サーバーを起動
-pub async fn start(
-    state: Arc<AppState>,
-    addr: &str,
-) -> anyhow::Result<JoinHandle<()>> {
+pub async fn start(state: Arc<AppState>, addr: &str) -> anyhow::Result<JoinHandle<()>> {
     let app = Router::new()
         // API routes
         .route("/api/health", get(api_health))

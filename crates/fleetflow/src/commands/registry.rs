@@ -111,10 +111,7 @@ pub fn handle_status(registry: &Registry) {
                     })
                 })
                 .map(|s| {
-                    let svc_count = s["services"]
-                        .as_array()
-                        .map(|arr| arr.len())
-                        .unwrap_or(0);
+                    let svc_count = s["services"].as_array().map(|arr| arr.len()).unwrap_or(0);
                     let running = s["services"]
                         .as_array()
                         .map(|arr| {
@@ -124,9 +121,13 @@ pub fn handle_status(registry: &Registry) {
                         })
                         .unwrap_or(0);
                     if running == svc_count && svc_count > 0 {
-                        format!("{}/{} running", running, svc_count).green().to_string()
+                        format!("{}/{} running", running, svc_count)
+                            .green()
+                            .to_string()
                     } else if running > 0 {
-                        format!("{}/{} running", running, svc_count).yellow().to_string()
+                        format!("{}/{} running", running, svc_count)
+                            .yellow()
+                            .to_string()
                     } else {
                         "stopped".red().to_string()
                     }
