@@ -87,6 +87,12 @@
   </div>
 </div>
 
+<!-- Deployments -->
+<div class="card" style="margin-bottom: 24px;">
+  <h2>Recent Deployments</h2>
+  <div id="deploy-content" class="loading">Loading...</div>
+</div>
+
 <!-- DNS Records -->
 <div class="card" style="margin-bottom: 24px;">
   <h2>DNS Records</h2>
@@ -269,10 +275,57 @@ async function loadDns() {
   }
 }
 
+function makeBadgeEl(status) {
+  const badge = document.createElement('span');
+  badge.textContent = status || 'unknown';
+  const cls = status === 'success' || status === 'online' || status === 'running' ? 'badge-green'
+    : status === 'failed' || status === 'offline' || status === 'stopped' ? 'badge-red'
+    : status === 'pending' ? 'badge-yellow'
+    : 'badge-gray';
+  badge.className = 'badge ' + cls;
+  return badge;
+}
+
+async function loadDeployments() {
+  try {
+    const data = await fetchJSON('/api/deployments');
+    const deploys = data.deployments || [];
+    if (deploys.length === 0) {
+      document.getElementById('deploy-content').textContent = 'No deployments';
+      return;
+    }
+    const table = document.createElement('table');
+    const thead = document.createElement('tr');
+    ['Stage', 'Server', 'Command', 'Status', 'Started'].forEach(h => { const th = document.createElement('th'); th.textContent = h; thead.appendChild(th); });
+    table.appendChild(thead);
+    deploys.forEach(d => {
+      const tr = document.createElement('tr');
+      const cmd = (d.command || '-').length > 30 ? d.command.substring(0, 29) + '…' : (d.command || '-');
+      [d.stage, d.server_slug, cmd].forEach(val => { const td = document.createElement('td'); td.textContent = val || '-'; tr.appendChild(td); });
+      const statusTd = document.createElement('td');
+      statusTd.appendChild(makeBadgeEl(d.status));
+      tr.appendChild(statusTd);
+      const timeTd = document.createElement('td');
+      timeTd.textContent = timeAgo(d.started_at);
+      timeTd.style.color = 'var(--text2)';
+      tr.appendChild(timeTd);
+      table.appendChild(tr);
+    });
+    const el = document.getElementById('deploy-content');
+    el.textContent = '';
+    el.appendChild(table);
+  } catch(e) {
+    const el = document.getElementById('deploy-content');
+    el.textContent = e.message;
+    el.className = 'error';
+  }
+}
+
 function loadAll() {
   loadProjects();
   loadServers();
   loadOverview();
+  loadDeployments();
   loadDns();
 }
 

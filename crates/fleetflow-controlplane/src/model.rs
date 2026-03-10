@@ -193,3 +193,27 @@ pub struct DnsRecord {
     pub created_at: Option<DateTime<Utc>>,
     pub updated_at: Option<DateTime<Utc>>,
 }
+
+// ─────────────────────────────────────────────
+// CP-009: Deployment（デプロイ履歴）
+// ─────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize, SurrealValue)]
+pub struct Deployment {
+    pub id: Option<RecordId>,
+    pub tenant: RecordId,
+    pub project: RecordId,
+    pub stage: String,
+    pub server_slug: String,
+    /// デプロイの状態: pending, running, success, failed, rolled_back
+    pub status: String,
+    /// 実行したコマンドまたは playbook 名
+    pub command: String,
+    /// 実行ログ
+    pub log: Option<String>,
+    /// デプロイ開始時刻
+    pub started_at: Option<DateTime<Utc>>,
+    /// デプロイ終了時刻
+    pub finished_at: Option<DateTime<Utc>>,
+    pub created_at: Option<DateTime<Utc>>,
+}

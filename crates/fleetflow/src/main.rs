@@ -337,6 +337,9 @@ enum Commands {
     /// DNS/ドメイン管理（Control Plane）
     #[command(subcommand)]
     Dns(DnsCommands),
+    /// リモートデプロイ（Control Plane 経由）
+    #[command(subcommand, name = "remote")]
+    Remote(RemoteCommands),
 }
 
 /// 認証管理のサブコマンド
@@ -498,6 +501,32 @@ enum DnsCommands {
     Delete {
         /// ドメイン名
         name: String,
+    },
+}
+
+/// リモートデプロイのサブコマンド
+#[derive(Subcommand)]
+enum RemoteCommands {
+    /// リモートサーバーにデプロイ実行
+    Deploy {
+        /// プロジェクトスラッグ
+        #[arg(long)]
+        project: String,
+        /// ステージ名
+        #[arg(long)]
+        stage: String,
+        /// 対象サーバースラッグ
+        #[arg(long)]
+        server: String,
+        /// 実行コマンド
+        #[arg(long)]
+        command: String,
+    },
+    /// デプロイ履歴
+    History {
+        /// 表示件数
+        #[arg(long, default_value = "20")]
+        limit: usize,
     },
 }
 
@@ -701,6 +730,9 @@ async fn main() -> anyhow::Result<()> {
         Commands::Dns(dns_cmd) => {
             return commands::cp::handle_dns(dns_cmd).await;
         }
+        Commands::Remote(remote_cmd) => {
+            return commands::cp::handle_remote(remote_cmd).await;
+        }
         // Control Plane 横断クエリ（設定ファイル不要）
         Commands::Ps {
             project: Some(project),
@@ -850,7 +882,8 @@ async fn main() -> anyhow::Result<()> {
         | Commands::Project(_)
         | Commands::Server(_)
         | Commands::Cost(_)
-        | Commands::Dns(_) => {
+        | Commands::Dns(_)
+        | Commands::Remote(_) => {
             unreachable!("CP commands are handled before config loading");
         }
         _ => stage_from_env.as_deref(),
@@ -1068,7 +1101,8 @@ async fn main() -> anyhow::Result<()> {
         | Commands::Project(_)
         | Commands::Server(_)
         | Commands::Cost(_)
-        | Commands::Dns(_) => {
+        | Commands::Dns(_)
+        | Commands::Remote(_) => {
             unreachable!("CP commands are handled before config loading");
         }
     }

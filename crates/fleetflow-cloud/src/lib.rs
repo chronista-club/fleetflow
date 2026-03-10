@@ -36,6 +36,7 @@
 pub mod action;
 pub mod error;
 pub mod provider;
+pub mod ssh;
 pub mod state;
 pub mod tailscale;
 

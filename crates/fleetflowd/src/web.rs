@@ -29,6 +29,7 @@ pub async fn start(state: Arc<AppState>, addr: &str) -> anyhow::Result<JoinHandl
         .route("/api/overview", get(api_overview))
         .route("/api/dns", get(api_dns))
         .route("/api/health-check", post(api_health_check))
+        .route("/api/deployments", get(api_deployments))
         // Dashboard
         .route("/", get(dashboard_html))
         .with_state(state);
@@ -136,6 +137,32 @@ async fn api_dns(State(state): State<Arc<AppState>>) -> impl IntoResponse {
                 })
                 .collect();
             (StatusCode::OK, Json(json!({ "dns_records": items }))).into_response()
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": e.to_string() })),
+        )
+            .into_response(),
+    }
+}
+
+async fn api_deployments(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    match state.db.list_deployments("default", 20).await {
+        Ok(deployments) => {
+            let items: Vec<Value> = deployments
+                .iter()
+                .map(|d| {
+                    json!({
+                        "stage": d.stage,
+                        "server_slug": d.server_slug,
+                        "status": d.status,
+                        "command": d.command,
+                        "started_at": d.started_at.map(|t| t.to_rfc3339()),
+                        "finished_at": d.finished_at.map(|t| t.to_rfc3339()),
+                    })
+                })
+                .collect();
+            (StatusCode::OK, Json(json!({ "deployments": items }))).into_response()
         }
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,

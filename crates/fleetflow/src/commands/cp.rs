@@ -8,7 +8,9 @@ use colored::Colorize;
 use serde_json::json;
 
 use super::cp_client;
-use crate::{CostCommands, DnsCommands, ProjectCommands, ServerCommands, TenantCommands};
+use crate::{
+    CostCommands, DnsCommands, ProjectCommands, RemoteCommands, ServerCommands, TenantCommands,
+};
 
 pub async fn handle_tenant(cmd: &TenantCommands) -> Result<()> {
     match cmd {
@@ -551,6 +553,124 @@ pub async fn handle_dns(cmd: &DnsCommands) -> Result<()> {
                 println!("{} {}", "削除完了:".green(), name.cyan());
             } else {
                 println!("{}", "レコードが見つかりません。".yellow());
+            }
+        }
+    }
+
+    client.disconnect().await.ok();
+    Ok(())
+}
+
+pub async fn handle_remote(cmd: &RemoteCommands) -> Result<()> {
+    let (client, _creds) = cp_client::connect().await?;
+
+    match cmd {
+        RemoteCommands::Deploy {
+            project,
+            stage,
+            server,
+            command,
+        } => {
+            println!(
+                "{} {} → {} ({})",
+                "リモートデプロイ:".bold(),
+                project.cyan(),
+                server.cyan(),
+                stage
+            );
+            println!("  コマンド: {}", command.dimmed());
+            println!();
+
+            let resp = cp_client::request(
+                &client,
+                "deploy",
+                "run",
+                json!({
+                    "tenant_slug": "default",
+                    "project_slug": project,
+                    "stage": stage,
+                    "server_slug": server,
+                    "command": command,
+                }),
+            )
+            .await?;
+
+            let status = resp["status"].as_str().unwrap_or("unknown");
+            let status_colored = match status {
+                "success" => status.green(),
+                "failed" => status.red(),
+                _ => status.yellow(),
+            };
+            println!("  結果: {}", status_colored);
+
+            if let Some(log) = resp["log"].as_str()
+                && !log.is_empty()
+            {
+                println!();
+                println!("{}", "─ ログ ─".dimmed());
+                for line in log.lines().take(50) {
+                    println!("  {}", line);
+                }
+            }
+
+            if let Some(err) = resp["error"].as_str() {
+                println!("  {}: {}", "エラー".red(), err);
+            }
+        }
+        RemoteCommands::History { limit } => {
+            println!("{}", "デプロイ履歴".bold());
+            println!();
+
+            let resp = cp_client::request(
+                &client,
+                "deploy",
+                "history",
+                json!({
+                    "tenant_slug": "default",
+                    "limit": limit,
+                }),
+            )
+            .await?;
+
+            if let Some(deployments) = resp["deployments"].as_array() {
+                if deployments.is_empty() {
+                    println!("{}", "デプロイ履歴がありません。".dimmed());
+                } else {
+                    println!(
+                        "{}",
+                        format!(
+                            "{:<12} {:<10} {:<15} {:<10} {:<20}",
+                            "STAGE", "SERVER", "COMMAND", "STATUS", "STARTED"
+                        )
+                        .bold()
+                    );
+                    println!("{}", "─".repeat(67).dimmed());
+                    for d in deployments {
+                        let status = d["status"].as_str().unwrap_or("unknown");
+                        let status_colored = match status {
+                            "success" => status.green(),
+                            "failed" => status.red(),
+                            "running" => status.yellow(),
+                            _ => status.dimmed(),
+                        };
+                        let cmd = d["command"].as_str().unwrap_or("-");
+                        let cmd_short = if cmd.len() > 14 {
+                            format!("{}…", &cmd[..13])
+                        } else {
+                            cmd.to_string()
+                        };
+                        println!(
+                            "{:<12} {:<10} {:<15} {:<10} {:<20}",
+                            d["stage"].as_str().unwrap_or("-"),
+                            d["server_slug"].as_str().unwrap_or("-"),
+                            cmd_short,
+                            status_colored,
+                            d["started_at"].as_str().unwrap_or("-"),
+                        );
+                    }
+                }
+            } else if let Some(err) = resp["error"].as_str() {
+                println!("{} {}", "エラー:".red(), err);
             }
         }
     }

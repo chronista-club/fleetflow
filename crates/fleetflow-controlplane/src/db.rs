@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use chrono::{DateTime, Utc};
 use surrealdb::Surreal;
 use surrealdb::engine::any::Any;
 use surrealdb::types::RecordId;
@@ -455,6 +456,63 @@ impl Database {
         let deleted: Vec<DnsRecord> = result.take(0)?;
         Ok(!deleted.is_empty())
     }
+
+    // ─────────────────────────────────────────
+    // Deployment CRUD
+    // ─────────────────────────────────────────
+
+    pub async fn create_deployment(&self, deploy: &Deployment) -> Result<Deployment> {
+        let mut result = self
+            .db
+            .query("CREATE deployment CONTENT { tenant: $tenant, project: $project, stage: $stage, server_slug: $server_slug, status: $status, command: $command, log: $log, started_at: $started_at, finished_at: $finished_at }")
+            .bind(("tenant", deploy.tenant.clone()))
+            .bind(("project", deploy.project.clone()))
+            .bind(("stage", deploy.stage.clone()))
+            .bind(("server_slug", deploy.server_slug.clone()))
+            .bind(("status", deploy.status.clone()))
+            .bind(("command", deploy.command.clone()))
+            .bind(("log", deploy.log.clone()))
+            .bind(("started_at", deploy.started_at))
+            .bind(("finished_at", deploy.finished_at))
+            .await
+            .context("デプロイ記録作成失敗")?;
+        let created: Option<Deployment> = result.take(0)?;
+        created.context("デプロイ記録作成結果が空")
+    }
+
+    pub async fn update_deployment_status(
+        &self,
+        id: &RecordId,
+        status: &str,
+        log: Option<&str>,
+        finished_at: Option<DateTime<Utc>>,
+    ) -> Result<()> {
+        self.db
+            .query("UPDATE $id SET status = $status, log = $log, finished_at = $finished_at")
+            .bind(("id", id.clone()))
+            .bind(("status", status.to_string()))
+            .bind(("log", log.map(String::from)))
+            .bind(("finished_at", finished_at))
+            .await
+            .context("デプロイステータス更新失敗")?;
+        Ok(())
+    }
+
+    pub async fn list_deployments(
+        &self,
+        tenant_slug: &str,
+        limit: usize,
+    ) -> Result<Vec<Deployment>> {
+        let mut result = self
+            .db
+            .query("SELECT * FROM deployment WHERE tenant.slug = $tenant_slug ORDER BY created_at DESC LIMIT $limit")
+            .bind(("tenant_slug", tenant_slug.to_string()))
+            .bind(("limit", limit as i64))
+            .await
+            .context("デプロイ履歴取得失敗")?;
+        let deployments: Vec<Deployment> = result.take(0)?;
+        Ok(deployments)
+    }
 }
 
 /// SurrealDB schema definition.
@@ -545,6 +603,19 @@ DEFINE FIELD IF NOT EXISTS proxied ON dns_record TYPE bool DEFAULT false;
 DEFINE FIELD IF NOT EXISTS created_at ON dns_record TYPE option<datetime> DEFAULT time::now();
 DEFINE FIELD IF NOT EXISTS updated_at ON dns_record TYPE option<datetime> DEFAULT time::now();
 DEFINE INDEX IF NOT EXISTS idx_dns_record_name ON dns_record FIELDS name UNIQUE;
+
+DEFINE TABLE IF NOT EXISTS deployment SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS tenant ON deployment TYPE record<tenant>;
+DEFINE FIELD IF NOT EXISTS project ON deployment TYPE record<project>;
+DEFINE FIELD IF NOT EXISTS stage ON deployment TYPE string;
+DEFINE FIELD IF NOT EXISTS server_slug ON deployment TYPE string;
+DEFINE FIELD IF NOT EXISTS status ON deployment TYPE string DEFAULT 'pending';
+DEFINE FIELD IF NOT EXISTS command ON deployment TYPE string;
+DEFINE FIELD IF NOT EXISTS log ON deployment TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS started_at ON deployment TYPE option<datetime>;
+DEFINE FIELD IF NOT EXISTS finished_at ON deployment TYPE option<datetime>;
+DEFINE FIELD IF NOT EXISTS created_at ON deployment TYPE option<datetime> DEFAULT time::now();
+DEFINE INDEX IF NOT EXISTS idx_deployment_project_stage ON deployment FIELDS project, stage;
 "#;
 
 #[cfg(test)]

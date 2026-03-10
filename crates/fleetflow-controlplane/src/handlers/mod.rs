@@ -1,5 +1,6 @@
 pub mod container;
 pub mod cost;
+pub mod deploy;
 pub mod dns;
 pub mod health;
 pub mod project;
@@ -24,4 +25,5 @@ pub async fn register_all(server: &ProtocolServer, state: Arc<AppState>) {
     health::register(server, state.clone()).await;
     cost::register(server, state.clone()).await;
     dns::register(server, state.clone()).await;
+    deploy::register(server, state.clone()).await;
 }
