@@ -207,11 +207,8 @@ async fn api_health_check(State(state): State<Arc<AppState>>) -> impl IntoRespon
             let peer = peers
                 .iter()
                 .find(|p| p.hostname.eq_ignore_ascii_case(&s.slug));
-            let (status, heartbeat) = match peer {
-                Some(p) if p.online => ("online".to_string(), Some(now)),
-                Some(_) => ("offline".to_string(), s.last_heartbeat_at),
-                None => ("unknown".to_string(), s.last_heartbeat_at),
-            };
+            let (status, heartbeat) =
+                fleetflow_cloud::tailscale::resolve_peer_status(peer, s.last_heartbeat_at, now);
             ServerStatusUpdate {
                 slug: s.slug.clone(),
                 status,

@@ -143,6 +143,21 @@ fn parse_pong_line(output: &str) -> (Option<f64>, Option<String>) {
     (latency_ms, via)
 }
 
+/// Tailscale ピアとサーバーのステータスを解決する
+///
+/// 3箇所（health.rs, server handler, web handler）で同じロジックが必要なため共通化。
+pub fn resolve_peer_status(
+    peer: Option<&TailscaleNode>,
+    prev_heartbeat: Option<DateTime<Utc>>,
+    now: DateTime<Utc>,
+) -> (String, Option<DateTime<Utc>>) {
+    match peer {
+        Some(p) if p.online => ("online".to_string(), Some(now)),
+        Some(_) => ("offline".to_string(), prev_heartbeat),
+        None => ("unknown".to_string(), prev_heartbeat),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -235,5 +250,46 @@ mod tests {
             .find(|n| n.hostname == "creo-dev")
             .unwrap();
         assert!(!dev.online);
+    }
+
+    #[test]
+    fn test_resolve_peer_status_online() {
+        let now = Utc::now();
+        let node = TailscaleNode {
+            hostname: "srv".into(),
+            dns_name: "srv.ts.net.".into(),
+            tailscale_ips: vec!["100.0.0.1".into()],
+            online: true,
+            os: "linux".into(),
+            last_seen: now,
+        };
+        let (status, heartbeat) = resolve_peer_status(Some(&node), None, now);
+        assert_eq!(status, "online");
+        assert_eq!(heartbeat, Some(now));
+    }
+
+    #[test]
+    fn test_resolve_peer_status_offline() {
+        let now = Utc::now();
+        let prev = now - chrono::Duration::hours(1);
+        let node = TailscaleNode {
+            hostname: "srv".into(),
+            dns_name: "srv.ts.net.".into(),
+            tailscale_ips: vec![],
+            online: false,
+            os: "linux".into(),
+            last_seen: prev,
+        };
+        let (status, heartbeat) = resolve_peer_status(Some(&node), Some(prev), now);
+        assert_eq!(status, "offline");
+        assert_eq!(heartbeat, Some(prev));
+    }
+
+    #[test]
+    fn test_resolve_peer_status_unknown() {
+        let now = Utc::now();
+        let (status, heartbeat) = resolve_peer_status(None, None, now);
+        assert_eq!(status, "unknown");
+        assert_eq!(heartbeat, None);
     }
 }

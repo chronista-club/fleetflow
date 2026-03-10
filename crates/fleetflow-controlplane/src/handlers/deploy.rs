@@ -23,12 +23,30 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                         "run" => {
                             let tenant_slug =
                                 payload["tenant_slug"].as_str().unwrap_or("default");
-                            let project_slug =
-                                payload["project_slug"].as_str().unwrap_or_default();
-                            let stage = payload["stage"].as_str().unwrap_or_default();
-                            let server_slug =
-                                payload["server_slug"].as_str().unwrap_or_default();
-                            let command = payload["command"].as_str().unwrap_or_default();
+
+                            // 必須フィールドのバリデーション
+                            macro_rules! require_field {
+                                ($field:expr, $name:literal) => {
+                                    match payload[$field].as_str().filter(|s| !s.is_empty()) {
+                                        Some(v) => v,
+                                        None => {
+                                            channel
+                                                .send_response(
+                                                    msg.id,
+                                                    "run",
+                                                    json!({ "error": format!("missing required field: {}", $name) }),
+                                                )
+                                                .await?;
+                                            continue;
+                                        }
+                                    }
+                                };
+                            }
+
+                            let project_slug = require_field!("project_slug", "project_slug");
+                            let stage = require_field!("stage", "stage");
+                            let server_slug = require_field!("server_slug", "server_slug");
+                            let command = require_field!("command", "command");
 
                             // Resolve tenant
                             let tenant = match state.db.get_tenant_by_slug(tenant_slug).await {
@@ -121,10 +139,36 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                             };
 
                             let now = Utc::now();
+                            let tenant_id = match tenant.id {
+                                Some(id) => id,
+                                None => {
+                                    channel
+                                        .send_response(
+                                            msg.id,
+                                            "run",
+                                            json!({ "error": "tenant has no id" }),
+                                        )
+                                        .await?;
+                                    continue;
+                                }
+                            };
+                            let project_id = match project.id {
+                                Some(id) => id,
+                                None => {
+                                    channel
+                                        .send_response(
+                                            msg.id,
+                                            "run",
+                                            json!({ "error": "project has no id" }),
+                                        )
+                                        .await?;
+                                    continue;
+                                }
+                            };
                             let deployment = Deployment {
                                 id: None,
-                                tenant: tenant.id.unwrap(),
-                                project: project.id.unwrap(),
+                                tenant: tenant_id,
+                                project: project_id,
                                 stage: stage.into(),
                                 server_slug: server_slug.into(),
                                 status: "running".into(),

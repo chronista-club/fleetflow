@@ -89,24 +89,45 @@ fn shell_escape(s: &str) -> String {
 /// ファイルをリモートにコピー（tailscale ssh 経由で安全に転送）
 ///
 /// ローカルファイルを base64 エンコードし、リモート側で decode して書き込む。
-/// コマンドインジェクション対策として、リモートパスはシェルエスケープされる。
+/// stdin 経由で base64 データを渡すことで、シェルインジェクションを完全に排除。
 pub async fn copy_file(local_path: &str, host: &str, remote_path: &str) -> Result<(), CloudError> {
     let content = tokio::fs::read(local_path)
         .await
         .map_err(|e| CloudError::CommandFailed(format!("ローカルファイル読み込み失敗: {e}")))?;
 
     let encoded = base64_encode(&content);
-
-    // base64 でエンコードしてリモートで decode → ファイルに書き込み
-    // remote_path はシェルエスケープ済み
     let escaped_path = shell_escape(remote_path);
-    let decode_cmd = format!("echo '{encoded}' | base64 -d > {escaped_path}");
 
-    let result = exec_with_timeout(host, "root", &decode_cmd, Duration::from_secs(60)).await?;
-    if !result.success {
+    // stdin 経由で base64 データを渡し、リモート側で decode → ファイル書き込み
+    // encoded は [A-Za-z0-9+/=] のみで構成されるため安全
+    // remote_path はシェルエスケープ済み
+    let target = format!("root@{host}");
+    let decode_cmd = format!("base64 -d > {escaped_path}");
+
+    let mut child = tokio::process::Command::new("tailscale")
+        .args(["ssh", &target, "--", &decode_cmd])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| CloudError::CommandFailed(format!("tailscale ssh 起動失敗: {e}")))?;
+
+    // stdin に base64 データを書き込んで閉じる
+    if let Some(mut stdin) = child.stdin.take() {
+        use tokio::io::AsyncWriteExt;
+        stdin.write_all(encoded.as_bytes()).await.ok();
+        stdin.shutdown().await.ok();
+    }
+
+    let output = tokio::time::timeout(Duration::from_secs(60), child.wait_with_output())
+        .await
+        .map_err(|_| CloudError::Timeout("ファイル転送タイムアウト (60s)".into()))?
+        .map_err(|e| CloudError::CommandFailed(format!("ファイル転送失敗: {e}")))?;
+
+    if !output.status.success() {
         return Err(CloudError::CommandFailed(format!(
             "ファイル転送失敗: {}",
-            result.stderr
+            String::from_utf8_lossy(&output.stderr)
         )));
     }
 

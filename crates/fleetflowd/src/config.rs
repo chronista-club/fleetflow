@@ -164,6 +164,9 @@ pub fn load_config(path: &Path) -> Result<DaemonConfig> {
         && let Some(entry) = node.entries().first()
         && let Some(val) = entry.value().as_integer()
     {
+        if val < 0 {
+            anyhow::bail!("health check-interval は 0 以上を指定してください（現在: {val}）");
+        }
         config.health_check_interval = val as u64;
     }
 

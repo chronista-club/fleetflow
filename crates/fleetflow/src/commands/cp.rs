@@ -566,18 +566,12 @@ pub async fn handle_dns(cmd: &DnsCommands) -> Result<()> {
                 println!("{} {}", "エラー:".red(), err);
             } else {
                 let imported = resp["imported"].as_u64().unwrap_or(0);
-                let updated = resp["updated"].as_u64().unwrap_or(0);
                 let cf_total = resp["cf_total"].as_u64().unwrap_or(0);
                 let db_total = resp["db_total"].as_u64().unwrap_or(0);
 
                 println!("{} Cloudflare: {} レコード", "CF:".cyan(), cf_total);
                 println!("{} DB: {} レコード", "DB:".cyan(), db_total);
-                println!(
-                    "{} インポート: {}, 更新: {}",
-                    "結果:".green(),
-                    imported,
-                    updated
-                );
+                println!("{} インポート: {}", "結果:".green(), imported);
 
                 if let Some(not_in_cf) = resp["not_in_cloudflare"].as_array()
                     && !not_in_cf.is_empty()

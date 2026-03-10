@@ -54,7 +54,19 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                     continue;
                                 }
                             };
-                            let tenant_id = tenant.id.unwrap();
+                            let tenant_id = match tenant.id {
+                                Some(id) => id,
+                                None => {
+                                    channel
+                                        .send_response(
+                                            msg.id,
+                                            "create",
+                                            json!({ "error": "tenant has no id" }),
+                                        )
+                                        .await?;
+                                    continue;
+                                }
+                            };
                             let project_id = project_slug.map(|s| RecordId::new("project", s));
 
                             let record = DnsRecord {
@@ -203,7 +215,6 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
 
                             // 3. Cloudflare にあって DB にないレコードを DB に追加
                             let mut imported = 0u32;
-                            let updated = 0u32;
 
                             let tenant = match state.db.get_tenant_by_slug(tenant_slug).await {
                                 Ok(Some(t)) => t,
@@ -224,9 +235,12 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                     db_records.iter().any(|db| db.name == cf_rec.name);
 
                                 if !exists_in_db {
+                                    let Some(ref tenant_id) = tenant.id else {
+                                        continue;
+                                    };
                                     let record = DnsRecord {
                                         id: None,
-                                        tenant: tenant.id.clone().unwrap(),
+                                        tenant: tenant_id.clone(),
                                         project: None,
                                         name: cf_rec.name.clone(),
                                         record_type: cf_rec.record_type.clone(),
@@ -255,7 +269,6 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
 
                             info!(
                                 imported,
-                                updated,
                                 not_in_cf = not_in_cf.len(),
                                 cf_total = cf_records.len(),
                                 db_total = db_records.len(),
@@ -268,7 +281,6 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                     "sync",
                                     json!({
                                         "imported": imported,
-                                        "updated": updated,
                                         "cf_total": cf_records.len(),
                                         "db_total": db_records.len() + imported as usize,
                                         "not_in_cloudflare": not_in_cf,
