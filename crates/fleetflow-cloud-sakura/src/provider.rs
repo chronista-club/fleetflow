@@ -1,5 +1,7 @@
 //! Sakura Cloud provider implementation
 
+use std::collections::HashMap;
+
 use crate::error::{Result, SakuraError};
 use crate::usacloud::{CreateServerConfig, Usacloud};
 use async_trait::async_trait;
@@ -319,18 +321,25 @@ impl CloudProvider for SakuraCloudProvider {
             match current_resource {
                 None => {
                     // Resource doesn't exist, create it
+                    let mut details: HashMap<String, serde_json::Value> = [
+                        ("provider".to_string(), serde_json::json!("sakura-cloud")),
+                        ("zone".to_string(), serde_json::json!(self.zone)),
+                    ]
+                    .into_iter()
+                    .collect();
+                    // Pass through resource config for apply()
+                    if let serde_json::Value::Object(ref map) = resource.config {
+                        for (k, v) in map {
+                            details.insert(k.clone(), v.clone());
+                        }
+                    }
                     actions.push(Action {
                         id: format!("create-{}", resource.id),
                         action_type: ActionType::Create,
                         resource_type: "server".to_string(),
                         resource_id: resource.id.clone(),
                         description: format!("サーバー {} を作成", resource.id),
-                        details: [
-                            ("provider".to_string(), serde_json::json!("sakura-cloud")),
-                            ("zone".to_string(), serde_json::json!(self.zone)),
-                        ]
-                        .into_iter()
-                        .collect(),
+                        details,
                     });
                 }
                 Some(_existing) => {
@@ -372,18 +381,113 @@ impl CloudProvider for SakuraCloudProvider {
                 ActionType::Create => {
                     tracing::info!("Creating server: {}", action.resource_id);
 
-                    // TODO: Get proper config from action.details
+                    // Extract config from action.details (populated by plan())
+                    let plan_str = action
+                        .details
+                        .get("plan")
+                        .and_then(|v| v.as_str())
+                        .map(String::from);
+                    let (core, memory) = parse_plan(&plan_str);
+                    let disk_size = action
+                        .details
+                        .get("disk_size")
+                        .and_then(|v| v.as_i64())
+                        .map(|v| v as i32);
+                    let os_type = action
+                        .details
+                        .get("os")
+                        .and_then(|v| v.as_str())
+                        .map(String::from);
+                    let ssh_key_names: Vec<String> = action
+                        .details
+                        .get("ssh_keys")
+                        .and_then(|v| v.as_array())
+                        .map(|arr| {
+                            arr.iter()
+                                .filter_map(|v| v.as_str().map(String::from))
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    let tags: Vec<String> = action
+                        .details
+                        .get("tags")
+                        .and_then(|v| v.as_array())
+                        .map(|arr| {
+                            arr.iter()
+                                .filter_map(|v| v.as_str().map(String::from))
+                                .collect()
+                        })
+                        .unwrap_or_default();
+
+                    // Resolve SSH key names to IDs
+                    let ssh_key_ids = if ssh_key_names.is_empty() {
+                        None
+                    } else {
+                        match self.usacloud.list_ssh_keys().await {
+                            Ok(all_keys) => {
+                                let ids: Vec<String> = ssh_key_names
+                                    .iter()
+                                    .filter_map(|name| {
+                                        all_keys
+                                            .iter()
+                                            .find(|k| k.name == *name)
+                                            .map(|k| k.id_str())
+                                    })
+                                    .collect();
+                                if ids.is_empty() { None } else { Some(ids) }
+                            }
+                            Err(e) => {
+                                tracing::warn!(error = %e, "SSH鍵一覧の取得に失敗");
+                                None
+                            }
+                        }
+                    };
+
+                    // Resolve startup scripts
+                    let startup_scripts: Vec<String> = action
+                        .details
+                        .get("startup_scripts")
+                        .and_then(|v| v.as_array())
+                        .map(|arr| {
+                            arr.iter()
+                                .filter_map(|v| v.as_str().map(String::from))
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    let mut note_ids: Option<Vec<String>> = None;
+                    if !startup_scripts.is_empty() {
+                        let mut ids = Vec::new();
+                        for name in &startup_scripts {
+                            if let Some(content) =
+                                crate::startup_scripts::get_builtin_script(name)
+                            {
+                                if let Ok(note) =
+                                    self.usacloud.get_or_create_note(name, content, "shell").await
+                                {
+                                    ids.push(note.id_str());
+                                }
+                            } else if let Ok(Some(note)) =
+                                self.usacloud.find_note_by_name(name).await
+                            {
+                                ids.push(note.id_str());
+                            }
+                        }
+                        if !ids.is_empty() {
+                            note_ids = Some(ids);
+                        }
+                    }
+
                     let config = CreateServerConfig {
                         name: action.resource_id.clone(),
-                        core: 1,
-                        memory: 1,
-                        disk_size: Some(20),
-                        os_type: Some("ubuntu2404".to_string()),
+                        core,
+                        memory,
+                        disk_size,
+                        os_type,
                         archive: None,
-                        ssh_key_ids: None,
-                        note_ids: None,
+                        ssh_key_ids,
+                        note_ids,
                         note_vars: None,
-                        tags: Vec::new(),
+                        tags,
                     };
 
                     match self.usacloud.create_server(&config).await {

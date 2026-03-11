@@ -56,6 +56,12 @@ fn build_resource_set(config: &fleetflow_core::Flow, stage_name: &str) -> Resour
             if !server.ssh_keys.is_empty() {
                 details.insert("ssh_keys".to_string(), serde_json::json!(server.ssh_keys));
             }
+            if !server.tags.is_empty() {
+                details.insert("tags".to_string(), serde_json::json!(server.tags));
+            }
+            if let Some(ref script) = server.startup_script {
+                details.insert("startup_scripts".to_string(), serde_json::json!([script]));
+            }
 
             resource_set.add(ResourceConfig::new(
                 "server",
