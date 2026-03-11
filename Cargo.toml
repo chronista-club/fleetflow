@@ -59,6 +59,7 @@ base64 = "0.22"
 # KDL parser
 kdl = "6"
 unison-kdl = { git = "https://github.com/chronista-club/unison-kdl", rev = "a5a37ce" }
+unison = { git = "https://github.com/chronista-club/unison", rev = "fd33f82" }
 
 # Template engine
 tera = "1"

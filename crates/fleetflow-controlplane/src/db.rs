@@ -45,8 +45,7 @@ impl Database {
 
         // mem:// (インメモリ) では認証不要
         if !config.endpoint.starts_with("mem://") {
-            db.signin(surrealdb::opt::auth::Namespace {
-                namespace: config.namespace.clone(),
+            db.signin(surrealdb::opt::auth::Root {
                 username: config.username.clone(),
                 password: config.password.clone(),
             })

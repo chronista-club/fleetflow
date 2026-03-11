@@ -62,7 +62,7 @@ libc = "0.2"
 open = "5"
 
 # Control Plane client
-unison = { path = "../../../unison/crates/unison-protocol" }
+unison.workspace = true
 rustls = { version = "0.23", default-features = false, features = ["ring"] }
 
 [dev-dependencies]

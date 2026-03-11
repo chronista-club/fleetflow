@@ -32,7 +32,7 @@ futures-util.workspace = true
 bollard.workspace = true
 
 # CP integration (v2)
-unison = { path = "../../../unison/crates/unison-protocol" }
+unison.workspace = true
 rustls = { version = "0.23", default-features = false, features = ["ring"] }
 dirs = "6"
 chrono.workspace = true

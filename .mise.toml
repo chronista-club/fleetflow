@@ -3,13 +3,13 @@
 
 [tools]
 # Rust toolchain
-rust = "1.91"
+rust = "1.94"
 
 [env]
 # Rustのデフォルト設定
 CARGO_TERM_COLOR = "always"
 RUST_BACKTRACE = "1"
-CARGO_INCREMENTAL = "1"
+CARGO_INCREMENTAL = "0"
 
 # ========================================
 # セットアップ・環境構築
