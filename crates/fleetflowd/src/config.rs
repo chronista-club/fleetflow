@@ -11,6 +11,8 @@ pub struct DaemonConfig {
     pub log_level: String,
     pub server: ServerConfig,
     pub web_addr: String,
+    /// Dashboard SPA 用 Auth0 Client ID
+    pub auth0_client_id: String,
     /// ヘルスチェック間隔（秒）。0 で無効化。
     pub health_check_interval: u64,
 }
@@ -27,6 +29,7 @@ impl Default for DaemonConfig {
             log_level: "info".into(),
             server: ServerConfig::default(),
             web_addr: "127.0.0.1:32080".into(),
+            auth0_client_id: String::new(),
             health_check_interval: 60,
         }
     }
@@ -134,10 +137,17 @@ pub fn load_config(path: &Path) -> Result<DaemonConfig> {
     // web ノード
     if let Some(web) = doc.get("web")
         && let Some(children) = web.children()
-        && let Some(node) = children.get("listen")
-        && let Some(val) = node_str(node)
     {
-        config.web_addr = val.to_string();
+        if let Some(node) = children.get("listen")
+            && let Some(val) = node_str(node)
+        {
+            config.web_addr = val.to_string();
+        }
+        if let Some(node) = children.get("auth0-client-id")
+            && let Some(val) = node_str(node)
+        {
+            config.auth0_client_id = resolve_env(val);
+        }
     }
 
     // auth ノード

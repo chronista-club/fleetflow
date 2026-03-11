@@ -28,8 +28,8 @@ impl Default for ServerConfig {
             listen_addr: "[::1]:4510".into(),
             db: DbConfig::default(),
             auth: Auth0Config {
-                domain: "anycreative.auth0.com".into(),
-                audience: "https://api.fleetflow.dev".into(),
+                domain: "anycreative.jp.auth0.com".into(),
+                audience: "https://api.fleetflow.run".into(),
             },
         }
     }

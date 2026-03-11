@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>FleetFlow Dashboard</title>
+<script src="https://cdn.auth0.com/js/auth0-spa-js/2.1/auth0-spa-js.production.js"></script>
 <style>
   :root {
     --bg: #0d1117; --card: #161b22; --border: #30363d;
@@ -36,6 +37,20 @@
                  padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; }
   .refresh-btn:hover { border-color: var(--accent); color: var(--accent); }
   .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+  /* Auth styles */
+  #auth-area { display: flex; align-items: center; gap: 12px; }
+  .user-email { color: var(--text2); font-size: 13px; }
+  .login-btn { background: var(--accent); border: none; color: #fff; padding: 8px 16px;
+               border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; }
+  .login-btn:hover { opacity: 0.9; }
+  .logout-btn { background: transparent; border: 1px solid var(--border); color: var(--text2);
+                padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; }
+  .logout-btn:hover { border-color: var(--red); color: var(--red); }
+  #login-screen { display: flex; justify-content: center; align-items: center; min-height: 60vh; }
+  .login-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+                padding: 48px; text-align: center; max-width: 400px; }
+  .login-card h2 { color: var(--accent); margin-bottom: 16px; }
+  .login-card p { color: var(--text2); margin-bottom: 24px; font-size: 14px; }
 </style>
 </head>
 <body>
@@ -44,169 +59,420 @@
     <h1>FleetFlow Dashboard</h1>
     <div class="subtitle">Control Plane Overview</div>
   </div>
-  <div style="display:flex; gap:8px;">
+  <div id="auth-area"></div>
+</div>
+
+<div id="login-screen" style="display:none;"></div>
+
+<div id="dashboard-content" style="display:none;">
+  <div style="display:flex; gap:8px; margin-bottom:24px;">
     <button class="refresh-btn" onclick="runHealthCheck()" id="health-btn">Health Check</button>
     <button class="refresh-btn" onclick="loadAll()">Refresh</button>
   </div>
-</div>
 
-<!-- Stats -->
-<div class="grid" id="stats">
-  <div class="card">
-    <h3>Projects</h3>
-    <div class="stat"><span class="stat-value" id="project-count">-</span><span class="stat-label">registered</span></div>
+  <!-- Stats -->
+  <div class="grid" id="stats">
+    <div class="card">
+      <h3>Projects</h3>
+      <div class="stat"><span class="stat-value" id="project-count">-</span><span class="stat-label">registered</span></div>
+    </div>
+    <div class="card">
+      <h3>Servers</h3>
+      <div class="stat"><span class="stat-value" id="server-count">-</span><span class="stat-label">registered</span></div>
+      <div class="stat"><span class="stat-value" id="server-online" style="font-size:18px; color:var(--green)">-</span><span class="stat-label">online</span></div>
+    </div>
+    <div class="card">
+      <h3>Stages</h3>
+      <div class="stat"><span class="stat-value" id="stage-count">-</span><span class="stat-label">active</span></div>
+    </div>
   </div>
-  <div class="card">
-    <h3>Servers</h3>
-    <div class="stat"><span class="stat-value" id="server-count">-</span><span class="stat-label">registered</span></div>
-    <div class="stat"><span class="stat-value" id="server-online" style="font-size:18px; color:var(--green)">-</span><span class="stat-label">online</span></div>
+
+  <!-- Overview matrix -->
+  <div class="card" style="margin-bottom: 24px;">
+    <h2>Project x Stage Matrix</h2>
+    <div id="overview-content" class="loading">Loading...</div>
   </div>
-  <div class="card">
-    <h3>Stages</h3>
-    <div class="stat"><span class="stat-value" id="stage-count">-</span><span class="stat-label">active</span></div>
+
+  <!-- Servers -->
+  <div class="card" style="margin-bottom: 24px;">
+    <h2>Servers</h2>
+    <div id="servers-content" class="loading">Loading...</div>
   </div>
-</div>
 
-<!-- Overview matrix -->
-<div class="card" style="margin-bottom: 24px;">
-  <h2>Project x Stage Matrix</h2>
-  <div id="overview-content" class="loading">Loading...</div>
-</div>
-
-<!-- Servers -->
-<div class="card" style="margin-bottom: 24px;">
-  <h2>Servers</h2>
-  <div id="servers-content" class="loading">Loading...</div>
-</div>
-
-<!-- Projects -->
-<div class="grid">
-  <div class="card">
-    <h2>Projects</h2>
-    <div id="projects-content" class="loading">Loading...</div>
+  <!-- Projects -->
+  <div class="grid">
+    <div class="card">
+      <h2>Projects</h2>
+      <div id="projects-content" class="loading">Loading...</div>
+    </div>
   </div>
-</div>
 
-<!-- Deployments -->
-<div class="card" style="margin-bottom: 24px;">
-  <h2>Recent Deployments</h2>
-  <div id="deploy-content" class="loading">Loading...</div>
-</div>
-
-<!-- DNS Records -->
-<div class="card" style="margin-bottom: 24px;">
-  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-    <h2 style="margin:0;">DNS Records</h2>
-    <button class="refresh-btn" onclick="runDnsSync()" id="dns-sync-btn">Sync Cloudflare</button>
+  <!-- Deployments -->
+  <div class="card" style="margin-bottom: 24px;">
+    <h2>Recent Deployments</h2>
+    <div id="deploy-content" class="loading">Loading...</div>
   </div>
-  <div id="dns-content" class="loading">Loading...</div>
-  <div id="dns-sync-result" style="margin-top:8px;"></div>
+
+  <!-- DNS Records -->
+  <div class="card" style="margin-bottom: 24px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <h2 style="margin:0;">DNS Records</h2>
+      <button class="refresh-btn" onclick="runDnsSync()" id="dns-sync-btn">Sync Cloudflare</button>
+    </div>
+    <div id="dns-content" class="loading">Loading...</div>
+    <div id="dns-sync-result" style="margin-top:8px;"></div>
+  </div>
 </div>
 
 <script>
-async function fetchJSON(path) {
-  const res = await fetch(path);
-  return res.json();
-}
+// ============================================================================
+// Auth0 Integration
+// ============================================================================
 
-function escapeText(str) {
-  if (!str) return '-';
-  const el = document.createElement('span');
-  el.textContent = str;
-  return el.innerHTML;
-}
+var auth0Client = null;
+var authMode = 'none'; // 'auth0' or 'none' (dev mode)
 
-function statusBadge(status) {
-  const safe = escapeText(status);
-  const cls = status === 'online' || status === 'running' ? 'badge-green'
-    : status === 'offline' || status === 'stopped' ? 'badge-red'
-    : status === 'partial' ? 'badge-yellow'
-    : 'badge-gray';
-  return '<span class="badge ' + cls + '">' + safe + '</span>';
-}
-
-async function loadProjects() {
+async function initAuth() {
   try {
-    const data = await fetchJSON('/api/projects');
-    const projects = data.projects || [];
-    document.getElementById('project-count').textContent = projects.length;
-    if (projects.length === 0) {
-      document.getElementById('projects-content').textContent = 'No projects';
+    var res = await fetch('/api/auth/config');
+    var config = await res.json();
+
+    if (!config.clientId) {
+      // No Auth0 configured — dev mode, show dashboard directly
+      authMode = 'none';
+      showDashboard(null);
       return;
     }
-    const table = document.createElement('table');
-    const thead = document.createElement('tr');
-    ['Slug', 'Name'].forEach(h => { const th = document.createElement('th'); th.textContent = h; thead.appendChild(th); });
-    table.appendChild(thead);
-    projects.forEach(p => {
-      const tr = document.createElement('tr');
-      [p.slug, p.name].forEach(val => { const td = document.createElement('td'); td.textContent = val || '-'; tr.appendChild(td); });
-      table.appendChild(tr);
+
+    authMode = 'auth0';
+    auth0Client = await auth0.createAuth0Client({
+      domain: config.domain,
+      clientId: config.clientId,
+      authorizationParams: {
+        audience: config.audience,
+        redirect_uri: window.location.origin
+      },
+      cacheLocation: 'localstorage'
     });
-    const el = document.getElementById('projects-content');
-    el.textContent = '';
-    el.appendChild(table);
-  } catch(e) {
-    const el = document.getElementById('projects-content');
-    el.textContent = e.message;
-    el.className = 'error';
+
+    // Handle redirect callback
+    if (window.location.search.includes('code=') && window.location.search.includes('state=')) {
+      await auth0Client.handleRedirectCallback();
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+
+    if (await auth0Client.isAuthenticated()) {
+      var user = await auth0Client.getUser();
+      showDashboard(user);
+    } else {
+      showLoginScreen();
+    }
+  } catch (e) {
+    console.error('Auth init failed:', e);
+    // Fallback to dev mode
+    authMode = 'none';
+    showDashboard(null);
   }
 }
 
+function showLoginScreen() {
+  var loginScreen = document.getElementById('login-screen');
+  loginScreen.style.display = 'flex';
+
+  var card = document.createElement('div');
+  card.className = 'login-card';
+
+  var h2 = document.createElement('h2');
+  h2.textContent = 'FleetFlow Dashboard';
+  card.appendChild(h2);
+
+  var p = document.createElement('p');
+  p.textContent = 'Control Plane にアクセスするにはログインが必要です。';
+  card.appendChild(p);
+
+  var btn = document.createElement('button');
+  btn.className = 'login-btn';
+  btn.textContent = 'Login with Auth0';
+  btn.addEventListener('click', function() {
+    auth0Client.loginWithRedirect();
+  });
+  card.appendChild(btn);
+
+  loginScreen.textContent = '';
+  loginScreen.appendChild(card);
+
+  document.getElementById('dashboard-content').style.display = 'none';
+}
+
+function showDashboard(user) {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('dashboard-content').style.display = 'block';
+
+  var authArea = document.getElementById('auth-area');
+  authArea.textContent = '';
+
+  if (user && authMode === 'auth0') {
+    var emailSpan = document.createElement('span');
+    emailSpan.className = 'user-email';
+    emailSpan.textContent = user.email || user.sub || '';
+    authArea.appendChild(emailSpan);
+
+    var logoutBtn = document.createElement('button');
+    logoutBtn.className = 'logout-btn';
+    logoutBtn.textContent = 'Logout';
+    logoutBtn.addEventListener('click', function() {
+      auth0Client.logout({ logoutParams: { returnTo: window.location.origin } });
+    });
+    authArea.appendChild(logoutBtn);
+  }
+
+  loadAll();
+}
+
+// ============================================================================
+// Authenticated fetch helpers
+// ============================================================================
+
+async function getAccessToken() {
+  if (authMode !== 'auth0' || !auth0Client) return null;
+  try {
+    return await auth0Client.getTokenSilently();
+  } catch (e) {
+    console.error('Token refresh failed:', e);
+    showLoginScreen();
+    return null;
+  }
+}
+
+async function fetchJSON(path) {
+  var headers = {};
+  var token = await getAccessToken();
+  if (token) {
+    headers['Authorization'] = 'Bearer ' + token;
+  }
+  var res = await fetch(path, { headers: headers });
+  if (res.status === 401 && authMode === 'auth0') {
+    showLoginScreen();
+    throw new Error('Unauthorized');
+  }
+  return res.json();
+}
+
+async function postJSON(path) {
+  var headers = {};
+  var token = await getAccessToken();
+  if (token) {
+    headers['Authorization'] = 'Bearer ' + token;
+  }
+  var res = await fetch(path, { method: 'POST', headers: headers });
+  if (res.status === 401 && authMode === 'auth0') {
+    showLoginScreen();
+    throw new Error('Unauthorized');
+  }
+  return res.json();
+}
+
+// ============================================================================
+// Dashboard Data Loading
+// ============================================================================
+
 function timeAgo(isoStr) {
   if (!isoStr) return '-';
-  const diff = Date.now() - new Date(isoStr).getTime();
+  var diff = Date.now() - new Date(isoStr).getTime();
   if (diff < 60000) return Math.floor(diff / 1000) + 's ago';
   if (diff < 3600000) return Math.floor(diff / 60000) + 'm ago';
   if (diff < 86400000) return Math.floor(diff / 3600000) + 'h ago';
   return Math.floor(diff / 86400000) + 'd ago';
 }
 
-async function loadServers() {
+function makeBadgeEl(status) {
+  var badge = document.createElement('span');
+  badge.textContent = status || 'unknown';
+  var cls = (status === 'success' || status === 'online' || status === 'running') ? 'badge-green'
+    : (status === 'failed' || status === 'offline' || status === 'stopped') ? 'badge-red'
+    : status === 'pending' ? 'badge-yellow'
+    : 'badge-gray';
+  badge.className = 'badge ' + cls;
+  return badge;
+}
+
+function makeTable(headers, rows) {
+  var table = document.createElement('table');
+  var thead = document.createElement('tr');
+  headers.forEach(function(h) {
+    var th = document.createElement('th');
+    th.textContent = h;
+    thead.appendChild(th);
+  });
+  table.appendChild(thead);
+  rows.forEach(function(row) { table.appendChild(row); });
+  return table;
+}
+
+function replaceContent(elementId, content) {
+  var el = document.getElementById(elementId);
+  el.textContent = '';
+  el.className = '';
+  if (typeof content === 'string') {
+    el.textContent = content;
+  } else {
+    el.appendChild(content);
+  }
+}
+
+function showError(elementId, message) {
+  var el = document.getElementById(elementId);
+  el.textContent = message;
+  el.className = 'error';
+}
+
+async function loadProjects() {
   try {
-    const data = await fetchJSON('/api/servers');
-    const servers = data.servers || [];
-    document.getElementById('server-count').textContent = servers.length;
-    document.getElementById('server-online').textContent = servers.filter(s => s.status === 'online').length;
-    if (servers.length === 0) {
-      document.getElementById('servers-content').textContent = 'No servers';
+    var data = await fetchJSON('/api/projects');
+    var projects = data.projects || [];
+    document.getElementById('project-count').textContent = projects.length;
+    if (projects.length === 0) {
+      replaceContent('projects-content', 'No projects');
       return;
     }
-    const table = document.createElement('table');
-    const thead = document.createElement('tr');
-    ['Slug', 'Provider', 'Host', 'Status', 'Last Seen'].forEach(h => { const th = document.createElement('th'); th.textContent = h; thead.appendChild(th); });
-    table.appendChild(thead);
-    servers.forEach(s => {
-      const tr = document.createElement('tr');
-      [s.slug, s.provider, s.ssh_host].forEach(val => { const td = document.createElement('td'); td.textContent = val || '-'; tr.appendChild(td); });
-      const statusTd = document.createElement('td');
-      const badge = document.createElement('span');
-      badge.textContent = s.status || 'unknown';
-      badge.className = 'badge ' + (s.status === 'online' ? 'badge-green' : s.status === 'offline' ? 'badge-red' : 'badge-gray');
-      statusTd.appendChild(badge);
+    var rows = projects.map(function(p) {
+      var tr = document.createElement('tr');
+      [p.slug, p.name].forEach(function(val) {
+        var td = document.createElement('td');
+        td.textContent = val || '-';
+        tr.appendChild(td);
+      });
+      return tr;
+    });
+    replaceContent('projects-content', makeTable(['Slug', 'Name'], rows));
+  } catch(e) {
+    showError('projects-content', e.message);
+  }
+}
+
+async function loadServers() {
+  try {
+    var data = await fetchJSON('/api/servers');
+    var servers = data.servers || [];
+    document.getElementById('server-count').textContent = servers.length;
+    document.getElementById('server-online').textContent = servers.filter(function(s) { return s.status === 'online'; }).length;
+    if (servers.length === 0) {
+      replaceContent('servers-content', 'No servers');
+      return;
+    }
+    var rows = servers.map(function(s) {
+      var tr = document.createElement('tr');
+      [s.slug, s.provider, s.ssh_host].forEach(function(val) {
+        var td = document.createElement('td');
+        td.textContent = val || '-';
+        tr.appendChild(td);
+      });
+      var statusTd = document.createElement('td');
+      statusTd.appendChild(makeBadgeEl(s.status));
       tr.appendChild(statusTd);
-      const seenTd = document.createElement('td');
+      var seenTd = document.createElement('td');
       seenTd.textContent = timeAgo(s.last_heartbeat_at);
       seenTd.style.color = 'var(--text2)';
       tr.appendChild(seenTd);
-      table.appendChild(tr);
+      return tr;
     });
-    const el = document.getElementById('servers-content');
-    el.textContent = '';
-    el.appendChild(table);
+    replaceContent('servers-content', makeTable(['Slug', 'Provider', 'Host', 'Status', 'Last Seen'], rows));
   } catch(e) {
-    const el = document.getElementById('servers-content');
-    el.textContent = e.message;
-    el.className = 'error';
+    showError('servers-content', e.message);
+  }
+}
+
+async function loadOverview() {
+  try {
+    var data = await fetchJSON('/api/overview');
+    var stages = data.stages || [];
+    document.getElementById('stage-count').textContent = stages.length;
+    if (stages.length === 0) {
+      replaceContent('overview-content', 'No stages deployed');
+      return;
+    }
+    var rows = stages.map(function(s) {
+      var tr = document.createElement('tr');
+      [s.project_name || '-', s.stage || '-'].forEach(function(val) {
+        var td = document.createElement('td');
+        td.textContent = val;
+        tr.appendChild(td);
+      });
+      return tr;
+    });
+    replaceContent('overview-content', makeTable(['Project', 'Stage'], rows));
+  } catch(e) {
+    showError('overview-content', e.message);
+  }
+}
+
+async function loadDns() {
+  try {
+    var data = await fetchJSON('/api/dns');
+    var records = data.dns_records || [];
+    if (records.length === 0) {
+      replaceContent('dns-content', 'No DNS records');
+      return;
+    }
+    var rows = records.map(function(r) {
+      var tr = document.createElement('tr');
+      [r.name, r.record_type, r.content].forEach(function(val) {
+        var td = document.createElement('td');
+        td.textContent = val || '-';
+        tr.appendChild(td);
+      });
+      var proxiedTd = document.createElement('td');
+      var badge = document.createElement('span');
+      badge.textContent = r.proxied ? 'yes' : 'no';
+      badge.className = 'badge ' + (r.proxied ? 'badge-green' : 'badge-gray');
+      proxiedTd.appendChild(badge);
+      tr.appendChild(proxiedTd);
+      return tr;
+    });
+    replaceContent('dns-content', makeTable(['Name', 'Type', 'Content', 'Proxied'], rows));
+  } catch(e) {
+    showError('dns-content', e.message);
+  }
+}
+
+async function loadDeployments() {
+  try {
+    var data = await fetchJSON('/api/deployments');
+    var deploys = data.deployments || [];
+    if (deploys.length === 0) {
+      replaceContent('deploy-content', 'No deployments');
+      return;
+    }
+    var rows = deploys.map(function(d) {
+      var tr = document.createElement('tr');
+      var cmd = (d.command || '-');
+      if (cmd.length > 30) cmd = cmd.substring(0, 29) + '\u2026';
+      [d.stage, d.server_slug, cmd].forEach(function(val) {
+        var td = document.createElement('td');
+        td.textContent = val || '-';
+        tr.appendChild(td);
+      });
+      var statusTd = document.createElement('td');
+      statusTd.appendChild(makeBadgeEl(d.status));
+      tr.appendChild(statusTd);
+      var timeTd = document.createElement('td');
+      timeTd.textContent = timeAgo(d.started_at);
+      timeTd.style.color = 'var(--text2)';
+      tr.appendChild(timeTd);
+      return tr;
+    });
+    replaceContent('deploy-content', makeTable(['Stage', 'Server', 'Command', 'Status', 'Started'], rows));
+  } catch(e) {
+    showError('deploy-content', e.message);
   }
 }
 
 async function runHealthCheck() {
-  const btn = document.getElementById('health-btn');
+  var btn = document.getElementById('health-btn');
   btn.textContent = 'Checking...';
   btn.disabled = true;
   try {
-    await fetch('/api/health-check', { method: 'POST' });
+    await postJSON('/api/health-check');
     await loadServers();
   } catch(e) {
     console.error('Health check failed:', e);
@@ -217,14 +483,13 @@ async function runHealthCheck() {
 }
 
 async function runDnsSync() {
-  const btn = document.getElementById('dns-sync-btn');
+  var btn = document.getElementById('dns-sync-btn');
   btn.textContent = 'Syncing...';
   btn.disabled = true;
-  const resultEl = document.getElementById('dns-sync-result');
+  var resultEl = document.getElementById('dns-sync-result');
   resultEl.textContent = '';
   try {
-    const res = await fetch('/api/dns/sync', { method: 'POST' });
-    const data = await res.json();
+    var data = await postJSON('/api/dns/sync');
     if (data.error) {
       resultEl.textContent = data.error;
       resultEl.style.color = 'var(--red)';
@@ -242,115 +507,6 @@ async function runDnsSync() {
   }
 }
 
-async function loadOverview() {
-  try {
-    const data = await fetchJSON('/api/overview');
-    const stages = data.stages || [];
-    document.getElementById('stage-count').textContent = stages.length;
-    if (stages.length === 0) {
-      document.getElementById('overview-content').textContent = 'No stages deployed';
-      return;
-    }
-    const table = document.createElement('table');
-    const thead = document.createElement('tr');
-    ['Project', 'Stage'].forEach(h => { const th = document.createElement('th'); th.textContent = h; thead.appendChild(th); });
-    table.appendChild(thead);
-    stages.forEach(s => {
-      const tr = document.createElement('tr');
-      [s.project_name || '-', s.stage || '-'].forEach(val => {
-        const td = document.createElement('td'); td.textContent = val; tr.appendChild(td);
-      });
-      table.appendChild(tr);
-    });
-    const el = document.getElementById('overview-content');
-    el.textContent = '';
-    el.appendChild(table);
-  } catch(e) {
-    const el = document.getElementById('overview-content');
-    el.textContent = e.message;
-    el.className = 'error';
-  }
-}
-
-async function loadDns() {
-  try {
-    const data = await fetchJSON('/api/dns');
-    const records = data.dns_records || [];
-    if (records.length === 0) {
-      document.getElementById('dns-content').textContent = 'No DNS records';
-      return;
-    }
-    const table = document.createElement('table');
-    const thead = document.createElement('tr');
-    ['Name', 'Type', 'Content', 'Proxied'].forEach(h => { const th = document.createElement('th'); th.textContent = h; thead.appendChild(th); });
-    table.appendChild(thead);
-    records.forEach(r => {
-      const tr = document.createElement('tr');
-      [r.name, r.record_type, r.content].forEach(val => { const td = document.createElement('td'); td.textContent = val || '-'; tr.appendChild(td); });
-      const proxiedTd = document.createElement('td');
-      const badge = document.createElement('span');
-      badge.textContent = r.proxied ? 'yes' : 'no';
-      badge.className = 'badge ' + (r.proxied ? 'badge-green' : 'badge-gray');
-      proxiedTd.appendChild(badge);
-      tr.appendChild(proxiedTd);
-      table.appendChild(tr);
-    });
-    const el = document.getElementById('dns-content');
-    el.textContent = '';
-    el.appendChild(table);
-  } catch(e) {
-    const el = document.getElementById('dns-content');
-    el.textContent = e.message;
-    el.className = 'error';
-  }
-}
-
-function makeBadgeEl(status) {
-  const badge = document.createElement('span');
-  badge.textContent = status || 'unknown';
-  const cls = status === 'success' || status === 'online' || status === 'running' ? 'badge-green'
-    : status === 'failed' || status === 'offline' || status === 'stopped' ? 'badge-red'
-    : status === 'pending' ? 'badge-yellow'
-    : 'badge-gray';
-  badge.className = 'badge ' + cls;
-  return badge;
-}
-
-async function loadDeployments() {
-  try {
-    const data = await fetchJSON('/api/deployments');
-    const deploys = data.deployments || [];
-    if (deploys.length === 0) {
-      document.getElementById('deploy-content').textContent = 'No deployments';
-      return;
-    }
-    const table = document.createElement('table');
-    const thead = document.createElement('tr');
-    ['Stage', 'Server', 'Command', 'Status', 'Started'].forEach(h => { const th = document.createElement('th'); th.textContent = h; thead.appendChild(th); });
-    table.appendChild(thead);
-    deploys.forEach(d => {
-      const tr = document.createElement('tr');
-      const cmd = (d.command || '-').length > 30 ? d.command.substring(0, 29) + '…' : (d.command || '-');
-      [d.stage, d.server_slug, cmd].forEach(val => { const td = document.createElement('td'); td.textContent = val || '-'; tr.appendChild(td); });
-      const statusTd = document.createElement('td');
-      statusTd.appendChild(makeBadgeEl(d.status));
-      tr.appendChild(statusTd);
-      const timeTd = document.createElement('td');
-      timeTd.textContent = timeAgo(d.started_at);
-      timeTd.style.color = 'var(--text2)';
-      tr.appendChild(timeTd);
-      table.appendChild(tr);
-    });
-    const el = document.getElementById('deploy-content');
-    el.textContent = '';
-    el.appendChild(table);
-  } catch(e) {
-    const el = document.getElementById('deploy-content');
-    el.textContent = e.message;
-    el.className = 'error';
-  }
-}
-
 function loadAll() {
   loadProjects();
   loadServers();
@@ -360,8 +516,16 @@ function loadAll() {
 }
 
 // Auto-refresh every 30 seconds
-loadAll();
-setInterval(loadAll, 30000);
+var refreshTimer = null;
+function startAutoRefresh() {
+  if (refreshTimer) clearInterval(refreshTimer);
+  refreshTimer = setInterval(loadAll, 30000);
+}
+
+// Initialize
+initAuth().then(function() {
+  startAutoRefresh();
+});
 </script>
 </body>
 </html>

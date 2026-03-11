@@ -2,28 +2,56 @@
 //!
 //! axum ベースの HTTP サーバーで、CP のデータを JSON API として提供し、
 //! 埋め込み HTML ダッシュボードを配信する。
-//!
-//! 注: ダッシュボードは CP の内部データのみ表示。全データは自サーバーの
-//! DB から取得されるため、XSS リスクはない（外部入力なし）。
 
 use std::sync::Arc;
 
 use axum::{
     Json, Router,
-    extract::State,
+    extract::{Request, State},
     http::{StatusCode, header},
-    response::{Html, IntoResponse},
+    middleware::{self, Next},
+    response::{Html, IntoResponse, Response},
     routing::{get, post},
 };
+use fleetflow_controlplane::auth::Claims;
 use fleetflow_controlplane::server::AppState;
 use serde_json::{Value, json};
 use tokio::task::JoinHandle;
+use tracing::debug;
+
+/// Web サーバー用の共有状態
+pub struct WebState {
+    pub app: Arc<AppState>,
+    pub auth0_domain: String,
+    pub auth0_client_id: String,
+    pub auth0_audience: String,
+}
 
 /// WebUI サーバーを起動
-pub async fn start(state: Arc<AppState>, addr: &str) -> anyhow::Result<JoinHandle<()>> {
-    let app = Router::new()
-        // API routes
+pub async fn start(
+    state: Arc<AppState>,
+    addr: &str,
+    auth0_client_id: &str,
+) -> anyhow::Result<JoinHandle<()>> {
+    let auth0_domain = state.auth.domain().to_string();
+    let auth0_audience = state.auth.audience().to_string();
+
+    let web_state = Arc::new(WebState {
+        app: state,
+        auth0_domain,
+        auth0_client_id: auth0_client_id.to_string(),
+        auth0_audience,
+    });
+
+    // 認証不要のルート
+    let public = Router::new()
+        .route("/", get(dashboard_html))
         .route("/api/health", get(api_health))
+        .route("/api/auth/config", get(api_auth_config));
+
+    // 認証必須のルート
+    let protected = Router::new()
+        .route("/api/me", get(api_me))
         .route("/api/projects", get(api_projects))
         .route("/api/servers", get(api_servers))
         .route("/api/overview", get(api_overview))
@@ -31,9 +59,12 @@ pub async fn start(state: Arc<AppState>, addr: &str) -> anyhow::Result<JoinHandl
         .route("/api/health-check", post(api_health_check))
         .route("/api/deployments", get(api_deployments))
         .route("/api/dns/sync", post(api_dns_sync))
-        // Dashboard
-        .route("/", get(dashboard_html))
-        .with_state(state);
+        .layer(middleware::from_fn_with_state(
+            web_state.clone(),
+            auth_middleware,
+        ));
+
+    let app = public.merge(protected).with_state(web_state);
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
     let handle = tokio::spawn(async move {
@@ -44,6 +75,79 @@ pub async fn start(state: Arc<AppState>, addr: &str) -> anyhow::Result<JoinHandl
 }
 
 // ============================================================================
+// Auth ミドルウェア
+// ============================================================================
+
+/// Authorization: Bearer <token> を検証し、Claims を request extensions に格納
+async fn auth_middleware(
+    State(state): State<Arc<WebState>>,
+    mut req: Request,
+    next: Next,
+) -> Response {
+    let auth_header = req
+        .headers()
+        .get(header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok());
+
+    let token = match auth_header {
+        Some(h) if h.starts_with("Bearer ") => &h[7..],
+        _ => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(json!({ "error": "Missing or invalid Authorization header" })),
+            )
+                .into_response();
+        }
+    };
+
+    match state.app.auth.verify(token).await {
+        Ok(claims) => {
+            debug!(sub = %claims.sub, "API 認証成功");
+            req.extensions_mut().insert(claims);
+            next.run(req).await
+        }
+        Err(e) => (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({ "error": format!("Token verification failed: {e}") })),
+        )
+            .into_response(),
+    }
+}
+
+// ============================================================================
+// Auth エンドポイント
+// ============================================================================
+
+/// Auth0 設定を返す（フロントエンド SPA 用）
+async fn api_auth_config(State(state): State<Arc<WebState>>) -> Json<Value> {
+    Json(json!({
+        "domain": state.auth0_domain,
+        "clientId": state.auth0_client_id,
+        "audience": state.auth0_audience,
+    }))
+}
+
+/// 認証済みユーザー情報を返す
+async fn api_me(req: Request) -> impl IntoResponse {
+    match req.extensions().get::<Claims>() {
+        Some(claims) => (
+            StatusCode::OK,
+            Json(json!({
+                "sub": claims.sub,
+                "email": claims.email,
+                "permissions": claims.permissions,
+            })),
+        )
+            .into_response(),
+        None => (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({ "error": "Not authenticated" })),
+        )
+            .into_response(),
+    }
+}
+
+// ============================================================================
 // API ハンドラー
 // ============================================================================
 
@@ -51,8 +155,8 @@ async fn api_health() -> Json<Value> {
     Json(json!({ "status": "ok" }))
 }
 
-async fn api_projects(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    match state.db.list_projects_by_tenant("default").await {
+async fn api_projects(State(state): State<Arc<WebState>>) -> impl IntoResponse {
+    match state.app.db.list_projects_by_tenant("default").await {
         Ok(projects) => {
             let items: Vec<Value> = projects
                 .iter()
@@ -75,8 +179,8 @@ async fn api_projects(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     }
 }
 
-async fn api_servers(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    match state.db.list_servers_by_tenant("default").await {
+async fn api_servers(State(state): State<Arc<WebState>>) -> impl IntoResponse {
+    match state.app.db.list_servers_by_tenant("default").await {
         Ok(servers) => {
             let items: Vec<Value> = servers
                 .iter()
@@ -100,8 +204,8 @@ async fn api_servers(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     }
 }
 
-async fn api_overview(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    match state.db.list_all_stages_by_tenant("default").await {
+async fn api_overview(State(state): State<Arc<WebState>>) -> impl IntoResponse {
+    match state.app.db.list_all_stages_by_tenant("default").await {
         Ok(stages) => {
             let items: Vec<Value> = stages
                 .iter()
@@ -123,8 +227,8 @@ async fn api_overview(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     }
 }
 
-async fn api_dns(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    match state.db.list_dns_records_by_tenant("default").await {
+async fn api_dns(State(state): State<Arc<WebState>>) -> impl IntoResponse {
+    match state.app.db.list_dns_records_by_tenant("default").await {
         Ok(records) => {
             let items: Vec<Value> = records
                 .iter()
@@ -147,8 +251,8 @@ async fn api_dns(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     }
 }
 
-async fn api_deployments(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    match state.db.list_deployments("default", 20).await {
+async fn api_deployments(State(state): State<Arc<WebState>>) -> impl IntoResponse {
+    match state.app.db.list_deployments("default", 20).await {
         Ok(deployments) => {
             let items: Vec<Value> = deployments
                 .iter()
@@ -173,7 +277,7 @@ async fn api_deployments(State(state): State<Arc<AppState>>) -> impl IntoRespons
     }
 }
 
-async fn api_health_check(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+async fn api_health_check(State(state): State<Arc<WebState>>) -> impl IntoResponse {
     use chrono::Utc;
     use fleetflow_cloud::tailscale;
     use fleetflow_controlplane::model::ServerStatusUpdate;
@@ -189,7 +293,7 @@ async fn api_health_check(State(state): State<Arc<AppState>>) -> impl IntoRespon
         }
     };
 
-    let servers = match state.db.list_all_servers().await {
+    let servers = match state.app.db.list_all_servers().await {
         Ok(s) => s,
         Err(e) => {
             return (
@@ -222,7 +326,7 @@ async fn api_health_check(State(state): State<Arc<AppState>>) -> impl IntoRespon
         .map(|u| json!({ "slug": u.slug, "status": u.status }))
         .collect();
 
-    match state.db.bulk_update_server_status(&updates).await {
+    match state.app.db.bulk_update_server_status(&updates).await {
         Ok(count) => (
             StatusCode::OK,
             Json(json!({ "updated": count, "results": results })),
@@ -236,8 +340,7 @@ async fn api_health_check(State(state): State<Arc<AppState>>) -> impl IntoRespon
     }
 }
 
-async fn api_dns_sync(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    // Cloudflare DNS との同期
+async fn api_dns_sync(State(state): State<Arc<WebState>>) -> impl IntoResponse {
     let cf_config = match fleetflow_cloud_cloudflare::dns::DnsConfig::from_env() {
         Ok(c) => c,
         Err(e) => {
@@ -262,7 +365,7 @@ async fn api_dns_sync(State(state): State<Arc<AppState>>) -> impl IntoResponse {
         }
     };
 
-    let db_records = match state.db.list_dns_records_by_tenant("default").await {
+    let db_records = match state.app.db.list_dns_records_by_tenant("default").await {
         Ok(r) => r,
         Err(e) => {
             return (
@@ -273,7 +376,7 @@ async fn api_dns_sync(State(state): State<Arc<AppState>>) -> impl IntoResponse {
         }
     };
 
-    let tenant = match state.db.get_tenant_by_slug("default").await {
+    let tenant = match state.app.db.get_tenant_by_slug("default").await {
         Ok(Some(t)) => t,
         _ => {
             return (
@@ -301,7 +404,7 @@ async fn api_dns_sync(State(state): State<Arc<AppState>>) -> impl IntoResponse {
                 created_at: None,
                 updated_at: None,
             };
-            if state.db.create_dns_record(&record).await.is_ok() {
+            if state.app.db.create_dns_record(&record).await.is_ok() {
                 imported += 1;
             }
         }

@@ -124,7 +124,7 @@ async fn main() -> anyhow::Result<()> {
     let (handle, state) = fleetflow_controlplane::server::start(cfg.server).await?;
 
     // WebUI Dashboard 起動
-    let web_handle = web::start(state.clone(), &web_addr).await?;
+    let web_handle = web::start(state.clone(), &web_addr, &cfg.auth0_client_id).await?;
     println!("  Web:    {}", format!("http://{}", web_addr).cyan());
 
     // バックグラウンド ヘルスチェッカー起動

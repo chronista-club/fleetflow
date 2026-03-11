@@ -16,4 +16,10 @@ database {
 
 web {
     listen "127.0.0.1:32080"
+    auth0-client-id "owYGH1SIWbNJVufA9bWvJdoH1S3DVW2v"
+}
+
+auth {
+    domain "anycreative.jp.auth0.com"
+    audience "https://api.fleetflow.run"
 }

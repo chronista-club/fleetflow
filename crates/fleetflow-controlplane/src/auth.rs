@@ -81,6 +81,19 @@ impl Auth0Verifier {
         }
     }
 
+    /// Auth0 ドメイン（issuer から復元）
+    pub fn domain(&self) -> &str {
+        self.issuer
+            .strip_prefix("https://")
+            .and_then(|s| s.strip_suffix('/'))
+            .unwrap_or(&self.issuer)
+    }
+
+    /// Audience
+    pub fn audience(&self) -> &str {
+        &self.audience
+    }
+
     /// Verify an access token and return claims.
     pub async fn verify(&self, token: &str) -> Result<Claims> {
         let header = jsonwebtoken::decode_header(token).context("JWT ヘッダーデコード失敗")?;
