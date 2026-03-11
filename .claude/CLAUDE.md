@@ -35,8 +35,6 @@ fleetflow/
 │   ├── fleetflow-cloud-cloudflare/ # Cloudflare連携
 │   └── fleetflow-mcp/            # MCPサーバー
 ├── docs/
-│   ├── spec/                      # 仕様書（What & Why）- 番号付きフラット構造
-│   ├── design/                    # 設計書（How）- 番号付きフラット構造
 │   └── guide/                     # 利用ガイド（Usage）
 ├── .claude/
 │   ├── CLAUDE.md                  # このファイル
@@ -117,7 +115,7 @@ Dockerラベルで自動グループ化:
 - `com.docker.compose.service` = `{service}`
 - `fleetflow.project` / `fleetflow.stage` / `fleetflow.service`
 
-詳細: `docs/spec/06-orbstack-integration.md`, `docs/design/02-orbstack-integration.md`
+詳細: Creo Memories (fleetflow atlas) の S4: OrbStack Integration / D2: OrbStack Integration Design を参照
 
 ## CLIコマンド
 
@@ -143,8 +141,15 @@ fleet validate / fleet mcp / fleet play <playbook> / fleet self-update
 |-------|------|------|
 | 1: MVP | 完了 | KDLパーサー、基本CLI、OrbStack連携、Docker API統合 |
 | 2: ビルド | 完了 | Dockerビルド、個別サービス操作、複数設定ファイル |
-| 3: クラウド | 進行中 | クラウド抽象化、さくら/Cloudflare連携（CLI統合が残） |
-| 4: 拡張 | 一部完了 | variables、include、MCP、Registry、SSH、Playbook（ヘルスチェック未着手） |
+| 3: クラウド | 完了 | クラウド抽象化、さくら/Cloudflare連携 |
+| 4: 拡張 | 完了 | variables、include、MCP、Registry、SSH、Playbook |
+| 5: Platform | 全5Phase完了 | Control Plane、Multi-Project、MCP v2、WebUI Dashboard |
+
+## ドキュメント
+
+- **仕様書 (spec)**: Creo Memories (fleetflow atlas, category: "spec") — S1〜S10
+- **設計書 (design)**: Creo Memories (fleetflow atlas, category: "design-decision") — D1〜D8
+- **利用ガイド (guide)**: `docs/guide/` + Creo Memories (fleetflow atlas, category: "guide")
 
 ## トラブルシューティング
 
