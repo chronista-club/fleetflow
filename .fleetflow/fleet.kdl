@@ -1,5 +1,31 @@
 project "fleetflow-services"
 
+// === クラウドプロバイダー ===
+
+provider "sakura-cloud" {
+    zone "tk1a"
+}
+
+provider "cloudflare" {
+}
+
+// === サーバー ===
+
+server "fleetflow-cp" {
+    provider "sakura-cloud"
+    plan "2core-4gb"
+    disk-size 40
+    os "debian"
+    ssh-key "mito-mac.local"
+    tags "fleetflow:cp"
+    startup-script "fleetflow-docker-setup"
+    // dns {
+    //     hostname "console.fleetstage.cloud"
+    // }
+}
+
+// === サービス定義 ===
+
 // SurrealDB サービス定義（ワークロードを使わずに直接定義）
 service "db" {
     image "surrealdb/surrealdb:v2"
@@ -25,9 +51,10 @@ stage "dev" {
     }
 }
 
-// ライブ環境 (Live)
+// ライブ環境 (Live) + CP サーバー
 // ポート範囲: 52000台
 stage "live" {
+    server "fleetflow-cp"
     service "db" {
         ports {
             port host=52001 container=8000

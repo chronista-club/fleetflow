@@ -1,0 +1,37 @@
+// FleetFlow Control Plane — インフラ定義
+// `fleet cloud plan live -f .fleetflow/cp.kdl` で計画確認
+// `fleet cloud up live -f .fleetflow/cp.kdl --yes` で作成
+
+project "fleetflow-cp"
+
+// === プロバイダー ===
+
+provider "sakura-cloud" {
+    zone "tk1a"
+}
+
+provider "cloudflare" {
+}
+
+// === サーバー ===
+
+server "fleetflow-cp" {
+    provider "sakura-cloud"
+    plan "2core-4gb"
+    disk-size 40
+    os "ubuntu"
+    ssh-key "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIp3bRIORsFVVDDs0q34IDerUh6yOL40bHgrjAZPqFpy makoto@mito-mac.local"
+    tags "fleetflow:cp"
+    startup-script "fleetflow-docker-setup"
+
+    dns {
+        hostname "cp"
+        aliases "dashboard"
+    }
+}
+
+// === ステージ ===
+
+stage "live" {
+    server "fleetflow-cp"
+}
