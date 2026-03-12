@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result};
 use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode};
 use serde::{Deserialize, Serialize};
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, Semaphore};
 use tracing::{debug, info, warn};
 
 /// JWKS キャッシュの TTL（1 時間）
@@ -72,6 +72,7 @@ pub struct Auth0Verifier {
     audience: String,
     issuer: String,
     cache: Arc<RwLock<JwksCacheState>>,
+    fetch_semaphore: Semaphore,
     http_client: reqwest::Client,
 }
 
@@ -96,6 +97,7 @@ impl Auth0Verifier {
                 fetched_at: None,
                 last_invalidation: None,
             })),
+            fetch_semaphore: Semaphore::new(1),
             http_client: reqwest::Client::builder()
                 .timeout(Duration::from_secs(10))
                 .connect_timeout(Duration::from_secs(5))
@@ -176,16 +178,22 @@ impl Auth0Verifier {
             }
         }
 
-        // Slow path: write lock で再確認（double-checked locking）
+        // Slow path: semaphore で HTTP fetch を1タスクに直列化
+        let _permit = self
+            .fetch_semaphore
+            .acquire()
+            .await
+            .context("JWKS fetch semaphore 取得失敗")?;
+
+        // Semaphore 取得後にキャッシュ再確認（先行タスクが更新済みの可能性）
         {
-            let state = self.cache.write().await;
+            let state = self.cache.read().await;
             if let Some(ref jwks) = state.jwks
                 && let Some(fetched_at) = state.fetched_at
                 && fetched_at.elapsed() < JWKS_CACHE_TTL
             {
                 return Ok(jwks.clone());
             }
-            // write lock をドロップしてから HTTP フェッチ（ロック保持中にawaitしない）
         }
 
         // Fetch from Auth0

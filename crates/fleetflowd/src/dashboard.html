@@ -291,8 +291,13 @@ async function fetchJSON(path) {
   }
   var res = await fetch(path, { headers: headers });
   if (res.status === 401 && authMode === 'auth0') {
+    stopAutoRefresh();
     showLoginScreen();
     throw new Error('Unauthorized');
+  }
+  if (!res.ok) {
+    var body = await res.json().catch(function() { return {}; });
+    throw new Error(body.error || 'HTTP ' + res.status);
   }
   return res.json();
 }
@@ -305,8 +310,13 @@ async function postJSON(path) {
   }
   var res = await fetch(path, { method: 'POST', headers: headers });
   if (res.status === 401 && authMode === 'auth0') {
+    stopAutoRefresh();
     showLoginScreen();
     throw new Error('Unauthorized');
+  }
+  if (!res.ok) {
+    var body = await res.json().catch(function() { return {}; });
+    throw new Error(body.error || 'HTTP ' + res.status);
   }
   return res.json();
 }
@@ -559,6 +569,9 @@ var refreshTimer = null;
 function startAutoRefresh() {
   if (refreshTimer) clearInterval(refreshTimer);
   refreshTimer = setInterval(loadAll, 30000);
+}
+function stopAutoRefresh() {
+  if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
 }
 
 // Initialize
