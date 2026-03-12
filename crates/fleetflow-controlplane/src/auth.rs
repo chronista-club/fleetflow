@@ -10,6 +10,9 @@ use tracing::{debug, info, warn};
 /// JWKS キャッシュの TTL（1 時間）
 const JWKS_CACHE_TTL: Duration = Duration::from_secs(3600);
 
+/// kid 不一致時の再フェッチ抑制間隔（30 秒）
+const JWKS_REFETCH_COOLDOWN: Duration = Duration::from_secs(30);
+
 /// Auth0 JWT claims.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Claims {
@@ -68,6 +71,7 @@ pub struct Auth0Verifier {
     audience: String,
     issuer: String,
     jwks_cache: Arc<RwLock<Option<JwksCacheEntry>>>,
+    last_invalidation: Arc<RwLock<Option<Instant>>>,
     http_client: reqwest::Client,
 }
 
@@ -88,6 +92,7 @@ impl Auth0Verifier {
             audience: config.audience.clone(),
             issuer,
             jwks_cache: Arc::new(RwLock::new(None)),
+            last_invalidation: Arc::new(RwLock::new(None)),
             http_client: reqwest::Client::new(),
         }
     }
@@ -112,11 +117,12 @@ impl Auth0Verifier {
         let kid = header.kid.context("JWT に kid がありません")?;
 
         // Try cached JWKS first, retry with fresh JWKS on kid-not-found (key rotation)
+        // Cooldown で thundering herd を防止
         let jwk = match self.find_jwk(&kid).await? {
             Some(jwk) => jwk,
             None => {
                 warn!(kid = %kid, "JWK kid 不一致、キャッシュ更新して再試行");
-                self.invalidate_cache().await;
+                self.invalidate_cache_throttled().await;
                 self.find_jwk(&kid)
                     .await?
                     .context("一致する JWK が見つかりません（キャッシュ更新後も不一致）")?
@@ -155,10 +161,10 @@ impl Auth0Verifier {
         // Check cache (with TTL)
         {
             let cache = self.jwks_cache.read().await;
-            if let Some(ref entry) = *cache {
-                if entry.fetched_at.elapsed() < JWKS_CACHE_TTL {
-                    return Ok(entry.jwks.clone());
-                }
+            if let Some(ref entry) = *cache
+                && entry.fetched_at.elapsed() < JWKS_CACHE_TTL
+            {
+                return Ok(entry.jwks.clone());
             }
         }
 
@@ -170,6 +176,8 @@ impl Auth0Verifier {
             .send()
             .await
             .context("JWKS リクエスト失敗")?
+            .error_for_status()
+            .context("JWKS HTTP エラー")?
             .json()
             .await
             .context("JWKS パース失敗")?;
@@ -185,6 +193,23 @@ impl Auth0Verifier {
 
         info!(keys = jwks.keys.len(), "JWKS キャッシュ更新完了");
         Ok(jwks)
+    }
+
+    /// Invalidate JWKS cache with cooldown to prevent thundering herd.
+    async fn invalidate_cache_throttled(&self) {
+        {
+            let last = self.last_invalidation.read().await;
+            if let Some(ref t) = *last
+                && t.elapsed() < JWKS_REFETCH_COOLDOWN
+            {
+                debug!("JWKS 再フェッチ cooldown 中、スキップ");
+                return;
+            }
+        }
+        let mut cache = self.jwks_cache.write().await;
+        *cache = None;
+        let mut last = self.last_invalidation.write().await;
+        *last = Some(Instant::now());
     }
 
     /// Invalidate JWKS cache (for key rotation).

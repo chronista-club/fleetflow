@@ -78,12 +78,18 @@ pub async fn start(
 // Auth ミドルウェア
 // ============================================================================
 
-/// Authorization: Bearer <token> を検証し、Claims を request extensions に格納
+/// Authorization: Bearer <token> を検証し、Claims を request extensions に格納。
+/// Auth0 domain が未設定の場合は認証をスキップ（dev mode）。
 async fn auth_middleware(
     State(state): State<Arc<WebState>>,
     mut req: Request,
     next: Next,
 ) -> Response {
+    // Auth0 未設定時は認証スキップ（dev mode）
+    if state.auth0_domain.is_empty() {
+        return next.run(req).await;
+    }
+
     let auth_header = req
         .headers()
         .get(header::AUTHORIZATION)
