@@ -16,7 +16,7 @@ database {
 
 web {
     listen "127.0.0.1:32080"
-    auth0-client-id "owYGH1SIWbNJVufA9bWvJdoH1S3DVW2v"
+    auth0-client-id "${FLEETFLOW_AUTH0_CLIENT_ID}"
 }
 
 auth {

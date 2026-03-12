@@ -3,7 +3,7 @@ use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 /// Auth0 JWT claims.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -100,12 +100,17 @@ impl Auth0Verifier {
 
         let kid = header.kid.context("JWT に kid がありません")?;
 
-        let jwks = self.get_jwks().await?;
-        let jwk = jwks
-            .keys
-            .iter()
-            .find(|k| k.kid.as_deref() == Some(kid.as_str()))
-            .context("一致する JWK が見つかりません")?;
+        // Try cached JWKS first, retry with fresh JWKS on kid-not-found (key rotation)
+        let jwk = match self.find_jwk(&kid).await? {
+            Some(jwk) => jwk,
+            None => {
+                warn!(kid = %kid, "JWK kid 不一致、キャッシュ更新して再試行");
+                self.invalidate_cache().await;
+                self.find_jwk(&kid)
+                    .await?
+                    .context("一致する JWK が見つかりません（キャッシュ更新後も不一致）")?
+            }
+        };
 
         let n = jwk.n.as_ref().context("JWK に n がありません")?;
         let e = jwk.e.as_ref().context("JWK に e がありません")?;
@@ -122,6 +127,19 @@ impl Auth0Verifier {
 
         debug!(sub = %token_data.claims.sub, "JWT 検証成功");
         Ok(token_data.claims)
+    }
+
+    /// Find a JWK by kid, filtering for signing keys (use=sig, alg=RS256).
+    async fn find_jwk(&self, kid: &str) -> Result<Option<Jwk>> {
+        let jwks = self.get_jwks().await?;
+        Ok(jwks
+            .keys
+            .into_iter()
+            .find(|k| {
+                k.kid.as_deref() == Some(kid)
+                    && k.use_.as_deref() == Some("sig")
+                    && k.alg.as_deref().is_none_or(|a| a == "RS256")
+            }))
     }
 
     /// Fetch JWKS from Auth0 (with caching).

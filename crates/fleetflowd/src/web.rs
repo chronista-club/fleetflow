@@ -106,11 +106,14 @@ async fn auth_middleware(
             req.extensions_mut().insert(claims);
             next.run(req).await
         }
-        Err(e) => (
-            StatusCode::UNAUTHORIZED,
-            Json(json!({ "error": format!("Token verification failed: {e}") })),
-        )
-            .into_response(),
+        Err(e) => {
+            tracing::warn!(error = %e, "JWT 検証失敗");
+            (
+                StatusCode::UNAUTHORIZED,
+                Json(json!({ "error": "Unauthorized" })),
+            )
+                .into_response()
+        }
     }
 }
 

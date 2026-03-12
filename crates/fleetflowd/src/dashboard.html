@@ -133,6 +133,7 @@ var auth0Client = null;
 var authMode = 'none'; // 'auth0' or 'none' (dev mode)
 
 async function initAuth() {
+  var authConfigured = false;
   try {
     var res = await fetch('/api/auth/config');
     var config = await res.json();
@@ -144,6 +145,7 @@ async function initAuth() {
       return;
     }
 
+    authConfigured = true;
     authMode = 'auth0';
     auth0Client = await auth0.createAuth0Client({
       domain: config.domain,
@@ -152,7 +154,7 @@ async function initAuth() {
         audience: config.audience,
         redirect_uri: window.location.origin
       },
-      cacheLocation: 'localstorage'
+      cacheLocation: 'memory'
     });
 
     // Handle redirect callback
@@ -169,10 +171,42 @@ async function initAuth() {
     }
   } catch (e) {
     console.error('Auth init failed:', e);
-    // Fallback to dev mode
-    authMode = 'none';
-    showDashboard(null);
+    if (authConfigured) {
+      // Auth was configured but SDK init failed — show error, do NOT bypass
+      showAuthError('認証の初期化に失敗しました。ページを再読み込みしてください。');
+    } else {
+      // Config fetch itself failed — dev mode fallback
+      authMode = 'none';
+      showDashboard(null);
+    }
   }
+}
+
+function showAuthError(message) {
+  var loginScreen = document.getElementById('login-screen');
+  loginScreen.style.display = 'flex';
+  document.getElementById('dashboard-content').style.display = 'none';
+
+  var card = document.createElement('div');
+  card.className = 'login-card';
+
+  var h2 = document.createElement('h2');
+  h2.textContent = 'FleetFlow Dashboard';
+  card.appendChild(h2);
+
+  var p = document.createElement('p');
+  p.textContent = message;
+  p.style.color = 'var(--red)';
+  card.appendChild(p);
+
+  var btn = document.createElement('button');
+  btn.className = 'login-btn';
+  btn.textContent = 'Reload';
+  btn.addEventListener('click', function() { window.location.reload(); });
+  card.appendChild(btn);
+
+  loginScreen.textContent = '';
+  loginScreen.appendChild(card);
 }
 
 function showLoginScreen() {
