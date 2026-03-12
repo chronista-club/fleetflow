@@ -96,7 +96,11 @@ impl Auth0Verifier {
                 fetched_at: None,
                 last_invalidation: None,
             })),
-            http_client: reqwest::Client::new(),
+            http_client: reqwest::Client::builder()
+                .timeout(Duration::from_secs(10))
+                .connect_timeout(Duration::from_secs(5))
+                .build()
+                .expect("reqwest Client 作成失敗"),
         }
     }
 
@@ -161,7 +165,7 @@ impl Auth0Verifier {
 
     /// Fetch JWKS from Auth0 (with TTL-based caching).
     async fn get_jwks(&self) -> Result<JwkSet> {
-        // Check cache (with TTL)
+        // Fast path: read lock でキャッシュ確認
         {
             let state = self.cache.read().await;
             if let Some(ref jwks) = state.jwks
@@ -170,6 +174,18 @@ impl Auth0Verifier {
             {
                 return Ok(jwks.clone());
             }
+        }
+
+        // Slow path: write lock で再確認（double-checked locking）
+        {
+            let state = self.cache.write().await;
+            if let Some(ref jwks) = state.jwks
+                && let Some(fetched_at) = state.fetched_at
+                && fetched_at.elapsed() < JWKS_CACHE_TTL
+            {
+                return Ok(jwks.clone());
+            }
+            // write lock をドロップしてから HTTP フェッチ（ロック保持中にawaitしない）
         }
 
         // Fetch from Auth0

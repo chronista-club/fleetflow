@@ -138,6 +138,9 @@ async function initAuth() {
   var authConfigured = false;
   try {
     var res = await fetch('/api/auth/config');
+    if (!res.ok) {
+      throw new Error('Auth config fetch failed: ' + res.status);
+    }
     var config = await res.json();
 
     if (!config.clientId) {
@@ -560,7 +563,10 @@ function startAutoRefresh() {
 
 // Initialize
 initAuth().then(function() {
-  startAutoRefresh();
+  // Auth エラー時（auth0Client が null のまま）は autoRefresh を開始しない
+  if (authMode === 'none' || auth0Client !== null) {
+    startAutoRefresh();
+  }
 });
 </script>
 </body>
