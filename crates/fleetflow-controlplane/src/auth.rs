@@ -59,10 +59,11 @@ pub struct Jwk {
     pub use_: Option<String>,
 }
 
-/// JWKS cache entry with TTL.
-struct JwksCacheEntry {
-    jwks: JwkSet,
-    fetched_at: Instant,
+/// JWKS cache state (cache + cooldown tracking).
+struct JwksCacheState {
+    jwks: Option<JwkSet>,
+    fetched_at: Option<Instant>,
+    last_invalidation: Option<Instant>,
 }
 
 /// Auth0 JWT verifier with JWKS caching.
@@ -70,8 +71,7 @@ pub struct Auth0Verifier {
     jwks_uri: String,
     audience: String,
     issuer: String,
-    jwks_cache: Arc<RwLock<Option<JwksCacheEntry>>>,
-    last_invalidation: Arc<RwLock<Option<Instant>>>,
+    cache: Arc<RwLock<JwksCacheState>>,
     http_client: reqwest::Client,
 }
 
@@ -91,8 +91,11 @@ impl Auth0Verifier {
             jwks_uri,
             audience: config.audience.clone(),
             issuer,
-            jwks_cache: Arc::new(RwLock::new(None)),
-            last_invalidation: Arc::new(RwLock::new(None)),
+            cache: Arc::new(RwLock::new(JwksCacheState {
+                jwks: None,
+                fetched_at: None,
+                last_invalidation: None,
+            })),
             http_client: reqwest::Client::new(),
         }
     }
@@ -160,11 +163,12 @@ impl Auth0Verifier {
     async fn get_jwks(&self) -> Result<JwkSet> {
         // Check cache (with TTL)
         {
-            let cache = self.jwks_cache.read().await;
-            if let Some(ref entry) = *cache
-                && entry.fetched_at.elapsed() < JWKS_CACHE_TTL
+            let state = self.cache.read().await;
+            if let Some(ref jwks) = state.jwks
+                && let Some(fetched_at) = state.fetched_at
+                && fetched_at.elapsed() < JWKS_CACHE_TTL
             {
-                return Ok(entry.jwks.clone());
+                return Ok(jwks.clone());
             }
         }
 
@@ -184,11 +188,9 @@ impl Auth0Verifier {
 
         // Update cache with timestamp
         {
-            let mut cache = self.jwks_cache.write().await;
-            *cache = Some(JwksCacheEntry {
-                jwks: jwks.clone(),
-                fetched_at: Instant::now(),
-            });
+            let mut state = self.cache.write().await;
+            state.jwks = Some(jwks.clone());
+            state.fetched_at = Some(Instant::now());
         }
 
         info!(keys = jwks.keys.len(), "JWKS キャッシュ更新完了");
@@ -197,24 +199,22 @@ impl Auth0Verifier {
 
     /// Invalidate JWKS cache with cooldown to prevent thundering herd.
     async fn invalidate_cache_throttled(&self) {
+        let mut state = self.cache.write().await;
+        if let Some(ref t) = state.last_invalidation
+            && t.elapsed() < JWKS_REFETCH_COOLDOWN
         {
-            let last = self.last_invalidation.read().await;
-            if let Some(ref t) = *last
-                && t.elapsed() < JWKS_REFETCH_COOLDOWN
-            {
-                debug!("JWKS 再フェッチ cooldown 中、スキップ");
-                return;
-            }
+            debug!("JWKS 再フェッチ cooldown 中、スキップ");
+            return;
         }
-        let mut cache = self.jwks_cache.write().await;
-        *cache = None;
-        let mut last = self.last_invalidation.write().await;
-        *last = Some(Instant::now());
+        state.jwks = None;
+        state.fetched_at = None;
+        state.last_invalidation = Some(Instant::now());
     }
 
     /// Invalidate JWKS cache (for key rotation).
     pub async fn invalidate_cache(&self) {
-        let mut cache = self.jwks_cache.write().await;
-        *cache = None;
+        let mut state = self.cache.write().await;
+        state.jwks = None;
+        state.fetched_at = None;
     }
 }

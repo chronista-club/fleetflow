@@ -121,10 +121,9 @@ async fn main() -> anyhow::Result<()> {
 
     // Auth 設定の整合性チェック
     if !cfg.server.auth.domain.is_empty() && cfg.auth0_client_id.is_empty() {
-        eprintln!(
-            "{}",
-            "Warning: auth.domain が設定されていますが auth0-client-id が未設定です。Dashboard は認証なしで動作します。"
-                .yellow()
+        anyhow::bail!(
+            "auth.domain が設定されていますが auth0-client-id が未設定です。\
+             FLEETFLOW_AUTH0_CLIENT_ID 環境変数を設定するか、auth {{ domain \"\" }} で認証を無効化してください。"
         );
     }
 

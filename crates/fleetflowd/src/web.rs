@@ -396,13 +396,24 @@ async fn api_dns_sync(State(state): State<Arc<WebState>>) -> impl IntoResponse {
         }
     };
 
+    let tenant_id = match tenant.id.clone() {
+        Some(id) => id,
+        None => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": "tenant has no id" })),
+            )
+                .into_response();
+        }
+    };
+
     let mut imported = 0u32;
     for cf_rec in &cf_records {
         let exists = db_records.iter().any(|db| db.name == cf_rec.name);
         if !exists {
             let record = fleetflow_controlplane::model::DnsRecord {
                 id: None,
-                tenant: tenant.id.clone().unwrap(),
+                tenant: tenant_id.clone(),
                 project: None,
                 name: cf_rec.name.clone(),
                 record_type: cf_rec.record_type.clone(),
