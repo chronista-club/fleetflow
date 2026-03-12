@@ -119,6 +119,15 @@ async fn main() -> anyhow::Result<()> {
     println!("  PID:    {}", std::process::id());
     println!();
 
+    // Auth 設定の整合性チェック
+    if !cfg.server.auth.domain.is_empty() && cfg.auth0_client_id.is_empty() {
+        eprintln!(
+            "{}",
+            "Warning: auth.domain が設定されていますが auth0-client-id が未設定です。Dashboard は認証なしで動作します。"
+                .yellow()
+        );
+    }
+
     // Control Plane サーバー起動
     let web_addr = cfg.web_addr.clone();
     let (handle, state) = fleetflow_controlplane::server::start(cfg.server).await?;

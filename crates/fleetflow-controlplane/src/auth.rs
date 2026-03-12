@@ -1,9 +1,14 @@
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+
 use anyhow::{Context, Result};
 use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
+
+/// JWKS キャッシュの TTL（1 時間）
+const JWKS_CACHE_TTL: Duration = Duration::from_secs(3600);
 
 /// Auth0 JWT claims.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -51,12 +56,18 @@ pub struct Jwk {
     pub use_: Option<String>,
 }
 
+/// JWKS cache entry with TTL.
+struct JwksCacheEntry {
+    jwks: JwkSet,
+    fetched_at: Instant,
+}
+
 /// Auth0 JWT verifier with JWKS caching.
 pub struct Auth0Verifier {
     jwks_uri: String,
     audience: String,
     issuer: String,
-    jwks_cache: Arc<RwLock<Option<JwkSet>>>,
+    jwks_cache: Arc<RwLock<Option<JwksCacheEntry>>>,
     http_client: reqwest::Client,
 }
 
@@ -132,23 +143,22 @@ impl Auth0Verifier {
     /// Find a JWK by kid, filtering for signing keys (use=sig, alg=RS256).
     async fn find_jwk(&self, kid: &str) -> Result<Option<Jwk>> {
         let jwks = self.get_jwks().await?;
-        Ok(jwks
-            .keys
-            .into_iter()
-            .find(|k| {
-                k.kid.as_deref() == Some(kid)
-                    && k.use_.as_deref() == Some("sig")
-                    && k.alg.as_deref().is_none_or(|a| a == "RS256")
-            }))
+        Ok(jwks.keys.into_iter().find(|k| {
+            k.kid.as_deref() == Some(kid)
+                && k.use_.as_deref() == Some("sig")
+                && k.alg.as_deref().is_none_or(|a| a == "RS256")
+        }))
     }
 
-    /// Fetch JWKS from Auth0 (with caching).
+    /// Fetch JWKS from Auth0 (with TTL-based caching).
     async fn get_jwks(&self) -> Result<JwkSet> {
-        // Check cache first
+        // Check cache (with TTL)
         {
             let cache = self.jwks_cache.read().await;
-            if let Some(ref jwks) = *cache {
-                return Ok(jwks.clone());
+            if let Some(ref entry) = *cache {
+                if entry.fetched_at.elapsed() < JWKS_CACHE_TTL {
+                    return Ok(entry.jwks.clone());
+                }
             }
         }
 
@@ -164,10 +174,13 @@ impl Auth0Verifier {
             .await
             .context("JWKS パース失敗")?;
 
-        // Update cache
+        // Update cache with timestamp
         {
             let mut cache = self.jwks_cache.write().await;
-            *cache = Some(jwks.clone());
+            *cache = Some(JwksCacheEntry {
+                jwks: jwks.clone(),
+                fetched_at: Instant::now(),
+            });
         }
 
         info!(keys = jwks.keys.len(), "JWKS キャッシュ更新完了");

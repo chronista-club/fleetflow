@@ -183,7 +183,8 @@ pub fn load_config(path: &Path) -> Result<DaemonConfig> {
     Ok(config)
 }
 
-/// 環境変数の展開: `${VAR_NAME}` → 環境変数の値
+/// 環境変数の展開: 値全体が `${VAR_NAME}` の場合のみ展開する。
+/// 部分的な展開（`prefix-${VAR}`）はサポートしない。
 fn resolve_env(val: &str) -> String {
     if val.starts_with("${") && val.ends_with('}') {
         let var_name = &val[2..val.len() - 1];
@@ -217,6 +218,7 @@ mod tests {
     fn test_load_config_from_kdl() {
         let dir = tempfile::tempdir().unwrap();
         let config_path = dir.path().join("fleetflowd.kdl");
+        unsafe { std::env::set_var("TEST_AUTH0_CLIENT", "test-client-id-123") };
         std::fs::write(
             &config_path,
             r#"
@@ -235,6 +237,11 @@ database {
     database "mydb"
 }
 
+web {
+    listen "0.0.0.0:8080"
+    auth0-client-id "${TEST_AUTH0_CLIENT}"
+}
+
 auth {
     domain "example.auth0.com"
     audience "https://api.example.com"
@@ -250,5 +257,8 @@ auth {
         assert_eq!(config.server.db.endpoint, "ws://db.example.com:12000");
         assert_eq!(config.server.db.namespace, "myns");
         assert_eq!(config.server.auth.domain, "example.auth0.com");
+        assert_eq!(config.web_addr, "0.0.0.0:8080");
+        assert_eq!(config.auth0_client_id, "test-client-id-123");
+        unsafe { std::env::remove_var("TEST_AUTH0_CLIENT") };
     }
 }
