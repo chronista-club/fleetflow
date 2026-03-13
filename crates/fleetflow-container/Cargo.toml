@@ -22,3 +22,4 @@ thiserror.workspace = true
 anyhow.workspace = true
 tracing.workspace = true
 nix = { version = "0.29", features = ["signal", "process"] }
+futures-util.workspace = true

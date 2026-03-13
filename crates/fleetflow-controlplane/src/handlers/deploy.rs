@@ -1,6 +1,7 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use chrono::Utc;
+use fleetflow_container::{DeployEngine, DeployRequest};
 use serde_json::json;
 use tracing::{error, info};
 use unison::network::channel::UnisonChannel;
@@ -275,6 +276,214 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                         .await?;
                                 }
                             }
+                        }
+                        "execute" => {
+                            let tenant_slug =
+                                payload["tenant_slug"].as_str().unwrap_or("default");
+                            let project_slug =
+                                payload["project_slug"].as_str().unwrap_or("unknown");
+
+                            // DeployRequest のデシリアライズ
+                            let deploy_request: DeployRequest =
+                                match serde_json::from_value(payload["request"].clone()) {
+                                    Ok(r) => r,
+                                    Err(e) => {
+                                        channel
+                                            .send_response(
+                                                msg.id,
+                                                "execute",
+                                                json!({ "error": format!("invalid request: {}", e) }),
+                                            )
+                                            .await?;
+                                        continue;
+                                    }
+                                };
+
+                            // Resolve tenant + project for Deployment record
+                            let tenant =
+                                match state.db.get_tenant_by_slug(tenant_slug).await {
+                                    Ok(Some(t)) => t,
+                                    Ok(None) => {
+                                        channel
+                                            .send_response(
+                                                msg.id,
+                                                "execute",
+                                                json!({ "error": "tenant not found" }),
+                                            )
+                                            .await?;
+                                        continue;
+                                    }
+                                    Err(e) => {
+                                        error!(error = %e, "tenant lookup 失敗");
+                                        channel
+                                            .send_response(
+                                                msg.id,
+                                                "execute",
+                                                json!({ "error": e.to_string() }),
+                                            )
+                                            .await?;
+                                        continue;
+                                    }
+                                };
+
+                            let project = match state
+                                .db
+                                .get_project_by_slug(tenant_slug, project_slug)
+                                .await
+                            {
+                                Ok(Some(p)) => p,
+                                Ok(None) => {
+                                    channel
+                                        .send_response(
+                                            msg.id,
+                                            "execute",
+                                            json!({ "error": "project not found" }),
+                                        )
+                                        .await?;
+                                    continue;
+                                }
+                                Err(e) => {
+                                    error!(error = %e, "project lookup 失敗");
+                                    channel
+                                        .send_response(
+                                            msg.id,
+                                            "execute",
+                                            json!({ "error": e.to_string() }),
+                                        )
+                                        .await?;
+                                    continue;
+                                }
+                            };
+
+                            let now = Utc::now();
+                            let tenant_id = match tenant.id {
+                                Some(id) => id,
+                                None => {
+                                    channel
+                                        .send_response(
+                                            msg.id,
+                                            "execute",
+                                            json!({ "error": "tenant has no id" }),
+                                        )
+                                        .await?;
+                                    continue;
+                                }
+                            };
+                            let project_id = match project.id {
+                                Some(id) => id,
+                                None => {
+                                    channel
+                                        .send_response(
+                                            msg.id,
+                                            "execute",
+                                            json!({ "error": "project has no id" }),
+                                        )
+                                        .await?;
+                                    continue;
+                                }
+                            };
+
+                            // Deployment レコード作成 (status: "running")
+                            let deployment = Deployment {
+                                id: None,
+                                tenant: tenant_id,
+                                project: project_id,
+                                stage: deploy_request.stage_name.clone(),
+                                server_slug: "local".into(),
+                                status: "running".into(),
+                                command: "deploy.execute".into(),
+                                log: None,
+                                started_at: Some(now),
+                                finished_at: None,
+                                created_at: None,
+                            };
+
+                            let created =
+                                match state.db.create_deployment(&deployment).await {
+                                    Ok(d) => d,
+                                    Err(e) => {
+                                        error!(error = %e, "deploy.execute 記録作成失敗");
+                                        channel
+                                            .send_response(
+                                                msg.id,
+                                                "execute",
+                                                json!({ "error": e.to_string() }),
+                                            )
+                                            .await?;
+                                        continue;
+                                    }
+                                };
+
+                            // Docker 接続 → DeployEngine 実行
+                            let docker = match bollard::Docker::connect_with_local_defaults() {
+                                Ok(d) => d,
+                                Err(e) => {
+                                    error!(error = %e, "Docker 接続失敗");
+                                    channel
+                                        .send_response(
+                                            msg.id,
+                                            "execute",
+                                            json!({ "error": format!("Docker connection failed: {}", e) }),
+                                        )
+                                        .await?;
+                                    continue;
+                                }
+                            };
+
+                            let engine = DeployEngine::new(docker);
+                            let logs = Arc::new(Mutex::new(Vec::<String>::new()));
+                            let logs_clone = logs.clone();
+
+                            let result = engine
+                                .execute(&deploy_request, move |event| {
+                                    logs_clone
+                                        .lock()
+                                        .unwrap()
+                                        .push(format!("{:?}", event));
+                                })
+                                .await;
+
+                            let (status, log_str) = match &result {
+                                Ok(r) => {
+                                    let combined_log = logs.lock().unwrap().join("\n");
+                                    ("success".to_string(), combined_log + "\n" + &r.log.join("\n"))
+                                }
+                                Err(e) => ("failed".to_string(), e.to_string()),
+                            };
+
+                            // Deployment レコード更新
+                            let finished = Utc::now();
+                            if let Some(ref id) = created.id {
+                                state
+                                    .db
+                                    .update_deployment_status(
+                                        id,
+                                        &status,
+                                        Some(&log_str),
+                                        Some(finished),
+                                    )
+                                    .await
+                                    .ok();
+                            }
+
+                            info!(
+                                project = project_slug,
+                                stage = deploy_request.stage_name.as_str(),
+                                status = status.as_str(),
+                                "deploy.execute 完了"
+                            );
+
+                            channel
+                                .send_response(
+                                    msg.id,
+                                    "execute",
+                                    json!({
+                                        "deployment_id": created.id.map(|id| format!("{id:?}")),
+                                        "status": status,
+                                        "log": log_str,
+                                    }),
+                                )
+                                .await?;
                         }
                         method => {
                             info!(method, "deploy: 不明なメソッド");
