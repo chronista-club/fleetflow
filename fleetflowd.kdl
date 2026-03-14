@@ -23,3 +23,8 @@ auth {
     domain "anycreative.jp.auth0.com"
     audience "https://api.fleetflow.run"
 }
+
+cloud {
+    provider "sakura-cloud"
+    zone "tk1a"
+}
