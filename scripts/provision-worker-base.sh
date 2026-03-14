@@ -19,7 +19,7 @@
 
 set -euo pipefail
 
-PROVISION_VERSION="v2"
+PROVISION_VERSION="v3"
 
 echo "=== FleetFlow Worker Base Image Provisioning (${PROVISION_VERSION}) ==="
 echo "  Date: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -29,7 +29,7 @@ echo ""
 # ─────────────────────────────────────────
 # 1. 基本パッケージ
 # ─────────────────────────────────────────
-echo "[1/6] 基本パッケージ..."
+echo "[1/9] 基本パッケージ..."
 apt-get update -qq
 apt-get install -y -qq \
   curl \
@@ -47,7 +47,7 @@ echo "  done."
 # ─────────────────────────────────────────
 # 2. Docker
 # ─────────────────────────────────────────
-echo "[2/6] Docker..."
+echo "[2/9] Docker..."
 if command -v docker &> /dev/null; then
   echo "  skip ($(docker --version))"
 else
@@ -60,7 +60,7 @@ fi
 # ─────────────────────────────────────────
 # 3. Tailscale
 # ─────────────────────────────────────────
-echo "[3/6] Tailscale..."
+echo "[3/9] Tailscale..."
 if command -v tailscale &> /dev/null; then
   echo "  skip ($(tailscale version | head -1))"
 else
@@ -72,7 +72,7 @@ fi
 # ─────────────────────────────────────────
 # 4. mise（ツールバージョン管理）
 # ─────────────────────────────────────────
-echo "[4/6] mise..."
+echo "[4/9] mise..."
 if command -v mise &> /dev/null || [ -f /usr/local/bin/mise ]; then
   echo "  skip ($(mise --version 2>/dev/null || echo 'installed'))"
 else
@@ -92,7 +92,7 @@ fi
 # ─────────────────────────────────────────
 # 5. Homebrew (Linuxbrew)
 # ─────────────────────────────────────────
-echo "[5/6] Homebrew..."
+echo "[5/9] Homebrew..."
 if command -v brew &> /dev/null || [ -f /home/linuxbrew/.linuxbrew/bin/brew ]; then
   echo "  skip ($(brew --version 2>/dev/null | head -1 || echo 'installed'))"
 else
@@ -116,9 +116,62 @@ else
 fi
 
 # ─────────────────────────────────────────
-# 6. FleetFlow 共通設定
+# 6. Firewall (ufw)
 # ─────────────────────────────────────────
-echo "[6/6] FleetFlow 共通設定..."
+echo "[6/9] Firewall (ufw)..."
+if command -v ufw &> /dev/null; then
+  echo "  skip ($(ufw status | head -1))"
+else
+  apt-get install -y -qq ufw > /dev/null 2>&1
+  # Tailscale (100.x.x.x) からは全許可
+  ufw allow in on tailscale0 > /dev/null 2>&1 || true
+  # SSH は公開IP からも許可（初回アクセス用）
+  ufw allow 22/tcp > /dev/null 2>&1
+  # Docker が iptables を直接操作するので、ufw の FORWARD ルールを調整
+  # /etc/ufw/after.rules に Docker 用ルールは追加しない（Docker が自前で管理）
+  ufw --force enable > /dev/null 2>&1
+  echo "  installed & enabled"
+fi
+
+# ─────────────────────────────────────────
+# 7. 自動セキュリティ更新 (unattended-upgrades)
+# ─────────────────────────────────────────
+echo "[7/9] Unattended upgrades..."
+if dpkg -l | grep -q unattended-upgrades 2>/dev/null; then
+  echo "  skip (already installed)"
+else
+  apt-get install -y -qq unattended-upgrades apt-listchanges > /dev/null 2>&1
+  # セキュリティ更新のみ自動適用
+  cat > /etc/apt/apt.conf.d/20auto-upgrades << 'AUTO_UPG'
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+APT::Periodic::AutocleanInterval "7";
+AUTO_UPG
+  # 自動再起動は無効（コンテナが動いているため）
+  sed -i 's|//Unattended-Upgrade::Automatic-Reboot .*|Unattended-Upgrade::Automatic-Reboot "false";|' \
+    /etc/apt/apt.conf.d/50unattended-upgrades 2>/dev/null || true
+  echo "  installed (security-only, no auto-reboot)"
+fi
+
+# ─────────────────────────────────────────
+# 8. ログ収集 (journald 最適化 + Vector 準備)
+# ─────────────────────────────────────────
+echo "[8/9] ログ設定..."
+# journald: ディスク使用量制限
+mkdir -p /etc/systemd/journald.conf.d
+cat > /etc/systemd/journald.conf.d/fleetflow.conf << 'JOURNAL_CONF'
+[Journal]
+SystemMaxUse=200M
+MaxRetentionSec=7day
+Compress=yes
+JOURNAL_CONF
+systemctl restart systemd-journald 2>/dev/null || true
+echo "  journald: max 200MB / 7 days"
+
+# ─────────────────────────────────────────
+# 9. FleetFlow 共通設定
+# ─────────────────────────────────────────
+echo "[9/9] FleetFlow 共通設定..."
 
 # デプロイ用ディレクトリ
 mkdir -p /opt/fleetflow
@@ -159,6 +212,8 @@ echo "  Docker:    $(docker --version 2>/dev/null || echo 'N/A')"
 echo "  Tailscale: $(tailscale version 2>/dev/null | head -1 || echo 'N/A')"
 echo "  mise:      $(mise --version 2>/dev/null || echo 'N/A')"
 echo "  Homebrew:  $(/home/linuxbrew/.linuxbrew/bin/brew --version 2>/dev/null | head -1 || echo 'N/A')"
+echo "  ufw:       $(ufw status 2>/dev/null | head -1 || echo 'N/A')"
+echo "  Auto-upg:  $(dpkg -l unattended-upgrades 2>/dev/null | grep -q ii && echo 'enabled' || echo 'N/A')"
 echo "  Swap:      $(swapon --show --bytes 2>/dev/null | tail -1 | awk '{printf "%.0fMB", $3/1024/1024}' || echo 'none')"
 echo "  Deploy:    /opt/fleetflow"
 echo ""
