@@ -328,6 +328,23 @@ impl Database {
         Ok(())
     }
 
+    /// ハートビート + バージョン情報更新
+    pub async fn update_server_versions(
+        &self,
+        server_slug: &str,
+        provision_version: Option<&str>,
+        tool_versions: Option<&serde_json::Value>,
+    ) -> Result<()> {
+        self.db
+            .query("UPDATE server SET last_heartbeat_at = time::now(), status = 'online', provision_version = $pv, tool_versions = $tv, updated_at = time::now() WHERE slug = $slug")
+            .bind(("slug", server_slug.to_string()))
+            .bind(("pv", provision_version.map(String::from)))
+            .bind(("tv", tool_versions.cloned()))
+            .await
+            .context("バージョン情報更新失敗")?;
+        Ok(())
+    }
+
     /// サーバーステータスを一括更新（Tailscale ヘルスチェック結果を反映）
     pub async fn bulk_update_server_status(&self, updates: &[ServerStatusUpdate]) -> Result<usize> {
         let mut updated = 0;
@@ -596,6 +613,8 @@ DEFINE FIELD IF NOT EXISTS ssh_host ON server TYPE string;
 DEFINE FIELD IF NOT EXISTS ssh_user ON server TYPE string DEFAULT 'root';
 DEFINE FIELD IF NOT EXISTS deploy_path ON server TYPE string;
 DEFINE FIELD IF NOT EXISTS status ON server TYPE string DEFAULT 'offline';
+DEFINE FIELD IF NOT EXISTS provision_version ON server TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS tool_versions ON server TYPE option<object>;
 DEFINE FIELD IF NOT EXISTS last_heartbeat_at ON server TYPE option<datetime>;
 DEFINE FIELD IF NOT EXISTS created_at ON server TYPE option<datetime> DEFAULT time::now();
 DEFINE FIELD IF NOT EXISTS updated_at ON server TYPE option<datetime> DEFAULT time::now();
@@ -739,6 +758,8 @@ mod tests {
             ssh_user: "root".into(),
             deploy_path: "/opt/apps".into(),
             status: "offline".into(),
+            provision_version: None,
+            tool_versions: None,
             last_heartbeat_at: None,
             created_at: None,
             updated_at: None,

@@ -87,6 +87,10 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                     .unwrap_or_default()
                                     .into(),
                                 status: "offline".into(),
+                                provision_version: payload["provision_version"]
+                                    .as_str()
+                                    .map(String::from),
+                                tool_versions: payload.get("tool_versions").cloned(),
                                 last_heartbeat_at: None,
                                 created_at: None,
                                 updated_at: None,
@@ -116,8 +120,20 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                         }
                         "heartbeat" => {
                             let server_slug = payload["server_slug"].as_str().unwrap_or_default();
+                            let pv = payload["provision_version"].as_str();
+                            let tv = payload.get("tool_versions");
 
-                            match state.db.update_server_heartbeat(server_slug).await {
+                            // バージョン情報があれば一緒に更新
+                            let result = if pv.is_some() || tv.is_some() {
+                                state
+                                    .db
+                                    .update_server_versions(server_slug, pv, tv)
+                                    .await
+                            } else {
+                                state.db.update_server_heartbeat(server_slug).await
+                            };
+
+                            match result {
                                 Ok(()) => {
                                     channel
                                         .send_response(msg.id, "heartbeat", json!({ "ack": true }))
@@ -352,6 +368,8 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                 ssh_user: "root".into(),
                                 deploy_path: "/opt/fleetflow".into(),
                                 status: spec.status.to_string(),
+                                provision_version: None,
+                                tool_versions: None,
                                 last_heartbeat_at: None,
                                 created_at: None,
                                 updated_at: None,

@@ -122,6 +122,10 @@ pub struct Server {
     pub ssh_user: String,
     pub deploy_path: String,
     pub status: String,
+    /// プロビジョニングバージョン（e.g., "v2"）
+    pub provision_version: Option<String>,
+    /// ツールバージョン情報（JSON: {"docker": "29.3.0", "tailscale": "1.94.2", ...}）
+    pub tool_versions: Option<serde_json::Value>,
     pub last_heartbeat_at: Option<DateTime<Utc>>,
     pub created_at: Option<DateTime<Utc>>,
     pub updated_at: Option<DateTime<Utc>>,
