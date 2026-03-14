@@ -219,6 +219,310 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                 }
                             }
                         }
+                        "get" => {
+                            let slug = payload["slug"].as_str().unwrap_or_default();
+
+                            match state.db.get_server_by_slug(slug).await {
+                                Ok(Some(server)) => {
+                                    channel
+                                        .send_response(
+                                            msg.id,
+                                            "get",
+                                            json!({ "server": server }),
+                                        )
+                                        .await?;
+                                }
+                                Ok(None) => {
+                                    channel
+                                        .send_response(
+                                            msg.id,
+                                            "get",
+                                            json!({ "error": "server not found" }),
+                                        )
+                                        .await?;
+                                }
+                                Err(e) => {
+                                    error!(error = %e, "server.get 失敗");
+                                    channel
+                                        .send_response(
+                                            msg.id,
+                                            "get",
+                                            json!({ "error": e.to_string() }),
+                                        )
+                                        .await?;
+                                }
+                            }
+                        }
+                        "create" => {
+                            // クラウドプロバイダーにサーバーを作成 + DB 登録
+                            let provider = match &state.server_provider {
+                                Some(p) => p,
+                                None => {
+                                    channel
+                                        .send_response(
+                                            msg.id,
+                                            "create",
+                                            json!({ "error": "server provider not configured" }),
+                                        )
+                                        .await?;
+                                    continue;
+                                }
+                            };
+
+                            let tenant_slug = payload["tenant_slug"].as_str().unwrap_or_default();
+                            let tenant = match state.db.get_tenant_by_slug(tenant_slug).await {
+                                Ok(Some(t)) => t,
+                                Ok(None) => {
+                                    channel
+                                        .send_response(
+                                            msg.id,
+                                            "create",
+                                            json!({ "error": "tenant not found" }),
+                                        )
+                                        .await?;
+                                    continue;
+                                }
+                                Err(e) => {
+                                    error!(error = %e, "tenant lookup 失敗");
+                                    channel
+                                        .send_response(
+                                            msg.id,
+                                            "create",
+                                            json!({ "error": e.to_string() }),
+                                        )
+                                        .await?;
+                                    continue;
+                                }
+                            };
+
+                            let request: fleetflow_cloud::CreateServerRequest =
+                                match serde_json::from_value(payload["request"].clone()) {
+                                    Ok(r) => r,
+                                    Err(e) => {
+                                        channel
+                                            .send_response(
+                                                msg.id,
+                                                "create",
+                                                json!({ "error": format!("invalid request: {}", e) }),
+                                            )
+                                            .await?;
+                                        continue;
+                                    }
+                                };
+
+                            info!(name = %request.name, "server.create: クラウドにサーバー作成中");
+
+                            // 1. クラウドにサーバーを作成
+                            let spec = match provider.create_server(&request).await {
+                                Ok(s) => s,
+                                Err(e) => {
+                                    error!(error = %e, "server.create クラウド作成失敗");
+                                    channel
+                                        .send_response(
+                                            msg.id,
+                                            "create",
+                                            json!({ "error": e.to_string() }),
+                                        )
+                                        .await?;
+                                    continue;
+                                }
+                            };
+
+                            info!(
+                                id = %spec.id,
+                                name = %spec.name,
+                                ip = ?spec.ip_address,
+                                "server.create: クラウドサーバー作成完了"
+                            );
+
+                            // 2. DB にサーバーを登録
+                            let server_model = Server {
+                                id: None,
+                                tenant: tenant.id.unwrap(),
+                                slug: request.name.clone(),
+                                provider: provider.provider_name().into(),
+                                plan: Some(format!(
+                                    "{}core-{}gb",
+                                    request.cpu, request.memory_gb
+                                )),
+                                ssh_host: spec
+                                    .ip_address
+                                    .clone()
+                                    .unwrap_or_default(),
+                                ssh_user: "root".into(),
+                                deploy_path: "/opt/fleetflow".into(),
+                                status: spec.status.to_string(),
+                                last_heartbeat_at: None,
+                                created_at: None,
+                                updated_at: None,
+                            };
+
+                            match state.db.register_server(&server_model).await {
+                                Ok(registered) => {
+                                    channel
+                                        .send_response(
+                                            msg.id,
+                                            "create",
+                                            json!({
+                                                "server": registered,
+                                                "cloud": spec,
+                                            }),
+                                        )
+                                        .await?;
+                                }
+                                Err(e) => {
+                                    // クラウドには作成されたが DB 登録に失敗
+                                    error!(error = %e, "server.create DB登録失敗（クラウドには作成済み）");
+                                    channel
+                                        .send_response(
+                                            msg.id,
+                                            "create",
+                                            json!({
+                                                "error": e.to_string(),
+                                                "cloud": spec,
+                                                "warning": "クラウドにはサーバーが作成されています"
+                                            }),
+                                        )
+                                        .await?;
+                                }
+                            }
+                        }
+                        "delete" => {
+                            let slug = payload["slug"].as_str().unwrap_or_default();
+                            let with_disks = payload["with_disks"].as_bool().unwrap_or(true);
+                            let cloud_id = payload["cloud_id"].as_str();
+
+                            // クラウドからも削除する場合
+                            if let Some(cloud_id) = cloud_id {
+                                match &state.server_provider {
+                                    Some(provider) => {
+                                        info!(slug, cloud_id, "server.delete: クラウドサーバー削除中");
+                                        if let Err(e) =
+                                            provider.delete_server(cloud_id, with_disks).await
+                                        {
+                                            error!(error = %e, "server.delete クラウド削除失敗");
+                                            channel
+                                                .send_response(
+                                                    msg.id,
+                                                    "delete",
+                                                    json!({ "error": e.to_string() }),
+                                                )
+                                                .await?;
+                                            continue;
+                                        }
+                                    }
+                                    None => {
+                                        channel
+                                            .send_response(
+                                                msg.id,
+                                                "delete",
+                                                json!({ "error": "server provider not configured (cannot delete from cloud)" }),
+                                            )
+                                            .await?;
+                                        continue;
+                                    }
+                                }
+                            }
+
+                            // DB から削除
+                            match state.db.delete_server(slug).await {
+                                Ok(()) => {
+                                    channel
+                                        .send_response(
+                                            msg.id,
+                                            "delete",
+                                            json!({ "deleted": slug }),
+                                        )
+                                        .await?;
+                                }
+                                Err(e) => {
+                                    error!(error = %e, "server.delete DB削除失敗");
+                                    channel
+                                        .send_response(
+                                            msg.id,
+                                            "delete",
+                                            json!({ "error": e.to_string() }),
+                                        )
+                                        .await?;
+                                }
+                            }
+                        }
+                        "power-on" => {
+                            let cloud_id = payload["cloud_id"].as_str().unwrap_or_default();
+
+                            match &state.server_provider {
+                                Some(provider) => {
+                                    match provider.power_on(cloud_id).await {
+                                        Ok(()) => {
+                                            channel
+                                                .send_response(
+                                                    msg.id,
+                                                    "power-on",
+                                                    json!({ "ok": true }),
+                                                )
+                                                .await?;
+                                        }
+                                        Err(e) => {
+                                            error!(error = %e, "server.power-on 失敗");
+                                            channel
+                                                .send_response(
+                                                    msg.id,
+                                                    "power-on",
+                                                    json!({ "error": e.to_string() }),
+                                                )
+                                                .await?;
+                                        }
+                                    }
+                                }
+                                None => {
+                                    channel
+                                        .send_response(
+                                            msg.id,
+                                            "power-on",
+                                            json!({ "error": "server provider not configured" }),
+                                        )
+                                        .await?;
+                                }
+                            }
+                        }
+                        "power-off" => {
+                            let cloud_id = payload["cloud_id"].as_str().unwrap_or_default();
+
+                            match &state.server_provider {
+                                Some(provider) => {
+                                    match provider.power_off(cloud_id).await {
+                                        Ok(()) => {
+                                            channel
+                                                .send_response(
+                                                    msg.id,
+                                                    "power-off",
+                                                    json!({ "ok": true }),
+                                                )
+                                                .await?;
+                                        }
+                                        Err(e) => {
+                                            error!(error = %e, "server.power-off 失敗");
+                                            channel
+                                                .send_response(
+                                                    msg.id,
+                                                    "power-off",
+                                                    json!({ "error": e.to_string() }),
+                                                )
+                                                .await?;
+                                        }
+                                    }
+                                }
+                                None => {
+                                    channel
+                                        .send_response(
+                                            msg.id,
+                                            "power-off",
+                                            json!({ "error": "server provider not configured" }),
+                                        )
+                                        .await?;
+                                }
+                            }
+                        }
                         "ping" => {
                             let hostname = payload["hostname"].as_str().unwrap_or_default();
 

@@ -28,7 +28,11 @@ async fn start_test_server(port: u16) -> anyhow::Result<()> {
         audience: "https://test.fleetflow.dev".into(),
     });
 
-    let state = Arc::new(AppState { db, auth });
+    let state = Arc::new(AppState {
+            db,
+            auth,
+            server_provider: None,
+        });
 
     let server = ProtocolServer::with_identity(
         "fleetflow-controlplane-test",

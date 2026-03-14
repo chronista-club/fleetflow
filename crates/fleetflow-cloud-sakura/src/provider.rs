@@ -5,9 +5,11 @@ use std::collections::HashMap;
 use crate::error::{Result, SakuraError};
 use crate::usacloud::{CreateServerConfig, Usacloud};
 use async_trait::async_trait;
+use fleetflow_cloud::server_provider::ServerProvider;
 use fleetflow_cloud::{
-    Action, ActionType, ApplyResult, AuthStatus, CloudProvider, Plan, ProviderState,
-    ResourceConfig, ResourceSet, ResourceState, ResourceStatus,
+    Action, ActionType, ApplyResult, AuthStatus, CloudProvider, CreateServerRequest, Plan,
+    ProviderState, ResourceConfig, ResourceSet, ResourceState, ResourceStatus, ServerSpec,
+    ServerStatus,
 };
 
 /// Parse plan string like "2core-4gb" to (core, memory_gb)
@@ -241,6 +243,131 @@ struct ServerResourceConfig {
     ssh_key: Option<String>,
 }
 
+/// usacloud ServerInfo → プロバイダー非依存 ServerSpec への変換
+impl SakuraCloudProvider {
+    fn to_server_spec(&self, info: &crate::usacloud::ServerInfo) -> ServerSpec {
+        ServerSpec {
+            id: info.id_str(),
+            name: info.name.clone(),
+            cpu: info.cpu,
+            memory_gb: info.memory_mb.map(|mb| mb / 1024),
+            disk_gb: None, // usacloud server list ではディスク情報が含まれない
+            status: if info.is_running() {
+                ServerStatus::Running
+            } else {
+                ServerStatus::Stopped
+            },
+            ip_address: info.ip_address(),
+            provider: "sakura-cloud".into(),
+            zone: Some(self.zone.clone()),
+            tags: info.tags.clone(),
+        }
+    }
+}
+
+impl ServerProvider for SakuraCloudProvider {
+    fn provider_name(&self) -> &str {
+        "sakura-cloud"
+    }
+
+    async fn list_servers(&self) -> fleetflow_cloud::Result<Vec<ServerSpec>> {
+        let servers = self
+            .usacloud
+            .list_servers()
+            .await
+            .map_err(|e| fleetflow_cloud::CloudError::ApiError(e.to_string()))?;
+
+        Ok(servers.iter().map(|s| self.to_server_spec(s)).collect())
+    }
+
+    async fn get_server(&self, server_id: &str) -> fleetflow_cloud::Result<ServerSpec> {
+        let server = self
+            .usacloud
+            .get_server_by_id(server_id)
+            .await
+            .map_err(|e| fleetflow_cloud::CloudError::ApiError(e.to_string()))?;
+
+        Ok(self.to_server_spec(&server))
+    }
+
+    async fn create_server(
+        &self,
+        request: &CreateServerRequest,
+    ) -> fleetflow_cloud::Result<ServerSpec> {
+        let options = CreateServerOptions {
+            name: request.name.clone(),
+            plan: Some(format!("{}core-{}gb", request.cpu, request.memory_gb)),
+            disk_size: request.disk_gb,
+            os: request.os_type.clone(),
+            archive: request
+                .provider_config
+                .as_ref()
+                .and_then(|c| c.get("archive"))
+                .and_then(|v| v.as_str())
+                .map(String::from),
+            ssh_keys: request.ssh_keys.clone(),
+            startup_scripts: request
+                .provider_config
+                .as_ref()
+                .and_then(|c| c.get("startup_scripts"))
+                .and_then(|v| v.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_str().map(String::from))
+                        .collect()
+                })
+                .unwrap_or_default(),
+            init_script_vars: request
+                .provider_config
+                .as_ref()
+                .and_then(|c| c.get("init_script_vars"))
+                .and_then(|v| serde_json::from_value(v.clone()).ok())
+                .unwrap_or_default(),
+            tags: request.tags.clone(),
+        };
+
+        let simple = SakuraCloudProvider::create_server(self, &options)
+            .await
+            .map_err(|e| fleetflow_cloud::CloudError::ApiError(e.to_string()))?;
+
+        // create_server returns SimpleServerInfo, convert to ServerSpec
+        Ok(ServerSpec {
+            id: simple.id,
+            name: simple.name,
+            cpu: Some(request.cpu),
+            memory_gb: Some(request.memory_gb),
+            disk_gb: request.disk_gb,
+            status: if simple.is_running {
+                ServerStatus::Running
+            } else {
+                ServerStatus::Stopped
+            },
+            ip_address: simple.ip_address,
+            provider: "sakura-cloud".into(),
+            zone: Some(self.zone.clone()),
+            tags: request.tags.clone(),
+        })
+    }
+
+    async fn delete_server(&self, server_id: &str, with_disks: bool) -> fleetflow_cloud::Result<()> {
+        SakuraCloudProvider::delete_server(self, server_id, with_disks)
+            .await
+            .map_err(|e| fleetflow_cloud::CloudError::ApiError(e.to_string()))
+    }
+
+    async fn power_on(&self, server_id: &str) -> fleetflow_cloud::Result<()> {
+        SakuraCloudProvider::power_on(self, server_id)
+            .await
+            .map_err(|e| fleetflow_cloud::CloudError::ApiError(e.to_string()))
+    }
+
+    async fn power_off(&self, server_id: &str) -> fleetflow_cloud::Result<()> {
+        SakuraCloudProvider::power_off(self, server_id)
+            .await
+            .map_err(|e| fleetflow_cloud::CloudError::ApiError(e.to_string()))
+    }
+}
+
 #[async_trait]
 impl CloudProvider for SakuraCloudProvider {
     fn name(&self) -> &str {
@@ -458,11 +585,12 @@ impl CloudProvider for SakuraCloudProvider {
                     if !startup_scripts.is_empty() {
                         let mut ids = Vec::new();
                         for name in &startup_scripts {
-                            if let Some(content) =
-                                crate::startup_scripts::get_builtin_script(name)
+                            if let Some(content) = crate::startup_scripts::get_builtin_script(name)
                             {
-                                if let Ok(note) =
-                                    self.usacloud.get_or_create_note(name, content, "shell").await
+                                if let Ok(note) = self
+                                    .usacloud
+                                    .get_or_create_note(name, content, "shell")
+                                    .await
                                 {
                                     ids.push(note.id_str());
                                 }

@@ -359,6 +359,28 @@ impl Database {
         Ok(servers)
     }
 
+    /// slug でサーバーを取得
+    pub async fn get_server_by_slug(&self, slug: &str) -> Result<Option<Server>> {
+        let mut result = self
+            .db
+            .query("SELECT * FROM server WHERE slug = $slug LIMIT 1")
+            .bind(("slug", slug.to_string()))
+            .await
+            .context("サーバー取得失敗")?;
+        let server: Option<Server> = result.take(0)?;
+        Ok(server)
+    }
+
+    /// サーバーを DB から削除
+    pub async fn delete_server(&self, slug: &str) -> Result<()> {
+        self.db
+            .query("DELETE FROM server WHERE slug = $slug")
+            .bind(("slug", slug.to_string()))
+            .await
+            .context("サーバー削除失敗")?;
+        Ok(())
+    }
+
     // ─────────────────────────────────────────
     // CostEntry CRUD
     // ─────────────────────────────────────────

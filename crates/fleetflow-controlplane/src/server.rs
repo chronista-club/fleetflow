@@ -7,19 +7,23 @@ use unison::network::server::{ProtocolServer, ServerHandle};
 use crate::auth::{Auth0Config, Auth0Verifier};
 use crate::db::{Database, DbConfig};
 use crate::handlers;
+use crate::server_provider::ServerProviderKind;
 
 /// Shared application state for all channel handlers.
 pub struct AppState {
     pub db: Database,
     pub auth: Auth0Verifier,
+    /// クラウドプロバイダーのサーバー操作（オプション、未設定なら DB のみ操作）
+    pub server_provider: Option<ServerProviderKind>,
 }
 
 /// Control Plane server configuration.
-#[derive(Debug)]
 pub struct ServerConfig {
     pub listen_addr: String,
     pub db: DbConfig,
     pub auth: Auth0Config,
+    /// クラウドプロバイダーのサーバー操作（オプション）
+    pub server_provider: Option<ServerProviderKind>,
 }
 
 impl Default for ServerConfig {
@@ -31,7 +35,25 @@ impl Default for ServerConfig {
                 domain: "anycreative.jp.auth0.com".into(),
                 audience: "https://api.fleetflow.run".into(),
             },
+            server_provider: None,
         }
+    }
+}
+
+impl std::fmt::Debug for ServerConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ServerConfig")
+            .field("listen_addr", &self.listen_addr)
+            .field("db", &self.db)
+            .field("auth", &self.auth)
+            .field(
+                "server_provider",
+                &self
+                    .server_provider
+                    .as_ref()
+                    .map(|p| p.provider_name().to_string()),
+            )
+            .finish()
     }
 }
 
@@ -46,7 +68,11 @@ pub async fn start(config: ServerConfig) -> Result<(ServerHandle, Arc<AppState>)
     let db = Database::connect(&config.db).await?;
     let auth = Auth0Verifier::new(&config.auth);
 
-    let state = Arc::new(AppState { db, auth });
+    let state = Arc::new(AppState {
+        db,
+        auth,
+        server_provider: config.server_provider,
+    });
 
     // Create Unison Protocol server
     let server = ProtocolServer::with_identity(

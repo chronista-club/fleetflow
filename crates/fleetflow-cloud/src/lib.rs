@@ -36,6 +36,7 @@
 pub mod action;
 pub mod error;
 pub mod provider;
+pub mod server_provider;
 pub mod ssh;
 pub mod state;
 pub mod tailscale;
@@ -44,6 +45,7 @@ pub mod tailscale;
 pub use action::{Action, ActionType, ApplyResult, Plan, PlanSummary};
 pub use error::{CloudError, Result};
 pub use provider::{AuthStatus, CloudProvider, ResourceConfig, ResourceSet, RetryConfig};
+pub use server_provider::{CreateServerRequest, ServerSpec, ServerStatus};
 pub use state::{
     GlobalState, ProviderState, ResourceState, ResourceStatus, StateLock, StateManager,
 };

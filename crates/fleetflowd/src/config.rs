@@ -167,6 +167,32 @@ pub fn load_config(path: &Path) -> Result<DaemonConfig> {
         }
     }
 
+    // cloud ノード（サーバープロバイダー設定）
+    if let Some(cloud) = doc.get("cloud")
+        && let Some(children) = cloud.children()
+        && let Some(node) = children.get("provider")
+        && let Some(val) = node_str(node)
+    {
+        match val {
+            "sakura-cloud" => {
+                let zone = children
+                    .get("zone")
+                    .and_then(|n| node_str(n))
+                    .unwrap_or("tk1a");
+                let provider = fleetflow_cloud_sakura::SakuraCloudProvider::new(zone);
+                config.server.server_provider = Some(
+                    fleetflow_controlplane::server_provider::ServerProviderKind::Sakura(provider),
+                );
+            }
+            other => {
+                tracing::warn!(
+                    provider = other,
+                    "未対応のクラウドプロバイダー（server CRUD は無効）"
+                );
+            }
+        }
+    }
+
     // health ノード
     if let Some(health) = doc.get("health")
         && let Some(children) = health.children()
