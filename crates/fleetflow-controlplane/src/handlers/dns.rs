@@ -26,8 +26,6 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                             let name = payload["name"].as_str().unwrap_or_default();
                             let record_type = payload["record_type"].as_str().unwrap_or("A");
                             let content = payload["content"].as_str().unwrap_or_default();
-                            let zone_id = payload["zone_id"].as_str().map(String::from);
-                            let cf_record_id = payload["cf_record_id"].as_str().map(String::from);
                             let proxied = payload["proxied"].as_bool().unwrap_or(false);
 
                             let tenant = match state.db.get_tenant_by_slug(tenant_slug).await {
@@ -69,6 +67,37 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                             };
                             let project_id = project_slug.map(|s| RecordId::new("project", s));
 
+                            // 1. Cloudflare に実レコード作成（環境変数から認証）
+                            let mut zone_id: Option<String> = payload["zone_id"].as_str().map(String::from);
+                            let mut cf_record_id: Option<String> = None;
+
+                            if let Ok(cf_config) = fleetflow_cloud_cloudflare::dns::DnsConfig::from_env() {
+                                zone_id = Some(cf_config.zone_id.clone());
+                                let cf = fleetflow_cloud_cloudflare::dns::CloudflareDns::new(cf_config);
+
+                                // subdomain 部分を抽出（FQDN からドメインを除く）
+                                let subdomain = name.trim_end_matches(&format!(".{}", cf.domain()))
+                                    .trim_end_matches('.');
+
+                                info!(subdomain, content, "dns.create: Cloudflare にレコード作成中");
+
+                                match cf.ensure_record(subdomain, content).await {
+                                    Ok(cf_rec) => {
+                                        cf_record_id = Some(cf_rec.id.clone());
+                                        info!(
+                                            cf_id = %cf_rec.id,
+                                            name = %cf_rec.name,
+                                            "dns.create: Cloudflare レコード作成完了"
+                                        );
+                                    }
+                                    Err(e) => {
+                                        error!(error = %e, "dns.create: Cloudflare 作成失敗（DB のみ登録）");
+                                        // Cloudflare 失敗でも DB には登録する
+                                    }
+                                }
+                            }
+
+                            // 2. DB に登録
                             let record = DnsRecord {
                                 id: None,
                                 tenant: tenant_id,
@@ -133,6 +162,19 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                         "delete" => {
                             let name = payload["name"].as_str().unwrap_or_default();
 
+                            // 1. Cloudflare からレコード削除
+                            if let Ok(cf_config) = fleetflow_cloud_cloudflare::dns::DnsConfig::from_env() {
+                                let cf = fleetflow_cloud_cloudflare::dns::CloudflareDns::new(cf_config);
+                                let subdomain = name.trim_end_matches(&format!(".{}", cf.domain()))
+                                    .trim_end_matches('.');
+
+                                info!(subdomain, "dns.delete: Cloudflare からレコード削除中");
+                                if let Err(e) = cf.remove_record(subdomain).await {
+                                    error!(error = %e, "dns.delete: Cloudflare 削除失敗（DB からは削除する）");
+                                }
+                            }
+
+                            // 2. DB から削除
                             match state.db.delete_dns_record(name).await {
                                 Ok(deleted) => {
                                     channel
