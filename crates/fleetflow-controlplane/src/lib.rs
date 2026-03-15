@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod crypto;
 pub mod db;
 pub mod handlers;
 pub mod model;
