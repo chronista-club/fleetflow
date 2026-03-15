@@ -61,6 +61,10 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                 name: name.into(),
                                 auth0_org_id,
                                 plan: plan.into(),
+                                dns_provider: payload["dns_provider"].as_str().map(String::from),
+                                dns_domain: payload["dns_domain"].as_str().map(String::from),
+                                dns_zone_id: payload["dns_zone_id"].as_str().map(String::from),
+                                dns_api_token_encrypted: None, // 暗号化は別チャネルで
                                 created_at: None,
                                 updated_at: None,
                             };

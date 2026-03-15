@@ -13,6 +13,14 @@ pub struct Tenant {
     pub name: String,
     pub auth0_org_id: Option<String>,
     pub plan: String,
+    /// DNS プロバイダー（e.g., "cloudflare"）
+    pub dns_provider: Option<String>,
+    /// テナントのドメイン（e.g., "anycreative.tech"）
+    pub dns_domain: Option<String>,
+    /// Cloudflare Zone ID
+    pub dns_zone_id: Option<String>,
+    /// 暗号化された API トークン（AES-256-GCM, base64）
+    pub dns_api_token_encrypted: Option<String>,
     pub created_at: Option<DateTime<Utc>>,
     pub updated_at: Option<DateTime<Utc>>,
 }

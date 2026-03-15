@@ -560,6 +560,10 @@ DEFINE FIELD IF NOT EXISTS slug ON tenant TYPE string;
 DEFINE FIELD IF NOT EXISTS name ON tenant TYPE string;
 DEFINE FIELD IF NOT EXISTS auth0_org_id ON tenant TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS plan ON tenant TYPE string DEFAULT 'self-hosted';
+DEFINE FIELD IF NOT EXISTS dns_provider ON tenant TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS dns_domain ON tenant TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS dns_zone_id ON tenant TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS dns_api_token_encrypted ON tenant TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS created_at ON tenant TYPE option<datetime> DEFAULT time::now();
 DEFINE FIELD IF NOT EXISTS updated_at ON tenant TYPE option<datetime> DEFAULT time::now();
 DEFINE INDEX IF NOT EXISTS idx_tenant_slug ON tenant FIELDS slug UNIQUE;
@@ -678,6 +682,10 @@ mod tests {
             name: "ANYCREATIVE Inc".into(),
             auth0_org_id: None,
             plan: "self-hosted".into(),
+            dns_provider: None,
+            dns_domain: None,
+            dns_zone_id: None,
+            dns_api_token_encrypted: None,
             created_at: None,
             updated_at: None,
         };
@@ -707,6 +715,10 @@ mod tests {
                 name: "ANYCREATIVE Inc".into(),
                 auth0_org_id: None,
                 plan: "self-hosted".into(),
+                dns_provider: None,
+                dns_domain: None,
+                dns_zone_id: None,
+                dns_api_token_encrypted: None,
                 created_at: None,
                 updated_at: None,
             })
@@ -742,6 +754,10 @@ mod tests {
                 name: "ANYCREATIVE Inc".into(),
                 auth0_org_id: None,
                 plan: "self-hosted".into(),
+                dns_provider: None,
+                dns_domain: None,
+                dns_zone_id: None,
+                dns_api_token_encrypted: None,
                 created_at: None,
                 updated_at: None,
             })
