@@ -1,0 +1,39 @@
+# syntax=docker/dockerfile:1
+
+# --- Chef: dependency caching layer ---
+FROM rust:1.94-bookworm AS chef
+RUN cargo install cargo-chef --locked
+WORKDIR /app
+
+# --- Planner: generate recipe from lock file ---
+FROM chef AS planner
+COPY . .
+RUN cargo chef prepare --recipe-path recipe.json
+
+# --- Builder: compile with cached dependencies ---
+FROM chef AS builder
+COPY --from=planner /app/recipe.json recipe.json
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    --mount=type=cache,target=/app/target \
+    cargo chef cook --release --recipe-path recipe.json -p fleetflowd
+
+COPY . .
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    --mount=type=cache,target=/app/target \
+    cargo build --release -p fleetflowd && \
+    cp /app/target/release/fleetflowd /usr/local/bin/fleetflowd
+
+# --- Runtime: minimal image ---
+FROM debian:bookworm-slim AS runtime
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /usr/local/bin/fleetflowd /usr/local/bin/fleetflowd
+
+EXPOSE 4510 32080
+
+ENTRYPOINT ["fleetflowd"]
+CMD ["--config", "/etc/fleetflow/fleetflowd.kdl"]

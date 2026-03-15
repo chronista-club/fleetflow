@@ -112,8 +112,14 @@ impl DeployEngine {
             total: 5,
             description: "既存コンテナを停止・削除中...".into(),
         });
-        self.stop_and_remove(flow, stage_name, &request.target_services, &on_event, &mut log)
-            .await;
+        self.stop_and_remove(
+            flow,
+            stage_name,
+            &request.target_services,
+            &on_event,
+            &mut log,
+        )
+        .await;
         on_event(DeployEvent::StepCompleted { step: 1 });
 
         // Step 2: イメージの pull
@@ -149,8 +155,15 @@ impl DeployEngine {
             description: "コンテナを作成・起動中...".into(),
         });
         let ordered = order_by_dependencies(&request.target_services, flow);
-        self.create_and_start(flow, stage_name, &ordered, request.no_pull, &on_event, &mut log)
-            .await?;
+        self.create_and_start(
+            flow,
+            stage_name,
+            &ordered,
+            request.no_pull,
+            &on_event,
+            &mut log,
+        )
+        .await?;
         on_event(DeployEvent::StepCompleted { step: 4 });
 
         // Step 5: 不要イメージ・キャッシュ削除
@@ -209,14 +222,12 @@ impl DeployEngine {
                     log.push(format!("{}: stopped", service_name));
                 }
                 Err(bollard::errors::Error::DockerResponseServerError {
-                    status_code: 404,
-                    ..
+                    status_code: 404, ..
                 }) => {
                     log.push(format!("{}: no container", service_name));
                 }
                 Err(bollard::errors::Error::DockerResponseServerError {
-                    status_code: 304,
-                    ..
+                    status_code: 304, ..
                 }) => {
                     log.push(format!("{}: already stopped", service_name));
                 }
@@ -245,8 +256,7 @@ impl DeployEngine {
                     log.push(format!("{}: removed", service_name));
                 }
                 Err(bollard::errors::Error::DockerResponseServerError {
-                    status_code: 404,
-                    ..
+                    status_code: 404, ..
                 }) => {}
                 Err(e) => {
                     log.push(format!("{}: remove error: {}", service_name, e));
@@ -313,7 +323,11 @@ impl DeployEngine {
     }
 
     /// Step 3: ネットワーク作成
-    async fn ensure_network(&self, network_name: &str, log: &mut Vec<String>) -> anyhow::Result<()> {
+    async fn ensure_network(
+        &self,
+        network_name: &str,
+        log: &mut Vec<String>,
+    ) -> anyhow::Result<()> {
         let network_config = bollard::models::NetworkCreateRequest {
             name: network_name.to_string(),
             driver: Some("bridge".to_string()),
@@ -325,8 +339,7 @@ impl DeployEngine {
                 log.push(format!("network created: {}", network_name));
             }
             Err(bollard::errors::Error::DockerResponseServerError {
-                status_code: 409,
-                ..
+                status_code: 409, ..
             }) => {
                 log.push(format!("network exists: {}", network_name));
             }
@@ -370,10 +383,7 @@ impl DeployEngine {
             );
 
             let image = container_config.image.as_ref().ok_or_else(|| {
-                anyhow::anyhow!(
-                    "サービス '{}' のイメージ設定が見つかりません",
-                    service_name
-                )
+                anyhow::anyhow!("サービス '{}' のイメージ設定が見つかりません", service_name)
             })?;
 
             // --no-pull でもローカルにイメージがなければ pull
@@ -403,11 +413,13 @@ impl DeployEngine {
                 && !service_def.depends_on.is_empty()
             {
                 for dep_service in &service_def.depends_on {
-                    let dep_container =
-                        format!("{}-{}-{}", flow.name, stage_name, dep_service);
+                    let dep_container = format!("{}-{}-{}", flow.name, stage_name, dep_service);
                     match crate::wait_for_service(&self.docker, &dep_container, wait_config).await {
                         Ok(_) => {
-                            log.push(format!("{}: dependency {} ready", service_name, dep_service));
+                            log.push(format!(
+                                "{}: dependency {} ready",
+                                service_name, dep_service
+                            ));
                         }
                         Err(e) => {
                             log.push(format!(
@@ -486,7 +498,10 @@ impl DeployEngine {
                 let reclaimed = result.space_reclaimed.unwrap_or(0);
                 if reclaimed > 0 {
                     let reclaimed_mb = reclaimed as f64 / 1_048_576.0;
-                    log.push(format!("build cache pruned ({:.1}MB reclaimed)", reclaimed_mb));
+                    log.push(format!(
+                        "build cache pruned ({:.1}MB reclaimed)",
+                        reclaimed_mb
+                    ));
                 }
             }
             Err(e) => {
@@ -530,10 +545,13 @@ mod tests {
     #[test]
     fn test_deploy_request_serialization() {
         let flow = make_test_flow(
-            vec![("web", Service {
-                image: Some("node:20".into()),
-                ..Default::default()
-            })],
+            vec![(
+                "web",
+                Service {
+                    image: Some("node:20".into()),
+                    ..Default::default()
+                },
+            )],
             vec!["web"],
         );
         let request = DeployRequest {
@@ -583,10 +601,7 @@ mod tests {
     #[test]
     fn test_order_by_dependencies_no_deps() {
         let flow = make_test_flow(
-            vec![
-                ("web", Service::default()),
-                ("db", Service::default()),
-            ],
+            vec![("web", Service::default()), ("db", Service::default())],
             vec!["web", "db"],
         );
         let services = vec!["web".into(), "db".into()];
@@ -599,10 +614,13 @@ mod tests {
     fn test_order_by_dependencies_with_deps() {
         let flow = make_test_flow(
             vec![
-                ("web", Service {
-                    depends_on: vec!["db".into()],
-                    ..Default::default()
-                }),
+                (
+                    "web",
+                    Service {
+                        depends_on: vec!["db".into()],
+                        ..Default::default()
+                    },
+                ),
                 ("db", Service::default()),
             ],
             vec!["web", "db"],
@@ -617,16 +635,22 @@ mod tests {
     fn test_order_by_dependencies_mixed() {
         let flow = make_test_flow(
             vec![
-                ("api", Service {
-                    depends_on: vec!["db".into()],
-                    ..Default::default()
-                }),
+                (
+                    "api",
+                    Service {
+                        depends_on: vec!["db".into()],
+                        ..Default::default()
+                    },
+                ),
                 ("db", Service::default()),
                 ("redis", Service::default()),
-                ("worker", Service {
-                    depends_on: vec!["redis".into(), "db".into()],
-                    ..Default::default()
-                }),
+                (
+                    "worker",
+                    Service {
+                        depends_on: vec!["redis".into(), "db".into()],
+                        ..Default::default()
+                    },
+                ),
             ],
             vec!["api", "db", "redis", "worker"],
         );
@@ -643,14 +667,20 @@ mod tests {
     fn test_deploy_request_from_flow() {
         let flow = make_test_flow(
             vec![
-                ("api", Service {
-                    image: Some("myapp:1.0".into()),
-                    ..Default::default()
-                }),
-                ("db", Service {
-                    image: Some("postgres:16".into()),
-                    ..Default::default()
-                }),
+                (
+                    "api",
+                    Service {
+                        image: Some("myapp:1.0".into()),
+                        ..Default::default()
+                    },
+                ),
+                (
+                    "db",
+                    Service {
+                        image: Some("postgres:16".into()),
+                        ..Default::default()
+                    },
+                ),
             ],
             vec!["api", "db"],
         );

@@ -116,10 +116,7 @@ fn print_deploy_event(event: DeployEvent) {
             "removed" => println!("  ✓ {} を削除しました", service.cyan()),
             "creating" => {
                 println!();
-                println!(
-                    "{}",
-                    format!("■ {} を起動中...", service).green().bold()
-                );
+                println!("{}", format!("■ {} を起動中...", service).green().bold());
             }
             "started" => println!("  ✓ 起動完了"),
             action if action.starts_with("pulling") => {

@@ -1,0 +1,25 @@
+// FleetFlow Control Plane — コンテナ用ローカル設定
+daemon {
+    pid-file "/tmp/fleetflowd.pid"
+    log-level "info"
+}
+
+api {
+    listen "[::]:4510"
+}
+
+database {
+    endpoint "mem://"
+    namespace "fleetflow"
+    database "control_plane"
+}
+
+web {
+    listen "0.0.0.0:32080"
+    auth0-client-id "${FLEETFLOW_AUTH0_CLIENT_ID}"
+}
+
+auth {
+    domain "anycreative.jp.auth0.com"
+    audience "https://api.fleetflow.run"
+}

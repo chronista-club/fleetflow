@@ -73,7 +73,10 @@ async fn create_tenant(client: &ProtocolClient, slug: &str) -> anyhow::Result<()
     Ok(())
 }
 
-fn mock_provider() -> (ServerProviderKind, std::sync::Arc<std::sync::Mutex<Vec<fleetflow_controlplane::server_provider::MockCall>>>) {
+fn mock_provider() -> (
+    ServerProviderKind,
+    std::sync::Arc<std::sync::Mutex<Vec<fleetflow_controlplane::server_provider::MockCall>>>,
+) {
     let (mock, calls) = MockServerProvider::new();
     (ServerProviderKind::Mock(mock), calls)
 }
@@ -89,9 +92,7 @@ async fn test_server_get_not_found() -> anyhow::Result<()> {
     let client = connect_client(port).await?;
 
     let ch = client.open_channel("server").await?;
-    let resp = ch
-        .request("get", json!({ "slug": "nonexistent" }))
-        .await?;
+    let resp = ch.request("get", json!({ "slug": "nonexistent" })).await?;
 
     assert_eq!(resp["error"].as_str().unwrap(), "server not found");
 
@@ -160,7 +161,10 @@ async fn test_server_create_no_provider() -> anyhow::Result<()> {
         )
         .await?;
 
-    assert_eq!(resp["error"].as_str().unwrap(), "server provider not configured");
+    assert_eq!(
+        resp["error"].as_str().unwrap(),
+        "server provider not configured"
+    );
 
     ch.close().await?;
     client.disconnect().await?;
@@ -264,9 +268,7 @@ async fn test_server_delete_db_only() -> anyhow::Result<()> {
     )
     .await?;
 
-    let resp = ch
-        .request("delete", json!({ "slug": "to-delete" }))
-        .await?;
+    let resp = ch.request("delete", json!({ "slug": "to-delete" })).await?;
     assert!(resp.get("error").is_none(), "delete 成功: {:?}", resp);
     assert_eq!(resp["deleted"].as_str().unwrap(), "to-delete");
 
@@ -335,7 +337,10 @@ async fn test_server_power_on_no_provider() -> anyhow::Result<()> {
         .request("power-on", json!({ "cloud_id": "12345" }))
         .await?;
 
-    assert_eq!(resp["error"].as_str().unwrap(), "server provider not configured");
+    assert_eq!(
+        resp["error"].as_str().unwrap(),
+        "server provider not configured"
+    );
 
     ch.close().await?;
     client.disconnect().await?;

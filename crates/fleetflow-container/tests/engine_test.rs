@@ -82,9 +82,11 @@ async fn test_engine_stop_nonexistent() {
 
     // Step 1 (stop/remove) should complete without errors
     let collected = events.lock().unwrap();
-    assert!(collected
-        .iter()
-        .any(|e| matches!(e, DeployEvent::StepCompleted { step: 1 })));
+    assert!(
+        collected
+            .iter()
+            .any(|e| matches!(e, DeployEvent::StepCompleted { step: 1 }))
+    );
 }
 
 /// alpine コンテナの作成・起動・削除が動作する
@@ -151,10 +153,7 @@ async fn test_engine_deploy_single_service() {
         .ok();
 
     // Cleanup network
-    docker
-        .remove_network("engine-test-test")
-        .await
-        .ok();
+    docker.remove_network("engine-test-test").await.ok();
 }
 
 /// イベントが正しい順序で発行される
@@ -255,8 +254,5 @@ async fn test_engine_events_order() {
         )
         .await
         .ok();
-    docker
-        .remove_network("engine-test-test")
-        .await
-        .ok();
+    docker.remove_network("engine-test-test").await.ok();
 }

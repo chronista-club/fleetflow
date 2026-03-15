@@ -30,10 +30,10 @@ async fn start_test_server(port: u16) -> anyhow::Result<()> {
     });
 
     let state = Arc::new(AppState {
-            db,
-            auth,
-            server_provider: None,
-        });
+        db,
+        auth,
+        server_provider: None,
+    });
 
     let server = ProtocolServer::with_identity(
         "fleetflow-controlplane-test",
@@ -209,11 +209,7 @@ async fn test_deploy_execute_with_tenant_and_project() -> anyhow::Result<()> {
 
     // Docker が利用可能な環境では success、利用不可なら Docker connection error
     if let Some(err) = resp.get("error").and_then(|e| e.as_str()) {
-        assert!(
-            err.contains("Docker"),
-            "Docker 関連のエラーが返る: {}",
-            err
-        );
+        assert!(err.contains("Docker"), "Docker 関連のエラーが返る: {}", err);
     } else {
         // Docker 利用可能: deployment_id と status が返る
         assert!(resp.get("deployment_id").is_some(), "deployment_id が返る");

@@ -352,6 +352,24 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                             );
 
                             // 2. DB にサーバーを登録
+                            let ssh_host = match &spec.ip_address {
+                                Some(ip) if !ip.is_empty() => ip.clone(),
+                                _ => {
+                                    error!("server.create: IP アドレスが取得できませんでした");
+                                    channel
+                                        .send_response(
+                                            msg.id,
+                                            "create",
+                                            json!({
+                                                "error": "server created but no IP address assigned",
+                                                "cloud": spec,
+                                            }),
+                                        )
+                                        .await?;
+                                    continue;
+                                }
+                            };
+
                             let server_model = Server {
                                 id: None,
                                 tenant: tenant.id.unwrap(),
@@ -361,10 +379,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                     "{}core-{}gb",
                                     request.cpu, request.memory_gb
                                 )),
-                                ssh_host: spec
-                                    .ip_address
-                                    .clone()
-                                    .unwrap_or_default(),
+                                ssh_host,
                                 ssh_user: "root".into(),
                                 deploy_path: "/opt/fleetflow".into(),
                                 status: spec.status.to_string(),

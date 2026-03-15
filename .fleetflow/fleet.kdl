@@ -26,7 +26,29 @@ server "fleetflow-cp" {
 
 // === サービス定義 ===
 
-// SurrealDB サービス定義（ワークロードを使わずに直接定義）
+// FleetFlow Control Plane デーモン
+service "fleetflowd" {
+    image "ghcr.io/chronista-club/fleetflowd:${FLEETFLOW_VERSION:-latest}"
+    restart "unless-stopped"
+
+    ports {
+        port host=4510 container=4510
+        port host=32080 container=32080
+    }
+
+    volumes {
+        volume "/etc/fleetflow" "/etc/fleetflow" read-only=true
+        volume "/var/run/docker.sock" "/var/run/docker.sock"
+    }
+
+    env {
+        RUST_LOG "info"
+        CLOUDFLARE_API_TOKEN "${CLOUDFLARE_API_TOKEN}"
+        CLOUDFLARE_ZONE_ID "${CLOUDFLARE_ZONE_ID}"
+    }
+}
+
+// SurrealDB サービス定義（Surreal Cloud 移行後は削除予定）
 service "db" {
     image "surrealdb/surrealdb:v2"
     restart "unless-stopped"
@@ -52,9 +74,11 @@ stage "dev" {
 }
 
 // ライブ環境 (Live) + CP サーバー
-// ポート範囲: 52000台
 stage "live" {
     server "fleetflow-cp"
+
+    service "fleetflowd"
+
     service "db" {
         ports {
             port host=52001 container=8000

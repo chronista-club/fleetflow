@@ -28,7 +28,9 @@ impl ServerProviderKind {
 
     pub async fn list_servers(&self) -> fleetflow_cloud::Result<Vec<ServerSpec>> {
         match self {
-            Self::Sakura(p) => fleetflow_cloud::server_provider::ServerProvider::list_servers(p).await,
+            Self::Sakura(p) => {
+                fleetflow_cloud::server_provider::ServerProvider::list_servers(p).await
+            }
             #[cfg(feature = "test-utils")]
             Self::Mock(_) => Ok(vec![]),
         }
@@ -36,7 +38,9 @@ impl ServerProviderKind {
 
     pub async fn get_server(&self, server_id: &str) -> fleetflow_cloud::Result<ServerSpec> {
         match self {
-            Self::Sakura(p) => fleetflow_cloud::server_provider::ServerProvider::get_server(p, server_id).await,
+            Self::Sakura(p) => {
+                fleetflow_cloud::server_provider::ServerProvider::get_server(p, server_id).await
+            }
             #[cfg(feature = "test-utils")]
             Self::Mock(m) => m.get_server(server_id),
         }
@@ -47,7 +51,9 @@ impl ServerProviderKind {
         request: &CreateServerRequest,
     ) -> fleetflow_cloud::Result<ServerSpec> {
         match self {
-            Self::Sakura(p) => fleetflow_cloud::server_provider::ServerProvider::create_server(p, request).await,
+            Self::Sakura(p) => {
+                fleetflow_cloud::server_provider::ServerProvider::create_server(p, request).await
+            }
             #[cfg(feature = "test-utils")]
             Self::Mock(m) => m.create_server(request),
         }
@@ -59,7 +65,12 @@ impl ServerProviderKind {
         with_disks: bool,
     ) -> fleetflow_cloud::Result<()> {
         match self {
-            Self::Sakura(p) => fleetflow_cloud::server_provider::ServerProvider::delete_server(p, server_id, with_disks).await,
+            Self::Sakura(p) => {
+                fleetflow_cloud::server_provider::ServerProvider::delete_server(
+                    p, server_id, with_disks,
+                )
+                .await
+            }
             #[cfg(feature = "test-utils")]
             Self::Mock(m) => m.delete_server(server_id, with_disks),
         }
@@ -67,7 +78,9 @@ impl ServerProviderKind {
 
     pub async fn power_on(&self, server_id: &str) -> fleetflow_cloud::Result<()> {
         match self {
-            Self::Sakura(p) => fleetflow_cloud::server_provider::ServerProvider::power_on(p, server_id).await,
+            Self::Sakura(p) => {
+                fleetflow_cloud::server_provider::ServerProvider::power_on(p, server_id).await
+            }
             #[cfg(feature = "test-utils")]
             Self::Mock(m) => m.power_on(server_id),
         }
@@ -75,7 +88,9 @@ impl ServerProviderKind {
 
     pub async fn power_off(&self, server_id: &str) -> fleetflow_cloud::Result<()> {
         match self {
-            Self::Sakura(p) => fleetflow_cloud::server_provider::ServerProvider::power_off(p, server_id).await,
+            Self::Sakura(p) => {
+                fleetflow_cloud::server_provider::ServerProvider::power_off(p, server_id).await
+            }
             #[cfg(feature = "test-utils")]
             Self::Mock(m) => m.power_off(server_id),
         }

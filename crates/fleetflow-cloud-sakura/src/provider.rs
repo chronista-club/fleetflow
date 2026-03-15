@@ -349,7 +349,11 @@ impl ServerProvider for SakuraCloudProvider {
         })
     }
 
-    async fn delete_server(&self, server_id: &str, with_disks: bool) -> fleetflow_cloud::Result<()> {
+    async fn delete_server(
+        &self,
+        server_id: &str,
+        with_disks: bool,
+    ) -> fleetflow_cloud::Result<()> {
         SakuraCloudProvider::delete_server(self, server_id, with_disks)
             .await
             .map_err(|e| fleetflow_cloud::CloudError::ApiError(e.to_string()))

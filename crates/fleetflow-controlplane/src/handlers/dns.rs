@@ -75,9 +75,11 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                 zone_id = Some(cf_config.zone_id.clone());
                                 let cf = fleetflow_cloud_cloudflare::dns::CloudflareDns::new(cf_config);
 
-                                // subdomain 部分を抽出（FQDN からドメインを除く）
-                                let subdomain = name.trim_end_matches(&format!(".{}", cf.domain()))
-                                    .trim_end_matches('.');
+                                // subdomain 部分を抽出（FQDN からドメインを除く、または name をそのまま使用）
+                                let domain_suffix = format!(".{}", cf.domain());
+                                let subdomain = name
+                                    .strip_suffix(&domain_suffix)
+                                    .unwrap_or(name);
 
                                 info!(subdomain, content, "dns.create: Cloudflare にレコード作成中");
 
@@ -165,8 +167,10 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                             // 1. Cloudflare からレコード削除
                             if let Ok(cf_config) = fleetflow_cloud_cloudflare::dns::DnsConfig::from_env() {
                                 let cf = fleetflow_cloud_cloudflare::dns::CloudflareDns::new(cf_config);
-                                let subdomain = name.trim_end_matches(&format!(".{}", cf.domain()))
-                                    .trim_end_matches('.');
+                                let domain_suffix = format!(".{}", cf.domain());
+                                let subdomain = name
+                                    .strip_suffix(&domain_suffix)
+                                    .unwrap_or(name);
 
                                 info!(subdomain, "dns.delete: Cloudflare からレコード削除中");
                                 if let Err(e) = cf.remove_record(subdomain).await {

@@ -29,10 +29,10 @@ async fn start_test_server(port: u16) -> anyhow::Result<()> {
     });
 
     let state = Arc::new(AppState {
-            db,
-            auth,
-            server_provider: None,
-        });
+        db,
+        auth,
+        server_provider: None,
+    });
 
     let server = ProtocolServer::with_identity(
         "fleetflow-controlplane-test",
