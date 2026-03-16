@@ -13,7 +13,7 @@ use axum::{
     response::{Html, IntoResponse, Response},
     routing::{get, post},
 };
-use fleetflow_controlplane::auth::Claims;
+use fleetflow_controlplane::model::{AuthContext, TenantRole};
 use fleetflow_controlplane::server::AppState;
 use serde_json::{Value, json};
 use tokio::task::JoinHandle;
@@ -78,15 +78,21 @@ pub async fn start(
 // Auth ミドルウェア
 // ============================================================================
 
-/// Authorization: Bearer <token> を検証し、Claims を request extensions に格納。
-/// Auth0 domain が未設定の場合は認証をスキップ（dev mode）。
+/// Authorization: Bearer <token> を検証し、テナント解決して AuthContext を request extensions に格納。
+/// Auth0 domain が未設定の場合は dev mode（"default" テナント）。
 async fn auth_middleware(
     State(state): State<Arc<WebState>>,
     mut req: Request,
     next: Next,
 ) -> Response {
-    // Auth0 未設定時は認証スキップ（dev mode）
+    // Auth0 未設定時は dev mode: "default" テナントで通す
     if state.auth0_domain.is_empty() {
+        req.extensions_mut().insert(AuthContext {
+            sub: "dev-user".into(),
+            email: Some("dev@localhost".into()),
+            tenant_slug: "default".into(),
+            role: TenantRole::Owner,
+        });
         return next.run(req).await;
     }
 
@@ -106,21 +112,75 @@ async fn auth_middleware(
         }
     };
 
-    match state.app.auth.verify(token).await {
-        Ok(claims) => {
-            debug!(sub = %claims.sub, "API 認証成功");
-            req.extensions_mut().insert(claims);
-            next.run(req).await
-        }
+    let claims = match state.app.auth.verify(token).await {
+        Ok(c) => c,
         Err(e) => {
             tracing::warn!(error = %e, "JWT 検証失敗");
-            (
+            return (
                 StatusCode::UNAUTHORIZED,
                 Json(json!({ "error": "Unauthorized" })),
             )
-                .into_response()
+                .into_response();
         }
-    }
+    };
+
+    // SurrealDB でテナント解決
+    let tenant_user = match state.app.db.resolve_tenant_by_sub(&claims.sub).await {
+        Ok(Some(tu)) => tu,
+        Ok(None) => {
+            tracing::warn!(sub = %claims.sub, "テナント未紐付けユーザー");
+            return (
+                StatusCode::FORBIDDEN,
+                Json(json!({ "error": "No tenant associated with this user" })),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            tracing::error!(error = %e, "テナント解決エラー");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": "Tenant resolution failed" })),
+            )
+                .into_response();
+        }
+    };
+
+    // tenant RecordId → slug 解決
+    let tenant_slug = match state
+        .app
+        .db
+        .get_tenant_by_id(&tenant_user.tenant)
+        .await
+    {
+        Ok(Some(t)) => t.slug,
+        Ok(None) => {
+            tracing::error!(tenant_id = ?tenant_user.tenant, "テナントが見つからない");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": "Tenant not found" })),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            tracing::error!(error = %e, "テナント取得エラー");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": "Tenant lookup failed" })),
+            )
+                .into_response();
+        }
+    };
+
+    let role = tenant_user.role.parse::<TenantRole>().unwrap_or(TenantRole::Member);
+
+    debug!(sub = %claims.sub, tenant = %tenant_slug, role = %role, "API 認証成功");
+    req.extensions_mut().insert(AuthContext {
+        sub: claims.sub,
+        email: claims.email,
+        tenant_slug,
+        role,
+    });
+    next.run(req).await
 }
 
 // ============================================================================
@@ -138,13 +198,14 @@ async fn api_auth_config(State(state): State<Arc<WebState>>) -> Json<Value> {
 
 /// 認証済みユーザー情報を返す
 async fn api_me(req: Request) -> impl IntoResponse {
-    match req.extensions().get::<Claims>() {
-        Some(claims) => (
+    match req.extensions().get::<AuthContext>() {
+        Some(ctx) => (
             StatusCode::OK,
             Json(json!({
-                "sub": claims.sub,
-                "email": claims.email,
-                "permissions": claims.permissions,
+                "sub": ctx.sub,
+                "email": ctx.email,
+                "tenant": ctx.tenant_slug,
+                "role": ctx.role.to_string(),
             })),
         )
             .into_response(),
@@ -164,8 +225,9 @@ async fn api_health() -> Json<Value> {
     Json(json!({ "status": "ok" }))
 }
 
-async fn api_projects(State(state): State<Arc<WebState>>) -> impl IntoResponse {
-    match state.app.db.list_projects_by_tenant("default").await {
+async fn api_projects(State(state): State<Arc<WebState>>, req: Request) -> impl IntoResponse {
+    let ctx = req.extensions().get::<AuthContext>().unwrap();
+    match state.app.db.list_projects_by_tenant(&ctx.tenant_slug).await {
         Ok(projects) => {
             let items: Vec<Value> = projects
                 .iter()
@@ -188,8 +250,9 @@ async fn api_projects(State(state): State<Arc<WebState>>) -> impl IntoResponse {
     }
 }
 
-async fn api_servers(State(state): State<Arc<WebState>>) -> impl IntoResponse {
-    match state.app.db.list_servers_by_tenant("default").await {
+async fn api_servers(State(state): State<Arc<WebState>>, req: Request) -> impl IntoResponse {
+    let ctx = req.extensions().get::<AuthContext>().unwrap();
+    match state.app.db.list_servers_by_tenant(&ctx.tenant_slug).await {
         Ok(servers) => {
             let items: Vec<Value> = servers
                 .iter()
@@ -213,8 +276,9 @@ async fn api_servers(State(state): State<Arc<WebState>>) -> impl IntoResponse {
     }
 }
 
-async fn api_overview(State(state): State<Arc<WebState>>) -> impl IntoResponse {
-    match state.app.db.list_all_stages_by_tenant("default").await {
+async fn api_overview(State(state): State<Arc<WebState>>, req: Request) -> impl IntoResponse {
+    let ctx = req.extensions().get::<AuthContext>().unwrap();
+    match state.app.db.list_all_stages_by_tenant(&ctx.tenant_slug).await {
         Ok(stages) => {
             let items: Vec<Value> = stages
                 .iter()
@@ -236,8 +300,9 @@ async fn api_overview(State(state): State<Arc<WebState>>) -> impl IntoResponse {
     }
 }
 
-async fn api_dns(State(state): State<Arc<WebState>>) -> impl IntoResponse {
-    match state.app.db.list_dns_records_by_tenant("default").await {
+async fn api_dns(State(state): State<Arc<WebState>>, req: Request) -> impl IntoResponse {
+    let ctx = req.extensions().get::<AuthContext>().unwrap();
+    match state.app.db.list_dns_records_by_tenant(&ctx.tenant_slug).await {
         Ok(records) => {
             let items: Vec<Value> = records
                 .iter()
@@ -260,8 +325,9 @@ async fn api_dns(State(state): State<Arc<WebState>>) -> impl IntoResponse {
     }
 }
 
-async fn api_deployments(State(state): State<Arc<WebState>>) -> impl IntoResponse {
-    match state.app.db.list_deployments("default", 20).await {
+async fn api_deployments(State(state): State<Arc<WebState>>, req: Request) -> impl IntoResponse {
+    let ctx = req.extensions().get::<AuthContext>().unwrap();
+    match state.app.db.list_deployments(&ctx.tenant_slug, 20).await {
         Ok(deployments) => {
             let items: Vec<Value> = deployments
                 .iter()
@@ -349,7 +415,9 @@ async fn api_health_check(State(state): State<Arc<WebState>>) -> impl IntoRespon
     }
 }
 
-async fn api_dns_sync(State(state): State<Arc<WebState>>) -> impl IntoResponse {
+async fn api_dns_sync(State(state): State<Arc<WebState>>, req: Request) -> impl IntoResponse {
+    let ctx = req.extensions().get::<AuthContext>().unwrap().clone();
+
     let cf_config = match fleetflow_cloud_cloudflare::dns::DnsConfig::from_env() {
         Ok(c) => c,
         Err(e) => {
@@ -374,7 +442,7 @@ async fn api_dns_sync(State(state): State<Arc<WebState>>) -> impl IntoResponse {
         }
     };
 
-    let db_records = match state.app.db.list_dns_records_by_tenant("default").await {
+    let db_records = match state.app.db.list_dns_records_by_tenant(&ctx.tenant_slug).await {
         Ok(r) => r,
         Err(e) => {
             return (
@@ -385,7 +453,7 @@ async fn api_dns_sync(State(state): State<Arc<WebState>>) -> impl IntoResponse {
         }
     };
 
-    let tenant = match state.app.db.get_tenant_by_slug("default").await {
+    let tenant = match state.app.db.get_tenant_by_slug(&ctx.tenant_slug).await {
         Ok(Some(t)) => t,
         _ => {
             return (

@@ -112,6 +112,17 @@ impl Database {
         created.context("テナント作成結果が空")
     }
 
+    pub async fn get_tenant_by_id(&self, id: &RecordId) -> Result<Option<Tenant>> {
+        let mut result = self
+            .db
+            .query("SELECT * FROM $id")
+            .bind(("id", id.clone()))
+            .await
+            .context("テナント ID 取得失敗")?;
+        let tenants: Vec<Tenant> = result.take(0)?;
+        Ok(tenants.into_iter().next())
+    }
+
     pub async fn get_tenant_by_slug(&self, slug: &str) -> Result<Option<Tenant>> {
         let mut result = self
             .db
@@ -131,6 +142,80 @@ impl Database {
             .context("テナント一覧取得失敗")?;
         let tenants: Vec<Tenant> = result.take(0)?;
         Ok(tenants)
+    }
+
+    // ─────────────────────────────────────────
+    // TenantUser CRUD
+    // ─────────────────────────────────────────
+
+    /// Auth0 sub からテナントを解決する（auth middleware 用）
+    pub async fn resolve_tenant_by_sub(
+        &self,
+        auth0_sub: &str,
+    ) -> Result<Option<TenantUser>> {
+        let mut result = self
+            .db
+            .query("SELECT * FROM tenant_user WHERE auth0_sub = $sub LIMIT 1")
+            .bind(("sub", auth0_sub.to_string()))
+            .await
+            .context("テナントユーザー解決失敗")?;
+        let users: Vec<TenantUser> = result.take(0)?;
+        Ok(users.into_iter().next())
+    }
+
+    /// テナントユーザーを作成
+    pub async fn create_tenant_user(&self, user: &TenantUser) -> Result<TenantUser> {
+        let mut result = self
+            .db
+            .query("CREATE tenant_user CONTENT { auth0_sub: $auth0_sub, tenant: $tenant, role: $role }")
+            .bind(("auth0_sub", user.auth0_sub.clone()))
+            .bind(("tenant", user.tenant.clone()))
+            .bind(("role", user.role.clone()))
+            .await
+            .context("テナントユーザー作成失敗")?;
+        let created: Option<TenantUser> = result.take(0)?;
+        created.context("テナントユーザー作成結果が空")
+    }
+
+    /// テナントのユーザー一覧を取得
+    pub async fn list_tenant_users(&self, tenant_slug: &str) -> Result<Vec<TenantUser>> {
+        let mut result = self
+            .db
+            .query("SELECT * FROM tenant_user WHERE tenant.slug = $tenant_slug ORDER BY role, auth0_sub")
+            .bind(("tenant_slug", tenant_slug.to_string()))
+            .await
+            .context("テナントユーザー一覧取得失敗")?;
+        let users: Vec<TenantUser> = result.take(0)?;
+        Ok(users)
+    }
+
+    /// テナントユーザーの role を更新
+    pub async fn update_tenant_user_role(
+        &self,
+        auth0_sub: &str,
+        new_role: &str,
+    ) -> Result<bool> {
+        let mut result = self
+            .db
+            .query("UPDATE tenant_user SET role = $role WHERE auth0_sub = $sub RETURN AFTER")
+            .bind(("sub", auth0_sub.to_string()))
+            .bind(("role", new_role.to_string()))
+            .await
+            .context("テナントユーザー role 更新失敗")?;
+        let updated: Vec<TenantUser> = result.take(0)?;
+        Ok(!updated.is_empty())
+    }
+
+    /// テナントユーザーを削除
+    pub async fn delete_tenant_user(&self, auth0_sub: &str) -> Result<bool> {
+        let mut result = self
+            .db
+            .query("DELETE FROM tenant_user WHERE auth0_sub = $sub RETURN BEFORE")
+            .bind(("sub", auth0_sub.to_string()))
+            .await
+            .context("テナントユーザー削除失敗")?;
+        let deleted: Vec<TenantUser> = result.take(0)?;
+        Ok(!deleted.is_empty())
     }
 
     // ─────────────────────────────────────────
@@ -648,6 +733,14 @@ DEFINE FIELD IF NOT EXISTS created_at ON dns_record TYPE option<datetime> DEFAUL
 DEFINE FIELD IF NOT EXISTS updated_at ON dns_record TYPE option<datetime> DEFAULT time::now();
 DEFINE INDEX IF NOT EXISTS idx_dns_record_name ON dns_record FIELDS name UNIQUE;
 
+DEFINE TABLE IF NOT EXISTS tenant_user SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS auth0_sub ON tenant_user TYPE string;
+DEFINE FIELD IF NOT EXISTS tenant ON tenant_user TYPE record<tenant>;
+DEFINE FIELD IF NOT EXISTS role ON tenant_user TYPE string DEFAULT 'member';
+DEFINE FIELD IF NOT EXISTS created_at ON tenant_user TYPE option<datetime> DEFAULT time::now();
+DEFINE INDEX IF NOT EXISTS idx_tenant_user_sub ON tenant_user FIELDS auth0_sub UNIQUE;
+DEFINE INDEX IF NOT EXISTS idx_tenant_user_tenant ON tenant_user FIELDS tenant;
+
 DEFINE TABLE IF NOT EXISTS deployment SCHEMAFULL;
 DEFINE FIELD IF NOT EXISTS tenant ON deployment TYPE record<tenant>;
 DEFINE FIELD IF NOT EXISTS project ON deployment TYPE record<project>;
@@ -788,5 +881,94 @@ mod tests {
         let servers = db.list_servers_by_tenant("anycreative").await.unwrap();
         assert_eq!(servers.len(), 1);
         assert_eq!(servers[0].slug, "vps-01");
+    }
+
+    /// テスト用ヘルパー: テナント作成
+    async fn create_test_tenant(db: &Database) -> Tenant {
+        db.create_tenant(&Tenant {
+            id: None,
+            slug: "test-tenant".into(),
+            name: "Test Tenant".into(),
+            auth0_org_id: None,
+            plan: "self-hosted".into(),
+            dns_provider: None,
+            dns_domain: None,
+            dns_zone_id: None,
+            dns_api_token_encrypted: None,
+            created_at: None,
+            updated_at: None,
+        })
+        .await
+        .unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_tenant_user_crud() {
+        let db = Database::connect_memory().await.unwrap();
+        let tenant = create_test_tenant(&db).await;
+        let tenant_id = tenant.id.unwrap();
+
+        // owner 作成
+        let user = TenantUser {
+            id: None,
+            auth0_sub: "auth0|owner123".into(),
+            tenant: tenant_id.clone(),
+            role: "owner".into(),
+            created_at: None,
+        };
+        let created = db.create_tenant_user(&user).await.unwrap();
+        assert!(created.id.is_some());
+        assert_eq!(created.role, "owner");
+
+        // resolve
+        let resolved = db.resolve_tenant_by_sub("auth0|owner123").await.unwrap();
+        assert!(resolved.is_some());
+        let resolved = resolved.unwrap();
+        assert_eq!(resolved.role, "owner");
+
+        // 存在しない sub
+        let not_found = db.resolve_tenant_by_sub("auth0|unknown").await.unwrap();
+        assert!(not_found.is_none());
+
+        // member 追加
+        db.create_tenant_user(&TenantUser {
+            id: None,
+            auth0_sub: "auth0|member456".into(),
+            tenant: tenant_id.clone(),
+            role: "member".into(),
+            created_at: None,
+        })
+        .await
+        .unwrap();
+
+        // 一覧
+        let users = db.list_tenant_users("test-tenant").await.unwrap();
+        assert_eq!(users.len(), 2);
+
+        // role 更新
+        let updated = db
+            .update_tenant_user_role("auth0|member456", "admin")
+            .await
+            .unwrap();
+        assert!(updated);
+        let resolved = db.resolve_tenant_by_sub("auth0|member456").await.unwrap().unwrap();
+        assert_eq!(resolved.role, "admin");
+
+        // 削除
+        let deleted = db.delete_tenant_user("auth0|member456").await.unwrap();
+        assert!(deleted);
+        let users = db.list_tenant_users("test-tenant").await.unwrap();
+        assert_eq!(users.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_get_tenant_by_id() {
+        let db = Database::connect_memory().await.unwrap();
+        let tenant = create_test_tenant(&db).await;
+        let tenant_id = tenant.id.unwrap();
+
+        let found = db.get_tenant_by_id(&tenant_id).await.unwrap();
+        assert!(found.is_some());
+        assert_eq!(found.unwrap().slug, "test-tenant");
     }
 }

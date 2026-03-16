@@ -33,6 +33,76 @@ pub struct TenantPatch {
 }
 
 // ─────────────────────────────────────────────
+// CP-001b: TenantUser（テナント所属ユーザー）
+// ─────────────────────────────────────────────
+
+/// テナントユーザーの役割
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TenantRole {
+    /// テナント全権。1テナントに1人。削除不可
+    Owner,
+    /// ユーザー管理 + 全リソース操作
+    Admin,
+    /// リソース閲覧 + 操作（ユーザー管理不可）
+    Member,
+}
+
+impl std::fmt::Display for TenantRole {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Owner => write!(f, "owner"),
+            Self::Admin => write!(f, "admin"),
+            Self::Member => write!(f, "member"),
+        }
+    }
+}
+
+impl std::str::FromStr for TenantRole {
+    type Err = anyhow::Error;
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s {
+            "owner" => Ok(Self::Owner),
+            "admin" => Ok(Self::Admin),
+            "member" => Ok(Self::Member),
+            _ => Err(anyhow::anyhow!("不明な role: {s}")),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, SurrealValue)]
+pub struct TenantUser {
+    pub id: Option<RecordId>,
+    /// Auth0 user ID (e.g., "auth0|xxx")
+    pub auth0_sub: String,
+    /// テナント参照
+    pub tenant: RecordId,
+    /// 役割: owner / admin / member
+    pub role: String,
+    pub created_at: Option<DateTime<Utc>>,
+}
+
+/// テナント解決結果（auth middleware → handler 受け渡し用）
+#[derive(Debug, Clone)]
+pub struct AuthContext {
+    /// Auth0 user ID
+    pub sub: String,
+    /// Email (from JWT)
+    pub email: Option<String>,
+    /// テナント slug
+    pub tenant_slug: String,
+    /// ユーザーの役割
+    pub role: TenantRole,
+}
+
+impl AuthContext {
+    /// owner or admin かどうか
+    pub fn can_manage_users(&self) -> bool {
+        matches!(self.role, TenantRole::Owner | TenantRole::Admin)
+    }
+}
+
+// ─────────────────────────────────────────────
 // CP-002: Project
 // ─────────────────────────────────────────────
 
