@@ -53,6 +53,16 @@
                 padding: 48px; text-align: center; max-width: 400px; }
   .login-card h2 { color: var(--accent); margin-bottom: 16px; }
   .login-card p { color: var(--text2); margin-bottom: 24px; font-size: 14px; }
+  /* Filter bar */
+  .filter-bar { display: flex; gap: 8px; margin-bottom: 16px; align-items: center; }
+  .filter-bar select, .filter-bar input {
+    background: var(--card); border: 1px solid var(--border); color: var(--text);
+    padding: 6px 10px; border-radius: 6px; font-size: 13px;
+  }
+  .filter-bar label { color: var(--text2); font-size: 13px; }
+  /* Stage row highlight */
+  .stage-row-alert { border-left: 3px solid var(--red); }
+  .stage-row-warn { border-left: 3px solid var(--yellow); }
 </style>
 </head>
 <body>
@@ -72,6 +82,25 @@
     <button class="refresh-btn" onclick="loadAll()">Refresh</button>
   </div>
 
+  <!-- 1st ビュー: Stages Overview -->
+  <div class="card" style="margin-bottom: 24px;">
+    <h2>Stages</h2>
+    <div class="filter-bar" id="stages-filter">
+      <label>Project:</label>
+      <select id="filter-project" onchange="applyStagesFilter()">
+        <option value="">All</option>
+      </select>
+      <label>Status:</label>
+      <select id="filter-status" onchange="applyStagesFilter()">
+        <option value="">All</option>
+        <option value="alert">Alert</option>
+        <option value="online">Online</option>
+        <option value="offline">Offline</option>
+      </select>
+    </div>
+    <div id="stages-content" class="loading">Loading...</div>
+  </div>
+
   <!-- Stats -->
   <div class="grid" id="stats">
     <div class="card">
@@ -89,10 +118,10 @@
     </div>
   </div>
 
-  <!-- Overview matrix -->
+  <!-- Recent Deployments -->
   <div class="card" style="margin-bottom: 24px;">
-    <h2>Project x Stage Matrix</h2>
-    <div id="overview-content" class="loading">Loading...</div>
+    <h2>Recent Deployments</h2>
+    <div id="deploy-content" class="loading">Loading...</div>
   </div>
 
   <!-- Servers -->
@@ -107,12 +136,6 @@
       <h2>Projects</h2>
       <div id="projects-content" class="loading">Loading...</div>
     </div>
-  </div>
-
-  <!-- Deployments -->
-  <div class="card" style="margin-bottom: 24px;">
-    <h2>Recent Deployments</h2>
-    <div id="deploy-content" class="loading">Loading...</div>
   </div>
 
   <!-- DNS Records -->
@@ -375,6 +398,115 @@ function showError(elementId, message) {
   el.className = 'error';
 }
 
+// ============================================================================
+// Stages 1st ビュー
+// ============================================================================
+
+var allStages = [];
+
+async function loadStages() {
+  try {
+    var data = await fetchJSON('/api/stages');
+    allStages = data.stages || [];
+    document.getElementById('stage-count').textContent = allStages.length;
+    populateProjectFilter(allStages);
+    renderStages(allStages);
+  } catch(e) {
+    showError('stages-content', e.message);
+  }
+}
+
+function populateProjectFilter(stages) {
+  var select = document.getElementById('filter-project');
+  var current = select.value;
+  var projects = [];
+  stages.forEach(function(s) {
+    if (projects.indexOf(s.project_slug) === -1) projects.push(s.project_slug);
+  });
+  // Clear and rebuild options via DOM
+  while (select.options.length > 0) select.remove(0);
+  var allOpt = document.createElement('option');
+  allOpt.value = '';
+  allOpt.textContent = 'All';
+  select.appendChild(allOpt);
+  projects.forEach(function(p) {
+    var opt = document.createElement('option');
+    opt.value = p;
+    opt.textContent = p;
+    if (p === current) opt.selected = true;
+    select.appendChild(opt);
+  });
+}
+
+function applyStagesFilter() {
+  var project = document.getElementById('filter-project').value;
+  var status = document.getElementById('filter-status').value;
+  var filtered = allStages.filter(function(s) {
+    if (project && s.project_slug !== project) return false;
+    if (status === 'alert') return s.last_deploy_status === 'failed' || s.server_status === 'offline';
+    if (status === 'online') return s.server_status === 'online';
+    if (status === 'offline') return s.server_status === 'offline';
+    return true;
+  });
+  renderStages(filtered);
+}
+
+function renderStages(stages) {
+  if (stages.length === 0) {
+    replaceContent('stages-content', 'No stages');
+    return;
+  }
+  var rows = stages.map(function(s) {
+    var tr = document.createElement('tr');
+    // 異常行のハイライト
+    if (s.last_deploy_status === 'failed' || s.server_status === 'offline') {
+      tr.className = 'stage-row-alert';
+    } else if (s.last_deploy_status === 'running' || s.last_deploy_status === 'pending') {
+      tr.className = 'stage-row-warn';
+    }
+    // Project
+    var td1 = document.createElement('td');
+    td1.textContent = s.project_name || s.project_slug;
+    tr.appendChild(td1);
+    // Stage
+    var td2 = document.createElement('td');
+    td2.textContent = s.stage;
+    tr.appendChild(td2);
+    // Server
+    var td3 = document.createElement('td');
+    td3.textContent = s.server_slug || '-';
+    tr.appendChild(td3);
+    // Server Status
+    var td4 = document.createElement('td');
+    if (s.server_status) {
+      td4.appendChild(makeBadgeEl(s.server_status));
+    } else {
+      td4.textContent = '-';
+    }
+    tr.appendChild(td4);
+    // Last Deploy
+    var td5 = document.createElement('td');
+    if (s.last_deploy_status) {
+      td5.appendChild(makeBadgeEl(s.last_deploy_status));
+      var timeSpan = document.createElement('span');
+      timeSpan.textContent = ' ' + timeAgo(s.last_deploy_at);
+      timeSpan.style.color = 'var(--text2)';
+      timeSpan.style.fontSize = '12px';
+      td5.appendChild(timeSpan);
+    } else {
+      td5.textContent = '-';
+    }
+    tr.appendChild(td5);
+    // Heartbeat
+    var td6 = document.createElement('td');
+    td6.textContent = timeAgo(s.server_heartbeat);
+    td6.style.color = 'var(--text2)';
+    tr.appendChild(td6);
+    return tr;
+  });
+  replaceContent('stages-content', makeTable(['Project', 'Stage', 'Server', 'Status', 'Last Deploy', 'Heartbeat'], rows));
+}
+
 async function loadProjects() {
   try {
     var data = await fetchJSON('/api/projects');
@@ -428,30 +560,6 @@ async function loadServers() {
     replaceContent('servers-content', makeTable(['Slug', 'Provider', 'Host', 'Status', 'Last Seen'], rows));
   } catch(e) {
     showError('servers-content', e.message);
-  }
-}
-
-async function loadOverview() {
-  try {
-    var data = await fetchJSON('/api/overview');
-    var stages = data.stages || [];
-    document.getElementById('stage-count').textContent = stages.length;
-    if (stages.length === 0) {
-      replaceContent('overview-content', 'No stages deployed');
-      return;
-    }
-    var rows = stages.map(function(s) {
-      var tr = document.createElement('tr');
-      [s.project_name || '-', s.stage || '-'].forEach(function(val) {
-        var td = document.createElement('td');
-        td.textContent = val;
-        tr.appendChild(td);
-      });
-      return tr;
-    });
-    replaceContent('overview-content', makeTable(['Project', 'Stage'], rows));
-  } catch(e) {
-    showError('overview-content', e.message);
   }
 }
 
@@ -557,9 +665,9 @@ async function runDnsSync() {
 }
 
 function loadAll() {
+  loadStages();
   loadProjects();
   loadServers();
-  loadOverview();
   loadDeployments();
   loadDns();
 }
