@@ -77,9 +77,16 @@ pub struct TenantUser {
     pub auth0_sub: String,
     /// テナント参照
     pub tenant: RecordId,
-    /// 役割: owner / admin / member
+    /// 役割: owner / admin / member（DB 上は String）
     pub role: String,
     pub created_at: Option<DateTime<Utc>>,
+}
+
+impl TenantUser {
+    /// role を TenantRole enum として取得
+    pub fn tenant_role(&self) -> TenantRole {
+        self.role.parse().unwrap_or(TenantRole::Member)
+    }
 }
 
 /// テナント解決結果（auth middleware → handler 受け渡し用）

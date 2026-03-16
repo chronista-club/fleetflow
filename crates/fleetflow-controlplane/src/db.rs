@@ -184,7 +184,7 @@ impl Database {
             .query("CREATE tenant_user CONTENT { auth0_sub: $auth0_sub, tenant: $tenant, role: $role }")
             .bind(("auth0_sub", user.auth0_sub.clone()))
             .bind(("tenant", user.tenant.clone()))
-            .bind(("role", user.role.clone()))
+            .bind(("role", user.role.to_string()))
             .await
             .context("テナントユーザー作成失敗")?;
         let created: Option<TenantUser> = result.take(0)?;
@@ -203,25 +203,32 @@ impl Database {
         Ok(users)
     }
 
-    /// テナントユーザーの role を更新
-    pub async fn update_tenant_user_role(&self, auth0_sub: &str, new_role: &str) -> Result<bool> {
+    /// テナントユーザーの role を更新（テナント境界チェック付き）
+    pub async fn update_tenant_user_role(
+        &self,
+        auth0_sub: &str,
+        new_role: &str,
+        tenant_slug: &str,
+    ) -> Result<bool> {
         let mut result = self
             .db
-            .query("UPDATE tenant_user SET role = $role WHERE auth0_sub = $sub RETURN AFTER")
+            .query("UPDATE tenant_user SET role = $role WHERE auth0_sub = $sub AND tenant.slug = $tenant_slug RETURN AFTER")
             .bind(("sub", auth0_sub.to_string()))
             .bind(("role", new_role.to_string()))
+            .bind(("tenant_slug", tenant_slug.to_string()))
             .await
             .context("テナントユーザー role 更新失敗")?;
         let updated: Vec<TenantUser> = result.take(0)?;
         Ok(!updated.is_empty())
     }
 
-    /// テナントユーザーを削除
-    pub async fn delete_tenant_user(&self, auth0_sub: &str) -> Result<bool> {
+    /// テナントユーザーを削除（テナント境界チェック付き）
+    pub async fn delete_tenant_user(&self, auth0_sub: &str, tenant_slug: &str) -> Result<bool> {
         let mut result = self
             .db
-            .query("DELETE FROM tenant_user WHERE auth0_sub = $sub RETURN BEFORE")
+            .query("DELETE FROM tenant_user WHERE auth0_sub = $sub AND tenant.slug = $tenant_slug RETURN BEFORE")
             .bind(("sub", auth0_sub.to_string()))
+            .bind(("tenant_slug", tenant_slug.to_string()))
             .await
             .context("テナントユーザー削除失敗")?;
         let deleted: Vec<TenantUser> = result.take(0)?;
@@ -957,13 +964,12 @@ mod tests {
         };
         let created = db.create_tenant_user(&user).await.unwrap();
         assert!(created.id.is_some());
-        assert_eq!(created.role, "owner");
+        assert_eq!(created.tenant_role(), TenantRole::Owner);
 
         // resolve
         let resolved = db.resolve_tenant_by_sub("auth0|owner123").await.unwrap();
         assert!(resolved.is_some());
-        let resolved = resolved.unwrap();
-        assert_eq!(resolved.role, "owner");
+        assert_eq!(resolved.unwrap().tenant_role(), TenantRole::Owner);
 
         // 存在しない sub
         let not_found = db.resolve_tenant_by_sub("auth0|unknown").await.unwrap();
@@ -984,9 +990,9 @@ mod tests {
         let users = db.list_tenant_users("test-tenant").await.unwrap();
         assert_eq!(users.len(), 2);
 
-        // role 更新
+        // role 更新（テナント境界チェック付き）
         let updated = db
-            .update_tenant_user_role("auth0|member456", "admin")
+            .update_tenant_user_role("auth0|member456", "admin", "test-tenant")
             .await
             .unwrap();
         assert!(updated);
@@ -995,13 +1001,30 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(resolved.role, "admin");
+        assert_eq!(resolved.tenant_role(), TenantRole::Admin);
 
-        // 削除
-        let deleted = db.delete_tenant_user("auth0|member456").await.unwrap();
+        // テナント境界チェック: 別テナントからの更新は失敗
+        let cross_tenant = db
+            .update_tenant_user_role("auth0|member456", "member", "other-tenant")
+            .await
+            .unwrap();
+        assert!(!cross_tenant);
+
+        // 削除（テナント境界チェック付き）
+        let deleted = db
+            .delete_tenant_user("auth0|member456", "test-tenant")
+            .await
+            .unwrap();
         assert!(deleted);
         let users = db.list_tenant_users("test-tenant").await.unwrap();
         assert_eq!(users.len(), 1);
+
+        // テナント境界チェック: 別テナントからの削除は失敗
+        let cross_delete = db
+            .delete_tenant_user("auth0|owner123", "other-tenant")
+            .await
+            .unwrap();
+        assert!(!cross_delete);
     }
 
     #[tokio::test]

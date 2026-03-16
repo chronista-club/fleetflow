@@ -175,11 +175,7 @@ async fn auth_middleware(
         }
     };
 
-    let role = tenant_user
-        .role
-        .parse::<TenantRole>()
-        .unwrap_or(TenantRole::Member);
-
+    let role = tenant_user.tenant_role();
     debug!(sub = %claims.sub, tenant = %tenant_slug, role = %role, "API 認証成功");
     req.extensions_mut().insert(AuthContext {
         sub: claims.sub,
@@ -683,13 +679,13 @@ async fn api_tenant_users_create(
                 .into_response();
         }
     };
-    let role = payload
+    let role_str = payload
         .get("role")
         .and_then(|v| v.as_str())
         .unwrap_or("member");
 
     // role バリデーション（owner は API 経由で作成不可）
-    if !matches!(role, "admin" | "member") {
+    if !matches!(role_str, "admin" | "member") {
         return (
             StatusCode::BAD_REQUEST,
             Json(json!({ "error": "role must be admin or member" })),
@@ -713,7 +709,7 @@ async fn api_tenant_users_create(
         id: None,
         auth0_sub,
         tenant: tenant.id.unwrap(),
-        role: role.to_string(),
+        role: role_str.to_string(),
         created_at: None,
     };
 
@@ -776,10 +772,19 @@ async fn api_tenant_users_update(
     };
 
     // owner の role 変更はブロック
-    if target.role == "owner" {
+    if target.tenant_role() == TenantRole::Owner {
         return (
             StatusCode::FORBIDDEN,
             Json(json!({ "error": "Cannot change owner role" })),
+        )
+            .into_response();
+    }
+
+    // admin が admin を操作するのはブロック（owner のみ admin を操作可能）
+    if ctx.role == TenantRole::Admin && target.tenant_role() == TenantRole::Admin {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({ "error": "Admin cannot modify another admin" })),
         )
             .into_response();
     }
@@ -816,7 +821,12 @@ async fn api_tenant_users_update(
         }
     };
 
-    match state.app.db.update_tenant_user_role(&sub, new_role).await {
+    match state
+        .app
+        .db
+        .update_tenant_user_role(&sub, new_role, &ctx.tenant_slug)
+        .await
+    {
         Ok(true) => (StatusCode::OK, Json(json!({ "updated": true }))).into_response(),
         Ok(false) => (
             StatusCode::NOT_FOUND,
@@ -871,7 +881,7 @@ async fn api_tenant_users_delete(
         }
     };
 
-    if target.role == "owner" {
+    if target.tenant_role() == TenantRole::Owner {
         return (
             StatusCode::FORBIDDEN,
             Json(json!({ "error": "Cannot delete owner" })),
@@ -879,7 +889,21 @@ async fn api_tenant_users_delete(
             .into_response();
     }
 
-    match state.app.db.delete_tenant_user(&sub).await {
+    // admin が admin を削除するのはブロック
+    if ctx.role == TenantRole::Admin && target.tenant_role() == TenantRole::Admin {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({ "error": "Admin cannot delete another admin" })),
+        )
+            .into_response();
+    }
+
+    match state
+        .app
+        .db
+        .delete_tenant_user(&sub, &ctx.tenant_slug)
+        .await
+    {
         Ok(true) => (StatusCode::OK, Json(json!({ "deleted": true }))).into_response(),
         Ok(false) => (
             StatusCode::NOT_FOUND,
