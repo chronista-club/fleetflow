@@ -149,16 +149,30 @@ impl Database {
     // ─────────────────────────────────────────
 
     /// Auth0 sub からテナントを解決する（auth middleware 用）
-    pub async fn resolve_tenant_by_sub(
-        &self,
-        auth0_sub: &str,
-    ) -> Result<Option<TenantUser>> {
+    pub async fn resolve_tenant_by_sub(&self, auth0_sub: &str) -> Result<Option<TenantUser>> {
         let mut result = self
             .db
             .query("SELECT * FROM tenant_user WHERE auth0_sub = $sub LIMIT 1")
             .bind(("sub", auth0_sub.to_string()))
             .await
             .context("テナントユーザー解決失敗")?;
+        let users: Vec<TenantUser> = result.take(0)?;
+        Ok(users.into_iter().next())
+    }
+
+    /// Auth0 sub + テナント slug でテナントユーザーを取得（テナント境界チェック付き）
+    pub async fn resolve_tenant_user_scoped(
+        &self,
+        auth0_sub: &str,
+        tenant_slug: &str,
+    ) -> Result<Option<TenantUser>> {
+        let mut result = self
+            .db
+            .query("SELECT * FROM tenant_user WHERE auth0_sub = $sub AND tenant.slug = $tenant_slug LIMIT 1")
+            .bind(("sub", auth0_sub.to_string()))
+            .bind(("tenant_slug", tenant_slug.to_string()))
+            .await
+            .context("テナントユーザー取得失敗（スコープ付き）")?;
         let users: Vec<TenantUser> = result.take(0)?;
         Ok(users.into_iter().next())
     }
@@ -190,11 +204,7 @@ impl Database {
     }
 
     /// テナントユーザーの role を更新
-    pub async fn update_tenant_user_role(
-        &self,
-        auth0_sub: &str,
-        new_role: &str,
-    ) -> Result<bool> {
+    pub async fn update_tenant_user_role(&self, auth0_sub: &str, new_role: &str) -> Result<bool> {
         let mut result = self
             .db
             .query("UPDATE tenant_user SET role = $role WHERE auth0_sub = $sub RETURN AFTER")
@@ -980,7 +990,11 @@ mod tests {
             .await
             .unwrap();
         assert!(updated);
-        let resolved = db.resolve_tenant_by_sub("auth0|member456").await.unwrap().unwrap();
+        let resolved = db
+            .resolve_tenant_by_sub("auth0|member456")
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(resolved.role, "admin");
 
         // 削除

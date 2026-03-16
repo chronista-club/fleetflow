@@ -59,8 +59,14 @@ pub async fn start(
         .route("/api/health-check", post(api_health_check))
         .route("/api/deployments", get(api_deployments))
         .route("/api/stages", get(api_stages))
-        .route("/api/tenant/users", get(api_tenant_users).post(api_tenant_users_create))
-        .route("/api/tenant/users/:sub", axum::routing::put(api_tenant_users_update).delete(api_tenant_users_delete))
+        .route(
+            "/api/tenant/users",
+            get(api_tenant_users).post(api_tenant_users_create),
+        )
+        .route(
+            "/api/tenant/users/:sub",
+            axum::routing::put(api_tenant_users_update).delete(api_tenant_users_delete),
+        )
         .route("/api/dns/sync", post(api_dns_sync))
         .layer(middleware::from_fn_with_state(
             web_state.clone(),
@@ -149,12 +155,7 @@ async fn auth_middleware(
     };
 
     // tenant RecordId → slug 解決
-    let tenant_slug = match state
-        .app
-        .db
-        .get_tenant_by_id(&tenant_user.tenant)
-        .await
-    {
+    let tenant_slug = match state.app.db.get_tenant_by_id(&tenant_user.tenant).await {
         Ok(Some(t)) => t.slug,
         Ok(None) => {
             tracing::error!(tenant_id = ?tenant_user.tenant, "テナントが見つからない");
@@ -174,7 +175,10 @@ async fn auth_middleware(
         }
     };
 
-    let role = tenant_user.role.parse::<TenantRole>().unwrap_or(TenantRole::Member);
+    let role = tenant_user
+        .role
+        .parse::<TenantRole>()
+        .unwrap_or(TenantRole::Member);
 
     debug!(sub = %claims.sub, tenant = %tenant_slug, role = %role, "API 認証成功");
     req.extensions_mut().insert(AuthContext {
@@ -281,7 +285,12 @@ async fn api_servers(State(state): State<Arc<WebState>>, req: Request) -> impl I
 
 async fn api_overview(State(state): State<Arc<WebState>>, req: Request) -> impl IntoResponse {
     let ctx = req.extensions().get::<AuthContext>().unwrap();
-    match state.app.db.list_all_stages_by_tenant(&ctx.tenant_slug).await {
+    match state
+        .app
+        .db
+        .list_all_stages_by_tenant(&ctx.tenant_slug)
+        .await
+    {
         Ok(stages) => {
             let items: Vec<Value> = stages
                 .iter()
@@ -305,7 +314,12 @@ async fn api_overview(State(state): State<Arc<WebState>>, req: Request) -> impl 
 
 async fn api_dns(State(state): State<Arc<WebState>>, req: Request) -> impl IntoResponse {
     let ctx = req.extensions().get::<AuthContext>().unwrap();
-    match state.app.db.list_dns_records_by_tenant(&ctx.tenant_slug).await {
+    match state
+        .app
+        .db
+        .list_dns_records_by_tenant(&ctx.tenant_slug)
+        .await
+    {
         Ok(records) => {
             let items: Vec<Value> = records
                 .iter()
@@ -445,7 +459,12 @@ async fn api_dns_sync(State(state): State<Arc<WebState>>, req: Request) -> impl 
         }
     };
 
-    let db_records = match state.app.db.list_dns_records_by_tenant(&ctx.tenant_slug).await {
+    let db_records = match state
+        .app
+        .db
+        .list_dns_records_by_tenant(&ctx.tenant_slug)
+        .await
+    {
         Ok(r) => r,
         Err(e) => {
             return (
@@ -669,11 +688,11 @@ async fn api_tenant_users_create(
         .and_then(|v| v.as_str())
         .unwrap_or("member");
 
-    // role バリデーション
-    if !matches!(role, "owner" | "admin" | "member") {
+    // role バリデーション（owner は API 経由で作成不可）
+    if !matches!(role, "admin" | "member") {
         return (
             StatusCode::BAD_REQUEST,
-            Json(json!({ "error": "role must be owner, admin, or member" })),
+            Json(json!({ "error": "role must be admin or member" })),
         )
             .into_response();
     }
@@ -732,8 +751,13 @@ async fn api_tenant_users_update(
             .into_response();
     }
 
-    // 対象ユーザーの現在の role を確認
-    let target = match state.app.db.resolve_tenant_by_sub(&sub).await {
+    // 対象ユーザーの現在の role を確認（テナント境界チェック付き）
+    let target = match state
+        .app
+        .db
+        .resolve_tenant_user_scoped(&sub, &ctx.tenant_slug)
+        .await
+    {
         Ok(Some(u)) => u,
         Ok(None) => {
             return (
@@ -823,8 +847,13 @@ async fn api_tenant_users_delete(
             .into_response();
     }
 
-    // owner は削除不可
-    let target = match state.app.db.resolve_tenant_by_sub(&sub).await {
+    // owner は削除不可（テナント境界チェック付き）
+    let target = match state
+        .app
+        .db
+        .resolve_tenant_user_scoped(&sub, &ctx.tenant_slug)
+        .await
+    {
         Ok(Some(u)) => u,
         Ok(None) => {
             return (
