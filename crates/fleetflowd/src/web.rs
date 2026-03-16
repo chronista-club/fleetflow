@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use axum::{
     Json, Router,
-    extract::{Request, State},
+    extract::{Path, Request, State},
     http::{StatusCode, header},
     middleware::{self, Next},
     response::{Html, IntoResponse, Response},
@@ -59,7 +59,8 @@ pub async fn start(
         .route("/api/health-check", post(api_health_check))
         .route("/api/deployments", get(api_deployments))
         .route("/api/stages", get(api_stages))
-        .route("/api/tenant/users", get(api_tenant_users))
+        .route("/api/tenant/users", get(api_tenant_users).post(api_tenant_users_create))
+        .route("/api/tenant/users/:sub", axum::routing::put(api_tenant_users_update).delete(api_tenant_users_delete))
         .route("/api/dns/sync", post(api_dns_sync))
         .layer(middleware::from_fn_with_state(
             web_state.clone(),
@@ -608,6 +609,254 @@ async fn api_tenant_users(State(state): State<Arc<WebState>>, req: Request) -> i
                 .collect();
             (StatusCode::OK, Json(json!({ "users": items }))).into_response()
         }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": e.to_string() })),
+        )
+            .into_response(),
+    }
+}
+
+/// テナントユーザー作成（owner/admin のみ）
+async fn api_tenant_users_create(
+    State(state): State<Arc<WebState>>,
+    req: Request,
+) -> impl IntoResponse {
+    let ctx = req.extensions().get::<AuthContext>().unwrap().clone();
+
+    if !ctx.can_manage_users() {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({ "error": "Insufficient permissions" })),
+        )
+            .into_response();
+    }
+
+    // body を取得
+    let body = match axum::body::to_bytes(req.into_body(), 1024 * 16).await {
+        Ok(b) => b,
+        Err(_) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({ "error": "Invalid request body" })),
+            )
+                .into_response();
+        }
+    };
+    let payload: Value = match serde_json::from_slice(&body) {
+        Ok(v) => v,
+        Err(_) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({ "error": "Invalid JSON" })),
+            )
+                .into_response();
+        }
+    };
+
+    let auth0_sub = match payload.get("auth0_sub").and_then(|v| v.as_str()) {
+        Some(s) => s.to_string(),
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({ "error": "auth0_sub is required" })),
+            )
+                .into_response();
+        }
+    };
+    let role = payload
+        .get("role")
+        .and_then(|v| v.as_str())
+        .unwrap_or("member");
+
+    // role バリデーション
+    if !matches!(role, "owner" | "admin" | "member") {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "error": "role must be owner, admin, or member" })),
+        )
+            .into_response();
+    }
+
+    // テナント取得
+    let tenant = match state.app.db.get_tenant_by_slug(&ctx.tenant_slug).await {
+        Ok(Some(t)) => t,
+        _ => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": "Tenant not found" })),
+            )
+                .into_response();
+        }
+    };
+
+    let user = fleetflow_controlplane::model::TenantUser {
+        id: None,
+        auth0_sub,
+        tenant: tenant.id.unwrap(),
+        role: role.to_string(),
+        created_at: None,
+    };
+
+    match state.app.db.create_tenant_user(&user).await {
+        Ok(created) => (
+            StatusCode::CREATED,
+            Json(json!({
+                "auth0_sub": created.auth0_sub,
+                "role": created.role,
+                "created_at": created.created_at.map(|d| d.to_rfc3339()),
+            })),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": e.to_string() })),
+        )
+            .into_response(),
+    }
+}
+
+/// テナントユーザー role 更新（owner/admin のみ、owner の role 変更は不可）
+async fn api_tenant_users_update(
+    State(state): State<Arc<WebState>>,
+    Path(sub): Path<String>,
+    req: Request,
+) -> impl IntoResponse {
+    let ctx = req.extensions().get::<AuthContext>().unwrap().clone();
+
+    if !ctx.can_manage_users() {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({ "error": "Insufficient permissions" })),
+        )
+            .into_response();
+    }
+
+    // 対象ユーザーの現在の role を確認
+    let target = match state.app.db.resolve_tenant_by_sub(&sub).await {
+        Ok(Some(u)) => u,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "error": "User not found" })),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": e.to_string() })),
+            )
+                .into_response();
+        }
+    };
+
+    // owner の role 変更はブロック
+    if target.role == "owner" {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({ "error": "Cannot change owner role" })),
+        )
+            .into_response();
+    }
+
+    let body = match axum::body::to_bytes(req.into_body(), 1024 * 16).await {
+        Ok(b) => b,
+        Err(_) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({ "error": "Invalid request body" })),
+            )
+                .into_response();
+        }
+    };
+    let payload: Value = match serde_json::from_slice(&body) {
+        Ok(v) => v,
+        Err(_) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({ "error": "Invalid JSON" })),
+            )
+                .into_response();
+        }
+    };
+
+    let new_role = match payload.get("role").and_then(|v| v.as_str()) {
+        Some(r) if matches!(r, "admin" | "member") => r,
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({ "error": "role must be admin or member" })),
+            )
+                .into_response();
+        }
+    };
+
+    match state.app.db.update_tenant_user_role(&sub, new_role).await {
+        Ok(true) => (StatusCode::OK, Json(json!({ "updated": true }))).into_response(),
+        Ok(false) => (
+            StatusCode::NOT_FOUND,
+            Json(json!({ "error": "User not found" })),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": e.to_string() })),
+        )
+            .into_response(),
+    }
+}
+
+/// テナントユーザー削除（owner/admin のみ、owner は削除不可）
+async fn api_tenant_users_delete(
+    State(state): State<Arc<WebState>>,
+    Path(sub): Path<String>,
+    req: Request,
+) -> impl IntoResponse {
+    let ctx = req.extensions().get::<AuthContext>().unwrap();
+
+    if !ctx.can_manage_users() {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({ "error": "Insufficient permissions" })),
+        )
+            .into_response();
+    }
+
+    // owner は削除不可
+    let target = match state.app.db.resolve_tenant_by_sub(&sub).await {
+        Ok(Some(u)) => u,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "error": "User not found" })),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": e.to_string() })),
+            )
+                .into_response();
+        }
+    };
+
+    if target.role == "owner" {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({ "error": "Cannot delete owner" })),
+        )
+            .into_response();
+    }
+
+    match state.app.db.delete_tenant_user(&sub).await {
+        Ok(true) => (StatusCode::OK, Json(json!({ "deleted": true }))).into_response(),
+        Ok(false) => (
+            StatusCode::NOT_FOUND,
+            Json(json!({ "error": "User not found" })),
+        )
+            .into_response(),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({ "error": e.to_string() })),
