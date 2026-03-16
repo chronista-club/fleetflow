@@ -341,6 +341,35 @@ impl Database {
         Ok(stages)
     }
 
+    /// 1st ビュー用: テナントの全ステージ概要（サーバー・直近デプロイ付き）
+    pub async fn list_stage_overviews(&self, tenant_slug: &str) -> Result<Vec<StageOverview>> {
+        let mut result = self
+            .db
+            .query(
+                r#"
+                SELECT
+                    id,
+                    slug,
+                    description,
+                    project.slug AS project_slug,
+                    project.name AS project_name,
+                    server.slug AS server_slug,
+                    server.status AS server_status,
+                    server.last_heartbeat_at AS server_heartbeat,
+                    (SELECT status, created_at FROM deployment WHERE project = $parent.project AND stage = $parent.slug ORDER BY created_at DESC LIMIT 1)[0].status AS last_deploy_status,
+                    (SELECT status, created_at FROM deployment WHERE project = $parent.project AND stage = $parent.slug ORDER BY created_at DESC LIMIT 1)[0].created_at AS last_deploy_at
+                FROM stage
+                WHERE project.tenant.slug = $tenant_slug
+                ORDER BY project_slug, slug
+                "#,
+            )
+            .bind(("tenant_slug", tenant_slug.to_string()))
+            .await
+            .context("ステージ概要取得失敗")?;
+        let stages: Vec<StageOverview> = result.take(0)?;
+        Ok(stages)
+    }
+
     // ─────────────────────────────────────────
     // Service CRUD
     // ─────────────────────────────────────────
@@ -970,5 +999,106 @@ mod tests {
         let found = db.get_tenant_by_id(&tenant_id).await.unwrap();
         assert!(found.is_some());
         assert_eq!(found.unwrap().slug, "test-tenant");
+    }
+
+    #[tokio::test]
+    async fn test_stage_overviews() {
+        let db = Database::connect_memory().await.unwrap();
+        let tenant = create_test_tenant(&db).await;
+        let tenant_id = tenant.id.unwrap();
+
+        // プロジェクト作成
+        let project = db
+            .create_project(&Project {
+                id: None,
+                tenant: tenant_id.clone(),
+                slug: "myapp".into(),
+                name: "My App".into(),
+                description: None,
+                repository_url: None,
+                created_at: None,
+                updated_at: None,
+            })
+            .await
+            .unwrap();
+
+        // サーバー作成
+        let server = db
+            .register_server(&Server {
+                id: None,
+                tenant: tenant_id.clone(),
+                slug: "vps-01".into(),
+                provider: "sakura-cloud".into(),
+                plan: None,
+                ssh_host: "10.0.0.1".into(),
+                ssh_user: "root".into(),
+                deploy_path: "/opt/apps".into(),
+                status: "online".into(),
+                provision_version: None,
+                tool_versions: None,
+                last_heartbeat_at: None,
+                created_at: None,
+                updated_at: None,
+            })
+            .await
+            .unwrap();
+
+        // ステージ作成（サーバー紐付き）
+        db.create_stage(&Stage {
+            id: None,
+            project: project.id.clone().unwrap(),
+            slug: "live".into(),
+            description: Some("本番環境".into()),
+            server: server.id.clone(),
+            created_at: None,
+            updated_at: None,
+        })
+        .await
+        .unwrap();
+
+        // ステージ作成（サーバーなし）
+        db.create_stage(&Stage {
+            id: None,
+            project: project.id.clone().unwrap(),
+            slug: "dev".into(),
+            description: None,
+            server: None,
+            created_at: None,
+            updated_at: None,
+        })
+        .await
+        .unwrap();
+
+        // デプロイ作成
+        db.create_deployment(&Deployment {
+            id: None,
+            tenant: tenant_id.clone(),
+            project: project.id.clone().unwrap(),
+            stage: "live".into(),
+            server_slug: "vps-01".into(),
+            status: "success".into(),
+            command: "deploy live".into(),
+            log: None,
+            started_at: None,
+            finished_at: None,
+            created_at: None,
+        })
+        .await
+        .unwrap();
+
+        // 概要取得
+        let overviews = db.list_stage_overviews("test-tenant").await.unwrap();
+        assert_eq!(overviews.len(), 2);
+
+        // dev は先（アルファベット順）、live は後
+        let dev = overviews.iter().find(|s| s.slug == "dev").unwrap();
+        assert_eq!(dev.project_slug, "myapp");
+        assert!(dev.server_slug.is_none());
+        assert!(dev.last_deploy_status.is_none());
+
+        let live = overviews.iter().find(|s| s.slug == "live").unwrap();
+        assert_eq!(live.server_slug.as_deref(), Some("vps-01"));
+        assert_eq!(live.server_status.as_deref(), Some("online"));
+        assert_eq!(live.last_deploy_status.as_deref(), Some("success"));
     }
 }

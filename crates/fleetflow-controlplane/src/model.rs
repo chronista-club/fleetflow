@@ -151,6 +151,26 @@ pub struct StageWithProject {
     pub tenant_slug: String,
 }
 
+/// 1st ビュー用: ステージ概要（サーバー・デプロイ情報付き）
+#[derive(Debug, Clone, Serialize, Deserialize, SurrealValue)]
+pub struct StageOverview {
+    pub id: Option<RecordId>,
+    pub slug: String,
+    pub description: Option<String>,
+    pub project_slug: String,
+    pub project_name: String,
+    /// サーバー slug（紐付いている場合）
+    pub server_slug: Option<String>,
+    /// サーバーステータス: online / offline / unknown
+    pub server_status: Option<String>,
+    /// サーバー最終ハートビート
+    pub server_heartbeat: Option<DateTime<Utc>>,
+    /// 直近デプロイのステータス: success / failed / running / pending
+    pub last_deploy_status: Option<String>,
+    /// 直近デプロイの時刻
+    pub last_deploy_at: Option<DateTime<Utc>>,
+}
+
 // ─────────────────────────────────────────────
 // CP-004: Service
 // ─────────────────────────────────────────────

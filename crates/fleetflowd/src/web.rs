@@ -58,6 +58,8 @@ pub async fn start(
         .route("/api/dns", get(api_dns))
         .route("/api/health-check", post(api_health_check))
         .route("/api/deployments", get(api_deployments))
+        .route("/api/stages", get(api_stages))
+        .route("/api/tenant/users", get(api_tenant_users))
         .route("/api/dns/sync", post(api_dns_sync))
         .layer(middleware::from_fn_with_state(
             web_state.clone(),
@@ -515,6 +517,103 @@ async fn api_dns_sync(State(state): State<Arc<WebState>>, req: Request) -> impl 
         })),
     )
         .into_response()
+}
+
+// ============================================================================
+// Stages API（1st ビュー）
+// ============================================================================
+
+/// テナントのステージ一覧（サーバー・デプロイ情報付き、優先度ソート済み）
+async fn api_stages(State(state): State<Arc<WebState>>, req: Request) -> impl IntoResponse {
+    let ctx = req.extensions().get::<AuthContext>().unwrap();
+    match state.app.db.list_stage_overviews(&ctx.tenant_slug).await {
+        Ok(mut stages) => {
+            // 優先度ソート: 異常が上に来る
+            stages.sort_by(|a, b| {
+                let priority = |s: &fleetflow_controlplane::model::StageOverview| -> u8 {
+                    // デプロイ失敗
+                    if s.last_deploy_status.as_deref() == Some("failed") {
+                        return 0;
+                    }
+                    // サーバー offline
+                    if s.server_status.as_deref() == Some("offline") {
+                        return 1;
+                    }
+                    // デプロイ進行中
+                    if matches!(
+                        s.last_deploy_status.as_deref(),
+                        Some("running") | Some("pending")
+                    ) {
+                        return 2;
+                    }
+                    // 正常
+                    3
+                };
+                priority(a).cmp(&priority(b))
+            });
+
+            let items: Vec<Value> = stages
+                .iter()
+                .map(|s| {
+                    json!({
+                        "project_slug": s.project_slug,
+                        "project_name": s.project_name,
+                        "stage": s.slug,
+                        "description": s.description,
+                        "server_slug": s.server_slug,
+                        "server_status": s.server_status,
+                        "server_heartbeat": s.server_heartbeat.map(|d| d.to_rfc3339()),
+                        "last_deploy_status": s.last_deploy_status,
+                        "last_deploy_at": s.last_deploy_at.map(|d| d.to_rfc3339()),
+                    })
+                })
+                .collect();
+            (StatusCode::OK, Json(json!({ "stages": items }))).into_response()
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": e.to_string() })),
+        )
+            .into_response(),
+    }
+}
+
+// ============================================================================
+// Tenant Users API
+// ============================================================================
+
+/// テナントユーザー一覧（owner/admin のみ）
+async fn api_tenant_users(State(state): State<Arc<WebState>>, req: Request) -> impl IntoResponse {
+    let ctx = req.extensions().get::<AuthContext>().unwrap();
+
+    if !ctx.can_manage_users() {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({ "error": "Insufficient permissions" })),
+        )
+            .into_response();
+    }
+
+    match state.app.db.list_tenant_users(&ctx.tenant_slug).await {
+        Ok(users) => {
+            let items: Vec<Value> = users
+                .iter()
+                .map(|u| {
+                    json!({
+                        "auth0_sub": u.auth0_sub,
+                        "role": u.role,
+                        "created_at": u.created_at.map(|d| d.to_rfc3339()),
+                    })
+                })
+                .collect();
+            (StatusCode::OK, Json(json!({ "users": items }))).into_response()
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": e.to_string() })),
+        )
+            .into_response(),
+    }
 }
 
 // ============================================================================
