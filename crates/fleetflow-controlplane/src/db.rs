@@ -417,6 +417,81 @@ impl Database {
         Ok(services)
     }
 
+    /// 展開ビュー用: プロジェクト slug + ステージ slug からサービス一覧を取得
+    pub async fn list_services_by_project_stage(
+        &self,
+        tenant_slug: &str,
+        project_slug: &str,
+        stage_slug: &str,
+    ) -> Result<Vec<Service>> {
+        let mut result = self
+            .db
+            .query(
+                r#"
+                SELECT * FROM service
+                WHERE stage.slug = $stage_slug
+                  AND stage.project.slug = $project_slug
+                  AND stage.project.tenant.slug = $tenant_slug
+                ORDER BY slug
+                "#,
+            )
+            .bind(("tenant_slug", tenant_slug.to_string()))
+            .bind(("project_slug", project_slug.to_string()))
+            .bind(("stage_slug", stage_slug.to_string()))
+            .await
+            .context("ステージサービス一覧取得失敗")?;
+        let services: Vec<Service> = result.take(0)?;
+        Ok(services)
+    }
+
+    /// 展開ビュー用: プロジェクト slug + ステージ slug からデプロイ履歴を取得
+    pub async fn list_deployments_by_project_stage(
+        &self,
+        tenant_slug: &str,
+        project_slug: &str,
+        stage_slug: &str,
+        limit: usize,
+    ) -> Result<Vec<Deployment>> {
+        let mut result = self
+            .db
+            .query(
+                r#"
+                SELECT * FROM deployment
+                WHERE tenant.slug = $tenant_slug
+                  AND project.slug = $project_slug
+                  AND stage = $stage_slug
+                ORDER BY created_at DESC
+                LIMIT $limit
+                "#,
+            )
+            .bind(("tenant_slug", tenant_slug.to_string()))
+            .bind(("project_slug", project_slug.to_string()))
+            .bind(("stage_slug", stage_slug.to_string()))
+            .bind(("limit", limit as i64))
+            .await
+            .context("ステージデプロイ履歴取得失敗")?;
+        let deployments: Vec<Deployment> = result.take(0)?;
+        Ok(deployments)
+    }
+
+    /// デプロイログ取得（ID 文字列で検索、テナント境界チェック付き）
+    pub async fn get_deployment_log(
+        &self,
+        id_key: &str,
+        tenant_slug: &str,
+    ) -> Result<Option<Deployment>> {
+        let record_id = RecordId::new("deployment", id_key);
+        let mut result = self
+            .db
+            .query("SELECT * FROM $id WHERE tenant.slug = $tenant_slug LIMIT 1")
+            .bind(("id", record_id))
+            .bind(("tenant_slug", tenant_slug.to_string()))
+            .await
+            .context("デプロイログ取得失敗")?;
+        let deployments: Vec<Deployment> = result.take(0)?;
+        Ok(deployments.into_iter().next())
+    }
+
     // ─────────────────────────────────────────
     // Server CRUD
     // ─────────────────────────────────────────

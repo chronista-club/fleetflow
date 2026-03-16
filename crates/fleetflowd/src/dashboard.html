@@ -63,6 +63,16 @@
   /* Stage row highlight */
   .stage-row-alert { border-left: 3px solid var(--red); }
   .stage-row-warn { border-left: 3px solid var(--yellow); }
+  /* Expandable stage detail */
+  tr.stage-clickable { cursor: pointer; }
+  tr.stage-clickable:hover { background: rgba(88,166,255,0.05); }
+  .stage-detail { background: var(--bg); padding: 16px; }
+  .stage-detail h4 { font-size: 13px; color: var(--accent); margin: 12px 0 6px 0; }
+  .stage-detail h4:first-child { margin-top: 0; }
+  .stage-detail table { margin-bottom: 8px; }
+  .log-pre { background: #0a0e14; border: 1px solid var(--border); border-radius: 4px;
+             padding: 12px; font-family: monospace; font-size: 12px; color: var(--text2);
+             max-height: 300px; overflow: auto; white-space: pre-wrap; word-break: break-all; }
 </style>
 </head>
 <body>
@@ -502,9 +512,145 @@ function renderStages(stages) {
     td6.textContent = timeAgo(s.server_heartbeat);
     td6.style.color = 'var(--text2)';
     tr.appendChild(td6);
+    // クリックで展開
+    tr.className = (tr.className ? tr.className + ' ' : '') + 'stage-clickable';
+    tr.addEventListener('click', function() {
+      toggleStageDetail(tr, s.project_slug, s.stage);
+    });
     return tr;
   });
   replaceContent('stages-content', makeTable(['Project', 'Stage', 'Server', 'Status', 'Last Deploy', 'Heartbeat'], rows));
+}
+
+// ============================================================================
+// 展開ビュー
+// ============================================================================
+
+function toggleStageDetail(row, projectSlug, stageSlug) {
+  var nextRow = row.nextElementSibling;
+  if (nextRow && nextRow.classList.contains('stage-detail-row')) {
+    nextRow.remove();
+    return;
+  }
+  var detailRow = document.createElement('tr');
+  detailRow.className = 'stage-detail-row';
+  var detailTd = document.createElement('td');
+  detailTd.colSpan = 6;
+  detailTd.className = 'stage-detail';
+  detailTd.textContent = 'Loading...';
+  detailRow.appendChild(detailTd);
+  row.parentNode.insertBefore(detailRow, row.nextSibling);
+  loadStageDetail(detailTd, projectSlug, stageSlug);
+}
+
+async function loadStageDetail(container, projectSlug, stageSlug) {
+  try {
+    var basePath = '/api/stages/' + encodeURIComponent(projectSlug) + '/' + encodeURIComponent(stageSlug);
+    var servicesData = fetchJSON(basePath + '/services');
+    var deploysData = fetchJSON(basePath + '/deployments');
+    var results = await Promise.all([servicesData, deploysData]);
+    var services = results[0].services || [];
+    var deploys = results[1].deployments || [];
+
+    container.textContent = '';
+
+    // Services
+    var h4s = document.createElement('h4');
+    h4s.textContent = 'Services (' + services.length + ')';
+    container.appendChild(h4s);
+    if (services.length > 0) {
+      var svcRows = services.map(function(svc) {
+        var tr = document.createElement('tr');
+        [svc.slug, svc.image, svc.desired_status].forEach(function(val) {
+          var td = document.createElement('td');
+          td.textContent = val || '-';
+          tr.appendChild(td);
+        });
+        return tr;
+      });
+      container.appendChild(makeTable(['Service', 'Image', 'Status'], svcRows));
+    } else {
+      var noSvc = document.createElement('div');
+      noSvc.textContent = 'No services';
+      noSvc.style.color = 'var(--text2)';
+      container.appendChild(noSvc);
+    }
+
+    // Deployments
+    var h4d = document.createElement('h4');
+    h4d.textContent = 'Deployments (' + deploys.length + ')';
+    container.appendChild(h4d);
+    if (deploys.length > 0) {
+      var depRows = deploys.map(function(d) {
+        var tr = document.createElement('tr');
+        // Command
+        var cmdTd = document.createElement('td');
+        var cmd = d.command || '-';
+        if (cmd.length > 40) cmd = cmd.substring(0, 39) + '\u2026';
+        cmdTd.textContent = cmd;
+        tr.appendChild(cmdTd);
+        // Server
+        var srvTd = document.createElement('td');
+        srvTd.textContent = d.server_slug || '-';
+        tr.appendChild(srvTd);
+        // Status
+        var stTd = document.createElement('td');
+        stTd.appendChild(makeBadgeEl(d.status));
+        tr.appendChild(stTd);
+        // Time
+        var timeTd = document.createElement('td');
+        timeTd.textContent = timeAgo(d.started_at);
+        timeTd.style.color = 'var(--text2)';
+        tr.appendChild(timeTd);
+        // Log button
+        var logTd = document.createElement('td');
+        if (d.has_log && d.id) {
+          var logBtn = document.createElement('button');
+          logBtn.className = 'refresh-btn';
+          logBtn.textContent = 'Log';
+          logBtn.style.padding = '2px 8px';
+          logBtn.style.fontSize = '11px';
+          logBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            showDeployLog(container, d.id);
+          });
+          logTd.appendChild(logBtn);
+        }
+        tr.appendChild(logTd);
+        return tr;
+      });
+      container.appendChild(makeTable(['Command', 'Server', 'Status', 'Time', ''], depRows));
+    } else {
+      var noDep = document.createElement('div');
+      noDep.textContent = 'No deployments';
+      noDep.style.color = 'var(--text2)';
+      container.appendChild(noDep);
+    }
+  } catch(e) {
+    container.textContent = '';
+    var errDiv = document.createElement('div');
+    errDiv.className = 'error';
+    errDiv.textContent = e.message;
+    container.appendChild(errDiv);
+  }
+}
+
+async function showDeployLog(container, deployId) {
+  // 既存のログ表示があれば消す
+  var existing = container.querySelector('.log-pre');
+  if (existing) { existing.remove(); return; }
+  try {
+    var data = await fetchJSON('/api/deployments/' + encodeURIComponent(deployId) + '/log');
+    var pre = document.createElement('pre');
+    pre.className = 'log-pre';
+    pre.textContent = data.log || '(no log)';
+    container.appendChild(pre);
+  } catch(e) {
+    var errPre = document.createElement('pre');
+    errPre.className = 'log-pre error';
+    errPre.textContent = e.message;
+    container.appendChild(errPre);
+  }
 }
 
 async function loadProjects() {

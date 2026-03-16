@@ -67,6 +67,15 @@ pub async fn start(
             "/api/tenant/users/:sub",
             axum::routing::put(api_tenant_users_update).delete(api_tenant_users_delete),
         )
+        .route(
+            "/api/stages/:project/:stage/services",
+            get(api_stage_services),
+        )
+        .route(
+            "/api/stages/:project/:stage/deployments",
+            get(api_stage_deployments),
+        )
+        .route("/api/deployments/:id/log", get(api_deployment_log))
         .route("/api/dns/sync", post(api_dns_sync))
         .layer(middleware::from_fn_with_state(
             web_state.clone(),
@@ -586,6 +595,116 @@ async fn api_stages(State(state): State<Arc<WebState>>, req: Request) -> impl In
                 .collect();
             (StatusCode::OK, Json(json!({ "stages": items }))).into_response()
         }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": e.to_string() })),
+        )
+            .into_response(),
+    }
+}
+
+// ============================================================================
+// Stage Detail API（展開ビュー）
+// ============================================================================
+
+/// ステージのサービス一覧
+async fn api_stage_services(
+    State(state): State<Arc<WebState>>,
+    Path((project, stage)): Path<(String, String)>,
+    req: Request,
+) -> impl IntoResponse {
+    let ctx = req.extensions().get::<AuthContext>().unwrap();
+    match state
+        .app
+        .db
+        .list_services_by_project_stage(&ctx.tenant_slug, &project, &stage)
+        .await
+    {
+        Ok(services) => {
+            let items: Vec<Value> = services
+                .iter()
+                .map(|s| {
+                    json!({
+                        "slug": s.slug,
+                        "image": s.image,
+                        "desired_status": s.desired_status,
+                        "config": s.config,
+                    })
+                })
+                .collect();
+            (StatusCode::OK, Json(json!({ "services": items }))).into_response()
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": e.to_string() })),
+        )
+            .into_response(),
+    }
+}
+
+/// ステージのデプロイ履歴
+async fn api_stage_deployments(
+    State(state): State<Arc<WebState>>,
+    Path((project, stage)): Path<(String, String)>,
+    req: Request,
+) -> impl IntoResponse {
+    let ctx = req.extensions().get::<AuthContext>().unwrap();
+    match state
+        .app
+        .db
+        .list_deployments_by_project_stage(&ctx.tenant_slug, &project, &stage, 10)
+        .await
+    {
+        Ok(deployments) => {
+            let items: Vec<Value> = deployments
+                .iter()
+                .map(|d| {
+                    json!({
+                        "id": d.id.as_ref().map(|id| serde_json::to_value(id).ok()),
+                        "status": d.status,
+                        "command": d.command,
+                        "server_slug": d.server_slug,
+                        "started_at": d.started_at.map(|t| t.to_rfc3339()),
+                        "finished_at": d.finished_at.map(|t| t.to_rfc3339()),
+                        "has_log": d.log.is_some(),
+                    })
+                })
+                .collect();
+            (StatusCode::OK, Json(json!({ "deployments": items }))).into_response()
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": e.to_string() })),
+        )
+            .into_response(),
+    }
+}
+
+/// デプロイログ取得
+async fn api_deployment_log(
+    State(state): State<Arc<WebState>>,
+    Path(id): Path<String>,
+    req: Request,
+) -> impl IntoResponse {
+    let ctx = req.extensions().get::<AuthContext>().unwrap();
+
+    match state.app.db.get_deployment_log(&id, &ctx.tenant_slug).await {
+        Ok(Some(d)) => (
+            StatusCode::OK,
+            Json(json!({
+                "status": d.status,
+                "command": d.command,
+                "log": d.log,
+                "started_at": d.started_at.map(|t| t.to_rfc3339()),
+                "finished_at": d.finished_at.map(|t| t.to_rfc3339()),
+            })),
+        )
+            .into_response(),
+        Ok(None) => (
+            StatusCode::NOT_FOUND,
+            Json(json!({ "error": "Deployment not found" })),
+        )
+            .into_response(),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({ "error": e.to_string() })),
