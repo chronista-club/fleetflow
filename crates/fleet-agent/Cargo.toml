@@ -1,0 +1,42 @@
+[package]
+name = "fleet-agent"
+description = "FleetFlow server agent — deploys, monitors, and reports"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "fleet_agent"
+path = "src/lib.rs"
+
+[[bin]]
+name = "fleet-agent"
+path = "src/main.rs"
+
+[dependencies]
+# Async
+tokio.workspace = true
+
+# Error handling
+anyhow.workspace = true
+
+# Logging
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+
+# Unison Protocol (QUIC)
+unison.workspace = true
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
+
+# CLI
+clap.workspace = true
+
+# Dev
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
