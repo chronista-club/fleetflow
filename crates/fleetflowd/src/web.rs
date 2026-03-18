@@ -556,23 +556,27 @@ async fn api_stages(State(state): State<Arc<WebState>>, req: Request) -> impl In
             // 優先度ソート: 異常が上に来る
             stages.sort_by(|a, b| {
                 let priority = |s: &fleetflow_controlplane::model::StageOverview| -> u8 {
+                    // アクティブアラートあり
+                    if s.alert_count.unwrap_or(0) > 0 {
+                        return 0;
+                    }
                     // デプロイ失敗
                     if s.last_deploy_status.as_deref() == Some("failed") {
-                        return 0;
+                        return 1;
                     }
                     // サーバー offline
                     if s.server_status.as_deref() == Some("offline") {
-                        return 1;
+                        return 2;
                     }
                     // デプロイ進行中
                     if matches!(
                         s.last_deploy_status.as_deref(),
                         Some("running") | Some("pending")
                     ) {
-                        return 2;
+                        return 3;
                     }
                     // 正常
-                    3
+                    4
                 };
                 priority(a).cmp(&priority(b))
             });
@@ -590,6 +594,7 @@ async fn api_stages(State(state): State<Arc<WebState>>, req: Request) -> impl In
                         "server_heartbeat": s.server_heartbeat.map(|d| d.to_rfc3339()),
                         "last_deploy_status": s.last_deploy_status,
                         "last_deploy_at": s.last_deploy_at.map(|d| d.to_rfc3339()),
+                        "alert_count": s.alert_count.unwrap_or(0),
                     })
                 })
                 .collect();

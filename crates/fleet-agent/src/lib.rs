@@ -3,3 +3,4 @@
 pub mod agent;
 pub mod deploy;
 pub mod heartbeat;
+pub mod monitor;

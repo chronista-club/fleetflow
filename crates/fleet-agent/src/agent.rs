@@ -11,12 +11,15 @@ use unison::network::client::ProtocolClient;
 
 use crate::deploy;
 use crate::heartbeat;
+use crate::monitor;
 
 pub struct AgentConfig {
     pub cp_endpoint: String,
     pub server_slug: String,
     pub heartbeat_interval_secs: u64,
     pub deploy_base: String,
+    pub monitor_interval_secs: u64,
+    pub restart_threshold: u32,
 }
 
 /// Agent メインループ
@@ -59,10 +62,23 @@ async fn run_session(config: &AgentConfig) -> Result<()> {
         heartbeat::run_loop(&hb_client, &hb_slug, hb_interval).await;
     });
 
+    // モニタータスク起動
+    let mon_client = Arc::clone(&client);
+    let mon_slug = config.server_slug.clone();
+    let mon_config = monitor::MonitorConfig {
+        interval_secs: config.monitor_interval_secs,
+        restart_threshold: config.restart_threshold,
+        alert_cooldown_secs: 300,
+    };
+    let mon_handle = tokio::spawn(async move {
+        monitor::run_loop(&mon_client, &mon_slug, &mon_config).await;
+    });
+
     // コマンド受信ループ
     let result = command_loop(&client, &config.server_slug, &config.deploy_base).await;
 
     hb_handle.abort();
+    mon_handle.abort();
     result
 }
 

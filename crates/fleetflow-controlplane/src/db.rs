@@ -374,7 +374,8 @@ impl Database {
                     server.status AS server_status,
                     server.last_heartbeat_at AS server_heartbeat,
                     (SELECT status, created_at FROM deployment WHERE project = $parent.project AND stage = $parent.slug ORDER BY created_at DESC LIMIT 1)[0].status AS last_deploy_status,
-                    (SELECT status, created_at FROM deployment WHERE project = $parent.project AND stage = $parent.slug ORDER BY created_at DESC LIMIT 1)[0].created_at AS last_deploy_at
+                    (SELECT status, created_at FROM deployment WHERE project = $parent.project AND stage = $parent.slug ORDER BY created_at DESC LIMIT 1)[0].created_at AS last_deploy_at,
+                    (SELECT count() FROM alert WHERE server_slug = $parent.server.slug AND resolved = false GROUP ALL)[0].count AS alert_count
                 FROM stage
                 WHERE project.tenant.slug = $tenant_slug
                 ORDER BY project_slug, slug
@@ -757,6 +758,85 @@ impl Database {
         let deployments: Vec<Deployment> = result.take(0)?;
         Ok(deployments)
     }
+
+    // ─────────────────────────────────────────
+    // Alert CRUD
+    // ─────────────────────────────────────────
+
+    /// 同一 (server_slug, container_name, alert_type) で未解決アラートがあれば更新、なければ作成
+    pub async fn upsert_alert(&self, alert: &Alert) -> Result<Alert> {
+        let mut result = self
+            .db
+            .query(
+                r#"
+                LET $existing = (SELECT * FROM alert
+                    WHERE server_slug = $server_slug
+                    AND container_name = $container_name
+                    AND alert_type = $alert_type
+                    AND resolved = false
+                    LIMIT 1);
+                IF array::len($existing) > 0 THEN
+                    (UPDATE $existing[0].id SET
+                        severity = $severity,
+                        message = $message)
+                ELSE
+                    (CREATE alert CONTENT {
+                        tenant: $tenant,
+                        server_slug: $server_slug,
+                        container_name: $container_name,
+                        alert_type: $alert_type,
+                        severity: $severity,
+                        message: $message,
+                        resolved: false
+                    })
+                END
+                "#,
+            )
+            .bind(("tenant", alert.tenant.clone()))
+            .bind(("server_slug", alert.server_slug.clone()))
+            .bind(("container_name", alert.container_name.clone()))
+            .bind(("alert_type", alert.alert_type.clone()))
+            .bind(("severity", alert.severity.clone()))
+            .bind(("message", alert.message.clone()))
+            .await
+            .context("アラート upsert 失敗")?;
+        // IF-ELSE 結果は statement index 1
+        let created: Option<Alert> = result.take(1)?;
+        created.context("アラート upsert 結果が空")
+    }
+
+    /// コンテナ正常復帰時に該当アラートを解決済みにする
+    pub async fn resolve_alerts(
+        &self,
+        server_slug: &str,
+        container_name: &str,
+    ) -> Result<()> {
+        self.db
+            .query(
+                "UPDATE alert SET resolved = true, resolved_at = time::now() WHERE server_slug = $server_slug AND container_name = $container_name AND resolved = false",
+            )
+            .bind(("server_slug", server_slug.to_string()))
+            .bind(("container_name", container_name.to_string()))
+            .await
+            .context("アラート解決失敗")?;
+        Ok(())
+    }
+
+    /// サーバーのアクティブアラート数を取得
+    pub async fn count_active_alerts_by_server(&self, server_slug: &str) -> Result<i64> {
+        let mut result = self
+            .db
+            .query(
+                "SELECT count() AS count FROM alert WHERE server_slug = $server_slug AND resolved = false GROUP ALL",
+            )
+            .bind(("server_slug", server_slug.to_string()))
+            .await
+            .context("アラートカウント取得失敗")?;
+        let row: Option<serde_json::Value> = result.take(0)?;
+        Ok(row
+            .and_then(|v| v["count"].as_i64())
+            .unwrap_or(0))
+    }
 }
 
 /// SurrealDB schema definition.
@@ -874,6 +954,19 @@ DEFINE FIELD IF NOT EXISTS started_at ON deployment TYPE option<datetime>;
 DEFINE FIELD IF NOT EXISTS finished_at ON deployment TYPE option<datetime>;
 DEFINE FIELD IF NOT EXISTS created_at ON deployment TYPE option<datetime> DEFAULT time::now();
 DEFINE INDEX IF NOT EXISTS idx_deployment_project_stage ON deployment FIELDS project, stage;
+
+DEFINE TABLE IF NOT EXISTS alert SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS tenant ON alert TYPE record<tenant>;
+DEFINE FIELD IF NOT EXISTS server_slug ON alert TYPE string;
+DEFINE FIELD IF NOT EXISTS container_name ON alert TYPE string;
+DEFINE FIELD IF NOT EXISTS alert_type ON alert TYPE string;
+DEFINE FIELD IF NOT EXISTS severity ON alert TYPE string DEFAULT 'warning';
+DEFINE FIELD IF NOT EXISTS message ON alert TYPE string;
+DEFINE FIELD IF NOT EXISTS resolved ON alert TYPE bool DEFAULT false;
+DEFINE FIELD IF NOT EXISTS resolved_at ON alert TYPE option<datetime>;
+DEFINE FIELD IF NOT EXISTS created_at ON alert TYPE option<datetime> DEFAULT time::now();
+DEFINE INDEX IF NOT EXISTS idx_alert_tenant ON alert FIELDS tenant;
+DEFINE INDEX IF NOT EXISTS idx_alert_active ON alert FIELDS server_slug, container_name, alert_type, resolved;
 "#;
 
 #[cfg(test)]
@@ -1212,5 +1305,80 @@ mod tests {
         assert_eq!(live.server_slug.as_deref(), Some("vps-01"));
         assert_eq!(live.server_status.as_deref(), Some("online"));
         assert_eq!(live.last_deploy_status.as_deref(), Some("success"));
+    }
+
+    #[tokio::test]
+    async fn test_alert_crud() {
+        let db = Database::connect_memory().await.unwrap();
+        let tenant = create_test_tenant(&db).await;
+        let tenant_id = tenant.id.unwrap();
+
+        // サーバー作成
+        db.register_server(&Server {
+            id: None,
+            tenant: tenant_id.clone(),
+            slug: "vps-01".into(),
+            provider: "sakura-cloud".into(),
+            plan: None,
+            ssh_host: "10.0.0.1".into(),
+            ssh_user: "root".into(),
+            deploy_path: "/opt/apps".into(),
+            status: "online".into(),
+            provision_version: None,
+            tool_versions: None,
+            last_heartbeat_at: None,
+            created_at: None,
+            updated_at: None,
+        })
+        .await
+        .unwrap();
+
+        // アラート作成
+        let alert = Alert {
+            id: None,
+            tenant: tenant_id.clone(),
+            server_slug: "vps-01".into(),
+            container_name: "web".into(),
+            alert_type: "restart_loop".into(),
+            severity: "critical".into(),
+            message: "コンテナ web がリスタートループ".into(),
+            resolved: false,
+            resolved_at: None,
+            created_at: None,
+        };
+        let created = db.upsert_alert(&alert).await.unwrap();
+        assert!(created.id.is_some());
+        assert_eq!(created.server_slug, "vps-01");
+        assert_eq!(created.alert_type, "restart_loop");
+        assert!(!created.resolved);
+
+        // 同一コンテナ・同一タイプで upsert → 更新される（新規作成されない）
+        let alert2 = Alert {
+            message: "更新されたメッセージ".into(),
+            ..alert.clone()
+        };
+        let updated = db.upsert_alert(&alert2).await.unwrap();
+        assert_eq!(updated.message, "更新されたメッセージ");
+
+        // アクティブアラートカウント
+        let count = db.count_active_alerts_by_server("vps-01").await.unwrap();
+        assert_eq!(count, 1);
+
+        // 別タイプのアラートを追加
+        let alert3 = Alert {
+            alert_type: "unhealthy".into(),
+            severity: "warning".into(),
+            message: "コンテナ web が unhealthy".into(),
+            ..alert.clone()
+        };
+        db.upsert_alert(&alert3).await.unwrap();
+
+        let count = db.count_active_alerts_by_server("vps-01").await.unwrap();
+        assert_eq!(count, 2);
+
+        // 解決
+        db.resolve_alerts("vps-01", "web").await.unwrap();
+        let count = db.count_active_alerts_by_server("vps-01").await.unwrap();
+        assert_eq!(count, 0);
     }
 }

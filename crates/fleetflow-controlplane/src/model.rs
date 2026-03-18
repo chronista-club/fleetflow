@@ -89,6 +89,26 @@ impl TenantUser {
     }
 }
 
+// ─────────────────────────────────────────────
+// CP-010: Alert（コンテナアラート）
+// ─────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize, SurrealValue)]
+pub struct Alert {
+    pub id: Option<RecordId>,
+    pub tenant: RecordId,
+    pub server_slug: String,
+    pub container_name: String,
+    /// "restart_loop" | "unexpected_stop" | "unhealthy"
+    pub alert_type: String,
+    /// "warning" | "critical"
+    pub severity: String,
+    pub message: String,
+    pub resolved: bool,
+    pub resolved_at: Option<DateTime<Utc>>,
+    pub created_at: Option<DateTime<Utc>>,
+}
+
 /// テナント解決結果（auth middleware → handler 受け渡し用）
 #[derive(Debug, Clone)]
 pub struct AuthContext {
@@ -176,6 +196,8 @@ pub struct StageOverview {
     pub last_deploy_status: Option<String>,
     /// 直近デプロイの時刻
     pub last_deploy_at: Option<DateTime<Utc>>,
+    /// アクティブアラート数
+    pub alert_count: Option<i64>,
 }
 
 // ─────────────────────────────────────────────
