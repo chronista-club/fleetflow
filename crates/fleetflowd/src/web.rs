@@ -744,8 +744,8 @@ async fn api_stage_redeploy(
 ) -> impl IntoResponse {
     let ctx = req.extensions().get::<AuthContext>().unwrap();
 
-    // 認可チェック: owner/admin のみ
-    if !ctx.can_manage_users() {
+    // 認可チェック: owner/admin のみ（インフラ操作）
+    if !ctx.can_operate() {
         return (
             StatusCode::FORBIDDEN,
             Json(json!({ "error": "Insufficient permissions" })),
@@ -807,8 +807,8 @@ async fn api_service_restart(
 ) -> impl IntoResponse {
     let ctx = req.extensions().get::<AuthContext>().unwrap();
 
-    // 認可チェック: owner/admin のみ
-    if !ctx.can_manage_users() {
+    // 認可チェック: owner/admin のみ（インフラ操作）
+    if !ctx.can_operate() {
         return (
             StatusCode::FORBIDDEN,
             Json(json!({ "error": "Insufficient permissions" })),
@@ -890,7 +890,7 @@ async fn api_stage_alerts(
     match state
         .app
         .db
-        .list_active_alerts_by_server(&server_slug)
+        .list_active_alerts_by_server(&server_slug, &ctx.tenant_slug)
         .await
     {
         Ok(alerts) => {

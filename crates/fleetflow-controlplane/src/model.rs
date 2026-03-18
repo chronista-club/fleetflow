@@ -123,8 +123,13 @@ pub struct AuthContext {
 }
 
 impl AuthContext {
-    /// owner or admin かどうか
+    /// ユーザー管理操作が可能か（owner/admin）
     pub fn can_manage_users(&self) -> bool {
+        matches!(self.role, TenantRole::Owner | TenantRole::Admin)
+    }
+
+    /// インフラ操作が可能か（再デプロイ・再起動等）
+    pub fn can_operate(&self) -> bool {
         matches!(self.role, TenantRole::Owner | TenantRole::Admin)
     }
 }

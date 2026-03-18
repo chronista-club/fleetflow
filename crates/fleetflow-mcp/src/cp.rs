@@ -121,14 +121,12 @@ pub async fn http_post_with_body(path: &str, body: Option<Value>) -> Result<Valu
     let url = format!("{}{}", DASHBOARD_BASE, path);
     let token = load_access_token()?;
 
-    let mut req = http_client()
-        .post(&url)
-        .header("Content-Type", "application/json");
+    let mut req = http_client().post(&url);
     if let Some(t) = &token {
         req = req.header("Authorization", format!("Bearer {}", t));
     }
     if let Some(b) = body {
-        req = req.json(&b);
+        req = req.json(&b); // reqwest が Content-Type: application/json を自動設定
     }
 
     let resp = req.send().await.context("HTTP POST 失敗")?;

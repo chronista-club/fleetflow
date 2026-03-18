@@ -832,12 +832,17 @@ impl Database {
         Ok(row.and_then(|v| v["count"].as_i64()).unwrap_or(0))
     }
 
-    /// サーバーのアクティブアラート一覧
-    pub async fn list_active_alerts_by_server(&self, server_slug: &str) -> Result<Vec<Alert>> {
+    /// サーバーのアクティブアラート一覧（テナント境界チェック付き）
+    pub async fn list_active_alerts_by_server(
+        &self,
+        server_slug: &str,
+        tenant_slug: &str,
+    ) -> Result<Vec<Alert>> {
         let mut result = self
             .db
-            .query("SELECT * FROM alert WHERE server_slug = $server_slug AND resolved = false ORDER BY created_at DESC")
+            .query("SELECT * FROM alert WHERE server_slug = $server_slug AND tenant.slug = $tenant_slug AND resolved = false ORDER BY created_at DESC")
             .bind(("server_slug", server_slug.to_string()))
+            .bind(("tenant_slug", tenant_slug.to_string()))
             .await
             .context("アラート一覧取得失敗")?;
         let alerts: Vec<Alert> = result.take(0)?;
