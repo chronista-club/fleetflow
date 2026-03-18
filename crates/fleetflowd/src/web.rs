@@ -744,6 +744,15 @@ async fn api_stage_redeploy(
 ) -> impl IntoResponse {
     let ctx = req.extensions().get::<AuthContext>().unwrap();
 
+    // 認可チェック: owner/admin のみ
+    if !ctx.can_manage_users() {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({ "error": "Insufficient permissions" })),
+        )
+            .into_response();
+    }
+
     // ステージのサーバーを特定
     let stages = match state.app.db.list_stage_overviews(&ctx.tenant_slug).await {
         Ok(s) => s,
@@ -797,6 +806,15 @@ async fn api_service_restart(
     req: Request,
 ) -> impl IntoResponse {
     let ctx = req.extensions().get::<AuthContext>().unwrap();
+
+    // 認可チェック: owner/admin のみ
+    if !ctx.can_manage_users() {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({ "error": "Insufficient permissions" })),
+        )
+            .into_response();
+    }
 
     // ステージのサーバーを特定
     let stages = match state.app.db.list_stage_overviews(&ctx.tenant_slug).await {
@@ -908,35 +926,44 @@ async fn api_agents(State(state): State<Arc<WebState>>) -> impl IntoResponse {
     Json(json!({ "agents": items }))
 }
 
-/// コンテナログ取得（スナップショット）
+/// コンテナログ取得（スナップショット、テナント分離付き）
 async fn api_container_logs(
     State(state): State<Arc<WebState>>,
-    Path((_project, _stage, container)): Path<(String, String, String)>,
+    Path((project, stage, container)): Path<(String, String, String)>,
     req: Request,
 ) -> impl IntoResponse {
-    let _ctx = req.extensions().get::<AuthContext>().unwrap();
+    let ctx = req.extensions().get::<AuthContext>().unwrap();
 
-    let topic_prefix = format!("logs/{}", container);
+    // テナント分離: ステージのサーバーを特定してから LogRouter を検索
+    let stages = match state.app.db.list_stage_overviews(&ctx.tenant_slug).await {
+        Ok(s) => s,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": e.to_string() })),
+            )
+                .into_response();
+        }
+    };
+
+    let target = stages
+        .iter()
+        .find(|s| s.project_slug == project && s.slug == stage);
+
+    let server_slug = match target.and_then(|s| s.server_slug.as_deref()) {
+        Some(s) => s.to_string(),
+        None => {
+            return Json(json!({ "logs": [] })).into_response();
+        }
+    };
+
+    // topic: logs/{server_slug}/{container_name}
+    let topic_prefix = format!("logs/{}/{}", server_slug, container);
     let logs = state
         .app
         .log_router
         .get_recent(&topic_prefix, "info", 100)
         .await;
-
-    // topic_prefix にマッチしなかった場合、server_slug/container でも検索
-    let logs = if logs.is_empty() {
-        // container 名で直接検索
-        state
-            .app
-            .log_router
-            .get_recent("", "info", 100)
-            .await
-            .into_iter()
-            .filter(|l| l.container_name.contains(&container))
-            .collect()
-    } else {
-        logs
-    };
 
     let items: Vec<Value> = logs
         .iter()
@@ -951,7 +978,7 @@ async fn api_container_logs(
         })
         .collect();
 
-    Json(json!({ "logs": items }))
+    Json(json!({ "logs": items })).into_response()
 }
 
 // ============================================================================

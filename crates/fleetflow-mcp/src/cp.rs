@@ -83,13 +83,18 @@ pub async fn request(
     Ok(resp)
 }
 
+/// 共有 HTTP クライアント（コネクションプール再利用）
+fn http_client() -> &'static reqwest::Client {
+    static CLIENT: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
+    CLIENT.get_or_init(reqwest::Client::new)
+}
+
 /// Dashboard HTTP API に GET リクエスト
 pub async fn http_get(path: &str) -> Result<Value> {
     let url = format!("{}{}", DASHBOARD_BASE, path);
     let token = load_access_token()?;
 
-    let client = reqwest::Client::new();
-    let mut req = client.get(&url);
+    let mut req = http_client().get(&url);
     if let Some(t) = &token {
         req = req.header("Authorization", format!("Bearer {}", t));
     }
@@ -106,27 +111,36 @@ pub async fn http_get(path: &str) -> Result<Value> {
     Ok(body)
 }
 
-/// Dashboard HTTP API に POST リクエスト
+/// Dashboard HTTP API に POST リクエスト（オプションでボディ付き）
 pub async fn http_post(path: &str) -> Result<Value> {
+    http_post_with_body(path, None).await
+}
+
+/// Dashboard HTTP API に POST リクエスト（ボディ付き）
+pub async fn http_post_with_body(path: &str, body: Option<Value>) -> Result<Value> {
     let url = format!("{}{}", DASHBOARD_BASE, path);
     let token = load_access_token()?;
 
-    let client = reqwest::Client::new();
-    let mut req = client.post(&url);
+    let mut req = http_client()
+        .post(&url)
+        .header("Content-Type", "application/json");
     if let Some(t) = &token {
         req = req.header("Authorization", format!("Bearer {}", t));
+    }
+    if let Some(b) = body {
+        req = req.json(&b);
     }
 
     let resp = req.send().await.context("HTTP POST 失敗")?;
     let status = resp.status();
-    let body: Value = resp.json().await.context("JSON パース失敗")?;
+    let resp_body: Value = resp.json().await.context("JSON パース失敗")?;
 
     if !status.is_success() {
-        let err = body["error"].as_str().unwrap_or("unknown error");
+        let err = resp_body["error"].as_str().unwrap_or("unknown error");
         anyhow::bail!("HTTP {} — {}", status, err);
     }
 
-    Ok(body)
+    Ok(resp_body)
 }
 
 /// credentials.json から access_token を取得

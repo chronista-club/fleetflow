@@ -79,24 +79,25 @@ impl AgentRegistry {
         method: &str,
         payload: Value,
     ) -> Result<Value, String> {
-        let agents = self.agents.lock().await;
-        let entry = agents
-            .get(server_slug)
-            .ok_or_else(|| format!("Agent '{}' が接続されていません", server_slug))?;
+        // ロックを最小限に保持: tx を clone して即解放
+        let tx = {
+            let agents = self.agents.lock().await;
+            agents
+                .get(server_slug)
+                .ok_or_else(|| format!("Agent '{}' が接続されていません", server_slug))?
+                .command_tx
+                .clone()
+        }; // ← ロック解放
 
         let (response_tx, response_rx) = oneshot::channel();
 
-        entry
-            .command_tx
-            .send(AgentCommand {
-                method: method.to_string(),
-                payload,
-                response_tx: Some(response_tx),
-            })
-            .await
-            .map_err(|_| format!("Agent '{}' へのコマンド送信失敗", server_slug))?;
-
-        drop(agents); // ロック解放
+        tx.send(AgentCommand {
+            method: method.to_string(),
+            payload,
+            response_tx: Some(response_tx),
+        })
+        .await
+        .map_err(|_| format!("Agent '{}' へのコマンド送信失敗", server_slug))?;
 
         // Agent からの応答を待つ（タイムアウト 60 秒）
         tokio::time::timeout(std::time::Duration::from_secs(60), response_rx)
@@ -112,20 +113,22 @@ impl AgentRegistry {
         method: &str,
         payload: Value,
     ) -> Result<(), String> {
-        let agents = self.agents.lock().await;
-        let entry = agents
-            .get(server_slug)
-            .ok_or_else(|| format!("Agent '{}' が接続されていません", server_slug))?;
+        let tx = {
+            let agents = self.agents.lock().await;
+            agents
+                .get(server_slug)
+                .ok_or_else(|| format!("Agent '{}' が接続されていません", server_slug))?
+                .command_tx
+                .clone()
+        };
 
-        entry
-            .command_tx
-            .send(AgentCommand {
-                method: method.to_string(),
-                payload,
-                response_tx: None,
-            })
-            .await
-            .map_err(|_| format!("Agent '{}' へのコマンド送信失敗", server_slug))
+        tx.send(AgentCommand {
+            method: method.to_string(),
+            payload,
+            response_tx: None,
+        })
+        .await
+        .map_err(|_| format!("Agent '{}' へのコマンド送信失敗", server_slug))
     }
 
     /// 接続中の Agent 一覧
