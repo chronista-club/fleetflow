@@ -141,17 +141,23 @@ pub async fn http_post_with_body(path: &str, body: Option<Value>) -> Result<Valu
     Ok(resp_body)
 }
 
-/// credentials.json から access_token を取得
+/// credentials.json から access_token を取得（プロセス内キャッシュ付き）
+/// fleet login でトークン更新された場合はプロセス再起動が必要。
+/// MCP サーバーは通常プロセスライフサイクルが短いため許容範囲。
 fn load_access_token() -> Result<Option<String>> {
-    let creds_path = dirs::config_dir()
-        .context("設定ディレクトリなし")?
-        .join("fleetflow/credentials.json");
+    static TOKEN: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
 
-    if !creds_path.exists() {
-        return Ok(None);
-    }
+    Ok(TOKEN
+        .get_or_init(|| {
+            let creds_path = dirs::config_dir().map(|d| d.join("fleetflow/credentials.json"))?;
 
-    let content = std::fs::read_to_string(&creds_path)?;
-    let creds: Credentials = serde_json::from_str(&content)?;
-    Ok(Some(creds.access_token))
+            if !creds_path.exists() {
+                return None;
+            }
+
+            let content = std::fs::read_to_string(&creds_path).ok()?;
+            let creds: Credentials = serde_json::from_str(&content).ok()?;
+            Some(creds.access_token)
+        })
+        .clone())
 }

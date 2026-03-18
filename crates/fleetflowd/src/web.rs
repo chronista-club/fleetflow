@@ -413,7 +413,7 @@ async fn api_health_check(State(state): State<Arc<WebState>>, req: Request) -> i
         }
     };
 
-    let servers = match state.app.db.list_all_servers().await {
+    let servers = match state.app.db.list_servers_by_tenant(&ctx.tenant_slug).await {
         Ok(s) => s,
         Err(e) => {
             return (
@@ -1110,10 +1110,21 @@ async fn api_tenant_users_create(
         }
     };
 
+    let tenant_id = match tenant.id {
+        Some(id) => id,
+        None => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": "tenant has no id" })),
+            )
+                .into_response();
+        }
+    };
+
     let user = fleetflow_controlplane::model::TenantUser {
         id: None,
         auth0_sub,
-        tenant: tenant.id.unwrap(),
+        tenant: tenant_id,
         role: role_str.to_string(),
         created_at: None,
     };
