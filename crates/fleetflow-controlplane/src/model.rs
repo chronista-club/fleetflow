@@ -128,7 +128,9 @@ impl AuthContext {
         matches!(self.role, TenantRole::Owner | TenantRole::Admin)
     }
 
-    /// インフラ操作が可能か（再デプロイ・再起動等）
+    /// インフラ操作が可能か（再デプロイ・再起動・ヘルスチェック・DNS 同期等）
+    /// 現在は can_manage_users() と同じ判定だが、将来 Member にインフラ操作を
+    /// 開放する場合はここだけ変更する（ユーザー管理は Owner/Admin のまま）。
     pub fn can_operate(&self) -> bool {
         matches!(self.role, TenantRole::Owner | TenantRole::Admin)
     }

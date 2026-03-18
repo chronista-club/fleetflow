@@ -375,7 +375,7 @@ impl Database {
                     server.last_heartbeat_at AS server_heartbeat,
                     (SELECT status, created_at FROM deployment WHERE project = $parent.project AND stage = $parent.slug ORDER BY created_at DESC LIMIT 1)[0].status AS last_deploy_status,
                     (SELECT status, created_at FROM deployment WHERE project = $parent.project AND stage = $parent.slug ORDER BY created_at DESC LIMIT 1)[0].created_at AS last_deploy_at,
-                    (SELECT count() FROM alert WHERE server_slug = $parent.server.slug AND resolved = false GROUP ALL)[0].count AS alert_count
+                    (SELECT count() FROM alert WHERE server_slug = $parent.server.slug AND tenant = $parent.project.tenant AND resolved = false GROUP ALL)[0].count AS alert_count
                 FROM stage
                 WHERE project.tenant.slug = $tenant_slug
                 ORDER BY project_slug, slug

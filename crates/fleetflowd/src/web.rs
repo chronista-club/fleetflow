@@ -388,7 +388,16 @@ async fn api_deployments(State(state): State<Arc<WebState>>, req: Request) -> im
     }
 }
 
-async fn api_health_check(State(state): State<Arc<WebState>>) -> impl IntoResponse {
+async fn api_health_check(State(state): State<Arc<WebState>>, req: Request) -> impl IntoResponse {
+    let ctx = req.extensions().get::<AuthContext>().unwrap();
+    if !ctx.can_operate() {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({ "error": "Insufficient permissions" })),
+        )
+            .into_response();
+    }
+
     use chrono::Utc;
     use fleetflow_cloud::tailscale;
     use fleetflow_controlplane::model::ServerStatusUpdate;
@@ -453,6 +462,15 @@ async fn api_health_check(State(state): State<Arc<WebState>>) -> impl IntoRespon
 
 async fn api_dns_sync(State(state): State<Arc<WebState>>, req: Request) -> impl IntoResponse {
     let ctx = req.extensions().get::<AuthContext>().unwrap().clone();
+
+    // 認可チェック: owner/admin のみ（インフラ操作）
+    if !ctx.can_operate() {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({ "error": "Insufficient permissions" })),
+        )
+            .into_response();
+    }
 
     let cf_config = match fleetflow_cloud_cloudflare::dns::DnsConfig::from_env() {
         Ok(c) => c,
