@@ -9,9 +9,11 @@ use serde_json::json;
 use unison::network::client::ProtocolClient;
 use unison::network::server::ProtocolServer;
 
+use fleetflow_controlplane::agent_registry::AgentRegistry;
 use fleetflow_controlplane::auth::{Auth0Config, Auth0Verifier};
 use fleetflow_controlplane::db::Database;
 use fleetflow_controlplane::handlers;
+use fleetflow_controlplane::log_router::LogRouter;
 use fleetflow_controlplane::server::AppState;
 
 /// Initialize rustls CryptoProvider (required once per process).
@@ -32,6 +34,8 @@ async fn start_test_server(port: u16) -> anyhow::Result<()> {
         db,
         auth,
         server_provider: None,
+        agent_registry: AgentRegistry::new(),
+        log_router: LogRouter::new(),
     });
 
     let server = ProtocolServer::with_identity(
