@@ -4,6 +4,7 @@ use anyhow::{Context, Result};
 use tracing::info;
 use unison::network::server::{ProtocolServer, ServerHandle};
 
+use crate::agent_registry::AgentRegistry;
 use crate::auth::{Auth0Config, Auth0Verifier};
 use crate::db::{Database, DbConfig};
 use crate::handlers;
@@ -15,6 +16,8 @@ pub struct AppState {
     pub auth: Auth0Verifier,
     /// クラウドプロバイダーのサーバー操作（オプション、未設定なら DB のみ操作）
     pub server_provider: Option<ServerProviderKind>,
+    /// 接続中の Fleet Agent レジストリ
+    pub agent_registry: AgentRegistry,
 }
 
 /// Control Plane server configuration.
@@ -72,6 +75,7 @@ pub async fn start(config: ServerConfig) -> Result<(ServerHandle, Arc<AppState>)
         db,
         auth,
         server_provider: config.server_provider,
+        agent_registry: AgentRegistry::new(),
     });
 
     // Create Unison Protocol server

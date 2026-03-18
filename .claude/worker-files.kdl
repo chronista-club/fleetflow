@@ -1,0 +1,6 @@
+// ccws worker ファイル共有設定
+// symlink: 親プロジェクトのファイルをシンボリックリンクで参照
+// copy: 親プロジェクトのファイルをコピー
+
+// CLAUDE.md はワーカーでも参照
+symlink ".claude/CLAUDE.md"

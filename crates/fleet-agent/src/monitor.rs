@@ -84,11 +84,7 @@ impl Severity {
 type CooldownKey = (String, String);
 
 /// モニターループを実行
-pub async fn run_loop(
-    client: &Arc<ProtocolClient>,
-    server_slug: &str,
-    config: &MonitorConfig,
-) {
+pub async fn run_loop(client: &Arc<ProtocolClient>, server_slug: &str, config: &MonitorConfig) {
     let docker = match Docker::connect_with_local_defaults() {
         Ok(d) => d,
         Err(e) => {
@@ -118,15 +114,15 @@ pub async fn run_loop(
                     );
 
                     // クールダウンチェック
-                    if let Some(last_sent) = cooldowns.get(&key) {
-                        if last_sent.elapsed() < Duration::from_secs(config.alert_cooldown_secs) {
-                            debug!(
-                                container = %alert.container_name,
-                                alert_type = alert.alert_type.as_str(),
-                                "クールダウン中 — アラートスキップ"
-                            );
-                            continue;
-                        }
+                    if let Some(last_sent) = cooldowns.get(&key)
+                        && last_sent.elapsed() < Duration::from_secs(config.alert_cooldown_secs)
+                    {
+                        debug!(
+                            container = %alert.container_name,
+                            alert_type = alert.alert_type.as_str(),
+                            "クールダウン中 — アラートスキップ"
+                        );
+                        continue;
                     }
 
                     // CP にアラート送信
@@ -213,10 +209,12 @@ pub(crate) async fn check_containers(
             None => continue,
         };
 
-        let status = state.status.as_ref().map(|s| s.to_string()).unwrap_or_default();
-        let restart_count = info
-            .restart_count
-            .unwrap_or(0);
+        let status = state
+            .status
+            .as_ref()
+            .map(|s| s.to_string())
+            .unwrap_or_default();
+        let restart_count = info.restart_count.unwrap_or(0);
         let health = state
             .health
             .as_ref()
@@ -233,17 +231,17 @@ pub(crate) async fn check_containers(
         let detected = detect_anomalies(&name, &current, prev_states.get(&name), config);
 
         // 正常復帰検知: 前回異常 → 今回正常
-        if detected.is_empty() {
-            if let Some(prev) = prev_states.get(&name) {
-                let was_abnormal = prev.status == "exited"
-                    || prev.status == "dead"
-                    || prev.health.as_deref() == Some("unhealthy")
-                    || prev.restart_count > config.restart_threshold as i64;
-                let is_healthy_now = current.status == "running"
-                    && current.health.as_deref() != Some("unhealthy");
-                if was_abnormal && is_healthy_now {
-                    recovered.push(name.clone());
-                }
+        if detected.is_empty()
+            && let Some(prev) = prev_states.get(&name)
+        {
+            let was_abnormal = prev.status == "exited"
+                || prev.status == "dead"
+                || prev.health.as_deref() == Some("unhealthy")
+                || prev.restart_count > config.restart_threshold as i64;
+            let is_healthy_now =
+                current.status == "running" && current.health.as_deref() != Some("unhealthy");
+            if was_abnormal && is_healthy_now {
+                recovered.push(name.clone());
             }
         }
 
@@ -305,10 +303,7 @@ pub(crate) fn detect_anomalies(
             container_name: container_name.to_string(),
             alert_type: AlertType::Unhealthy,
             severity: Severity::Warning,
-            message: format!(
-                "コンテナ {} が unhealthy",
-                container_name
-            ),
+            message: format!("コンテナ {} が unhealthy", container_name),
         });
     }
 

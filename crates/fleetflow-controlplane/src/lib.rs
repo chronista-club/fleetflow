@@ -1,3 +1,4 @@
+pub mod agent_registry;
 pub mod auth;
 pub mod crypto;
 pub mod db;
