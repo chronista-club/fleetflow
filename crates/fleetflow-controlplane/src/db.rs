@@ -831,6 +831,18 @@ impl Database {
         let row: Option<serde_json::Value> = result.take(0)?;
         Ok(row.and_then(|v| v["count"].as_i64()).unwrap_or(0))
     }
+
+    /// サーバーのアクティブアラート一覧
+    pub async fn list_active_alerts_by_server(&self, server_slug: &str) -> Result<Vec<Alert>> {
+        let mut result = self
+            .db
+            .query("SELECT * FROM alert WHERE server_slug = $server_slug AND resolved = false ORDER BY created_at DESC")
+            .bind(("server_slug", server_slug.to_string()))
+            .await
+            .context("アラート一覧取得失敗")?;
+        let alerts: Vec<Alert> = result.take(0)?;
+        Ok(alerts)
+    }
 }
 
 /// SurrealDB schema definition.

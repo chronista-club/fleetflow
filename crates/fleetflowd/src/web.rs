@@ -76,6 +76,16 @@ pub async fn start(
             get(api_stage_deployments),
         )
         .route("/api/deployments/:id/log", get(api_deployment_log))
+        .route(
+            "/api/stages/:project/:stage/redeploy",
+            post(api_stage_redeploy),
+        )
+        .route(
+            "/api/stages/:project/:stage/restart/:service",
+            post(api_service_restart),
+        )
+        .route("/api/stages/:project/:stage/alerts", get(api_stage_alerts))
+        .route("/api/agents", get(api_agents))
         .route("/api/dns/sync", post(api_dns_sync))
         .layer(middleware::from_fn_with_state(
             web_state.clone(),
@@ -716,6 +726,182 @@ async fn api_deployment_log(
         )
             .into_response(),
     }
+}
+
+// ============================================================================
+// Agent Action API（再デプロイ・再起動）
+// ============================================================================
+
+/// ステージ再デプロイ（CP → Agent → docker compose up）
+async fn api_stage_redeploy(
+    State(state): State<Arc<WebState>>,
+    Path((project, stage)): Path<(String, String)>,
+    req: Request,
+) -> impl IntoResponse {
+    let ctx = req.extensions().get::<AuthContext>().unwrap();
+
+    // ステージのサーバーを特定
+    let stages = match state.app.db.list_stage_overviews(&ctx.tenant_slug).await {
+        Ok(s) => s,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": e.to_string() })),
+            )
+                .into_response();
+        }
+    };
+
+    let target = stages
+        .iter()
+        .find(|s| s.project_slug == project && s.slug == stage);
+
+    let server_slug = match target.and_then(|s| s.server_slug.as_deref()) {
+        Some(s) => s.to_string(),
+        None => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "error": "Stage has no server assigned" })),
+            )
+                .into_response();
+        }
+    };
+
+    // Agent にデプロイコマンド送信
+    let payload = json!({
+        "project_slug": project,
+        "stage": stage,
+        "compose_path": format!("/opt/apps/{}/{}/docker-compose.yml", project, stage),
+        "command": "up -d",
+    });
+
+    match state
+        .app
+        .agent_registry
+        .send_command(&server_slug, "deploy", payload)
+        .await
+    {
+        Ok(result) => (StatusCode::OK, Json(result)).into_response(),
+        Err(e) => (StatusCode::SERVICE_UNAVAILABLE, Json(json!({ "error": e }))).into_response(),
+    }
+}
+
+/// サービス再起動（CP → Agent → docker restart）
+async fn api_service_restart(
+    State(state): State<Arc<WebState>>,
+    Path((project, stage, service)): Path<(String, String, String)>,
+    req: Request,
+) -> impl IntoResponse {
+    let ctx = req.extensions().get::<AuthContext>().unwrap();
+
+    // ステージのサーバーを特定
+    let stages = match state.app.db.list_stage_overviews(&ctx.tenant_slug).await {
+        Ok(s) => s,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": e.to_string() })),
+            )
+                .into_response();
+        }
+    };
+
+    let target = stages
+        .iter()
+        .find(|s| s.project_slug == project && s.slug == stage);
+
+    let server_slug = match target.and_then(|s| s.server_slug.as_deref()) {
+        Some(s) => s.to_string(),
+        None => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "error": "Stage has no server assigned" })),
+            )
+                .into_response();
+        }
+    };
+
+    let payload = json!({ "service": format!("{}-{}-{}", project, stage, service) });
+
+    match state
+        .app
+        .agent_registry
+        .send_command(&server_slug, "restart", payload)
+        .await
+    {
+        Ok(result) => (StatusCode::OK, Json(result)).into_response(),
+        Err(e) => (StatusCode::SERVICE_UNAVAILABLE, Json(json!({ "error": e }))).into_response(),
+    }
+}
+
+/// ステージのアクティブアラート一覧
+async fn api_stage_alerts(
+    State(state): State<Arc<WebState>>,
+    Path((project, stage)): Path<(String, String)>,
+    req: Request,
+) -> impl IntoResponse {
+    let ctx = req.extensions().get::<AuthContext>().unwrap();
+
+    // ステージのサーバーを特定
+    let stages = match state.app.db.list_stage_overviews(&ctx.tenant_slug).await {
+        Ok(s) => s,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": e.to_string() })),
+            )
+                .into_response();
+        }
+    };
+
+    let target = stages
+        .iter()
+        .find(|s| s.project_slug == project && s.slug == stage);
+
+    let server_slug = match target.and_then(|s| s.server_slug.as_deref()) {
+        Some(s) => s.to_string(),
+        None => {
+            return (StatusCode::OK, Json(json!({ "alerts": [] }))).into_response();
+        }
+    };
+
+    match state
+        .app
+        .db
+        .list_active_alerts_by_server(&server_slug)
+        .await
+    {
+        Ok(alerts) => {
+            let items: Vec<Value> = alerts
+                .iter()
+                .map(|a| {
+                    json!({
+                        "container_name": a.container_name,
+                        "alert_type": a.alert_type,
+                        "severity": a.severity,
+                        "message": a.message,
+                        "created_at": a.created_at.map(|d| d.to_rfc3339()),
+                    })
+                })
+                .collect();
+            (StatusCode::OK, Json(json!({ "alerts": items }))).into_response()
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": e.to_string() })),
+        )
+            .into_response(),
+    }
+}
+
+/// 接続中の Agent 一覧
+async fn api_agents(State(state): State<Arc<WebState>>) -> impl IntoResponse {
+    let agents = state.app.agent_registry.list().await;
+    let items: Vec<Value> = agents
+        .iter()
+        .map(|(slug, version)| json!({ "server_slug": slug, "version": version }))
+        .collect();
+    Json(json!({ "agents": items }))
 }
 
 // ============================================================================

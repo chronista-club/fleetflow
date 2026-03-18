@@ -548,11 +548,53 @@ async function loadStageDetail(container, projectSlug, stageSlug) {
     var basePath = '/api/stages/' + encodeURIComponent(projectSlug) + '/' + encodeURIComponent(stageSlug);
     var servicesData = fetchJSON(basePath + '/services');
     var deploysData = fetchJSON(basePath + '/deployments');
-    var results = await Promise.all([servicesData, deploysData]);
+    var alertsData = fetchJSON(basePath + '/alerts');
+    var results = await Promise.all([servicesData, deploysData, alertsData]);
     var services = results[0].services || [];
     var deploys = results[1].deployments || [];
+    var alerts = results[2].alerts || [];
 
     container.textContent = '';
+
+    // Alerts
+    if (alerts.length > 0) {
+      var h4a = document.createElement('h4');
+      h4a.textContent = 'Alerts (' + alerts.length + ')';
+      h4a.style.color = 'var(--red)';
+      container.appendChild(h4a);
+      var alertRows = alerts.map(function(a) {
+        var tr = document.createElement('tr');
+        tr.className = 'stage-row-alert';
+        [a.container_name, a.alert_type].forEach(function(val) {
+          var td = document.createElement('td');
+          td.textContent = val || '-';
+          tr.appendChild(td);
+        });
+        var sevTd = document.createElement('td');
+        sevTd.appendChild(makeBadgeEl(a.severity === 'critical' ? 'failed' : 'pending'));
+        sevTd.firstChild.textContent = a.severity;
+        tr.appendChild(sevTd);
+        var msgTd = document.createElement('td');
+        msgTd.textContent = a.message;
+        msgTd.style.fontSize = '12px';
+        tr.appendChild(msgTd);
+        return tr;
+      });
+      container.appendChild(makeTable(['Container', 'Type', 'Severity', 'Message'], alertRows));
+    }
+
+    // Actions
+    var actionsDiv = document.createElement('div');
+    actionsDiv.style.marginBottom = '12px';
+    var redeployBtn = document.createElement('button');
+    redeployBtn.className = 'refresh-btn';
+    redeployBtn.textContent = 'Redeploy';
+    redeployBtn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      executeAction(redeployBtn, 'POST', basePath + '/redeploy');
+    });
+    actionsDiv.appendChild(redeployBtn);
+    container.appendChild(actionsDiv);
 
     // Services
     var h4s = document.createElement('h4');
@@ -566,9 +608,22 @@ async function loadStageDetail(container, projectSlug, stageSlug) {
           td.textContent = val || '-';
           tr.appendChild(td);
         });
+        // Restart button
+        var actTd = document.createElement('td');
+        var restartBtn = document.createElement('button');
+        restartBtn.className = 'refresh-btn';
+        restartBtn.textContent = 'Restart';
+        restartBtn.style.padding = '2px 8px';
+        restartBtn.style.fontSize = '11px';
+        restartBtn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          executeAction(restartBtn, 'POST', basePath + '/restart/' + encodeURIComponent(svc.slug));
+        });
+        actTd.appendChild(restartBtn);
+        tr.appendChild(actTd);
         return tr;
       });
-      container.appendChild(makeTable(['Service', 'Image', 'Status'], svcRows));
+      container.appendChild(makeTable(['Service', 'Image', 'Status', ''], svcRows));
     } else {
       var noSvc = document.createElement('div');
       noSvc.textContent = 'No services';
@@ -632,6 +687,31 @@ async function loadStageDetail(container, projectSlug, stageSlug) {
     errDiv.className = 'error';
     errDiv.textContent = e.message;
     container.appendChild(errDiv);
+  }
+}
+
+async function executeAction(btn, method, path) {
+  var originalText = btn.textContent;
+  btn.textContent = '...';
+  btn.disabled = true;
+  try {
+    var data = await postJSON(path);
+    btn.textContent = data.error ? 'Error' : 'Done';
+    btn.style.color = data.error ? 'var(--red)' : 'var(--green)';
+    setTimeout(function() {
+      btn.textContent = originalText;
+      btn.style.color = '';
+      btn.disabled = false;
+      loadStages(); // 1st ビューを更新
+    }, 2000);
+  } catch(e) {
+    btn.textContent = 'Error';
+    btn.style.color = 'var(--red)';
+    setTimeout(function() {
+      btn.textContent = originalText;
+      btn.style.color = '';
+      btn.disabled = false;
+    }, 3000);
   }
 }
 
