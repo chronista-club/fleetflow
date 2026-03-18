@@ -8,6 +8,7 @@ use crate::agent_registry::AgentRegistry;
 use crate::auth::{Auth0Config, Auth0Verifier};
 use crate::db::{Database, DbConfig};
 use crate::handlers;
+use crate::log_router::LogRouter;
 use crate::server_provider::ServerProviderKind;
 
 /// Shared application state for all channel handlers.
@@ -18,6 +19,8 @@ pub struct AppState {
     pub server_provider: Option<ServerProviderKind>,
     /// 接続中の Fleet Agent レジストリ
     pub agent_registry: AgentRegistry,
+    /// コンテナログ Pub/Sub ルーター
+    pub log_router: LogRouter,
 }
 
 /// Control Plane server configuration.
@@ -76,6 +79,7 @@ pub async fn start(config: ServerConfig) -> Result<(ServerHandle, Arc<AppState>)
         auth,
         server_provider: config.server_provider,
         agent_registry: AgentRegistry::new(),
+        log_router: LogRouter::new(),
     });
 
     // Create Unison Protocol server

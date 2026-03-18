@@ -101,6 +101,10 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                                 let _ = tx.send(p);
                                             }
                                         }
+                                        "log" => {
+                                            // Agent からのコンテナログ → LogRouter に publish
+                                            handle_agent_log(&state, &p).await;
+                                        }
                                         method => {
                                             warn!(method, server = %server_slug, "Agent から不明なメッセージ");
                                         }
@@ -153,6 +157,35 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
 
                 Ok(())
             })
+        })
+        .await;
+}
+
+/// Agent からのコンテナログを LogRouter に publish
+async fn handle_agent_log(state: &AppState, payload: &Value) {
+    use crate::log_router::LogEntry;
+
+    let server_slug = payload["server_slug"].as_str().unwrap_or("");
+    let container_name = payload["container_name"].as_str().unwrap_or("");
+    let stream = payload["stream"].as_str().unwrap_or("stdout");
+    let level = payload["level"].as_str().unwrap_or("info");
+    let message = payload["message"].as_str().unwrap_or("");
+
+    let timestamp = payload["timestamp"]
+        .as_str()
+        .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+        .map(|dt| dt.with_timezone(&chrono::Utc))
+        .unwrap_or_else(chrono::Utc::now);
+
+    state
+        .log_router
+        .publish(LogEntry {
+            timestamp,
+            server_slug: server_slug.to_string(),
+            container_name: container_name.to_string(),
+            stream: stream.to_string(),
+            level: level.to_string(),
+            message: message.to_string(),
         })
         .await;
 }

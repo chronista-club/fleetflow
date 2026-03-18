@@ -86,6 +86,10 @@ pub async fn start(
         )
         .route("/api/stages/:project/:stage/alerts", get(api_stage_alerts))
         .route("/api/agents", get(api_agents))
+        .route(
+            "/api/stages/:project/:stage/logs/:container",
+            get(api_container_logs),
+        )
         .route("/api/dns/sync", post(api_dns_sync))
         .layer(middleware::from_fn_with_state(
             web_state.clone(),
@@ -902,6 +906,52 @@ async fn api_agents(State(state): State<Arc<WebState>>) -> impl IntoResponse {
         .map(|(slug, version)| json!({ "server_slug": slug, "version": version }))
         .collect();
     Json(json!({ "agents": items }))
+}
+
+/// コンテナログ取得（スナップショット）
+async fn api_container_logs(
+    State(state): State<Arc<WebState>>,
+    Path((_project, _stage, container)): Path<(String, String, String)>,
+    req: Request,
+) -> impl IntoResponse {
+    let _ctx = req.extensions().get::<AuthContext>().unwrap();
+
+    let topic_prefix = format!("logs/{}", container);
+    let logs = state
+        .app
+        .log_router
+        .get_recent(&topic_prefix, "info", 100)
+        .await;
+
+    // topic_prefix にマッチしなかった場合、server_slug/container でも検索
+    let logs = if logs.is_empty() {
+        // container 名で直接検索
+        state
+            .app
+            .log_router
+            .get_recent("", "info", 100)
+            .await
+            .into_iter()
+            .filter(|l| l.container_name.contains(&container))
+            .collect()
+    } else {
+        logs
+    };
+
+    let items: Vec<Value> = logs
+        .iter()
+        .map(|l| {
+            json!({
+                "timestamp": l.timestamp.to_rfc3339(),
+                "container": l.container_name,
+                "stream": l.stream,
+                "level": l.level,
+                "message": l.message,
+            })
+        })
+        .collect();
+
+    Json(json!({ "logs": items }))
 }
 
 // ============================================================================
