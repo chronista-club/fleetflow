@@ -635,6 +635,39 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                 }
                             }
                         }
+                        "alert_resolve" => {
+                            let server_slug =
+                                payload["server_slug"].as_str().unwrap_or_default();
+                            let container_name =
+                                payload["container_name"].as_str().unwrap_or_default();
+
+                            match state.db.resolve_alerts(server_slug, container_name).await {
+                                Ok(()) => {
+                                    info!(
+                                        server = server_slug,
+                                        container = container_name,
+                                        "アラート解決完了"
+                                    );
+                                    channel
+                                        .send_response(
+                                            msg.id,
+                                            "alert_resolve",
+                                            json!({ "ack": true }),
+                                        )
+                                        .await?;
+                                }
+                                Err(e) => {
+                                    error!(error = %e, "アラート解決失敗");
+                                    channel
+                                        .send_response(
+                                            msg.id,
+                                            "alert_resolve",
+                                            json!({ "error": e.to_string() }),
+                                        )
+                                        .await?;
+                                }
+                            }
+                        }
                         "ping" => {
                             let hostname = payload["hostname"].as_str().unwrap_or_default();
 

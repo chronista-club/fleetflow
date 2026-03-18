@@ -110,8 +110,8 @@ pub async fn run_loop(
         tokio::time::sleep(Duration::from_secs(config.interval_secs)).await;
 
         match check_containers(&docker, &prev_states, config).await {
-            Ok((alerts, new_states)) => {
-                for alert in &alerts {
+            Ok(result) => {
+                for alert in &result.alerts {
                     let key = (
                         alert.container_name.clone(),
                         alert.alert_type.as_str().to_string(),
@@ -142,7 +142,17 @@ pub async fn run_loop(
                         );
                     }
                 }
-                prev_states = new_states;
+
+                // 正常復帰 → CP に resolve 送信
+                for container_name in &result.recovered {
+                    if let Err(e) = send_resolve(client, server_slug, container_name).await {
+                        warn!(error = %e, container = %container_name, "resolve 送信失敗");
+                    } else {
+                        info!(container = %container_name, "コンテナ正常復帰 — アラート解決送信");
+                    }
+                }
+
+                prev_states = result.new_states;
             }
             Err(e) => {
                 warn!(error = %e, "コンテナチェック失敗");
@@ -151,12 +161,19 @@ pub async fn run_loop(
     }
 }
 
+/// チェック結果
+pub(crate) struct CheckResult {
+    pub alerts: Vec<DetectedAlert>,
+    pub recovered: Vec<String>,
+    pub new_states: HashMap<String, ContainerState>,
+}
+
 /// 全コンテナを取得し、前回状態と比較して異常を検知
 pub(crate) async fn check_containers(
     docker: &Docker,
     prev_states: &HashMap<String, ContainerState>,
     config: &MonitorConfig,
-) -> anyhow::Result<(Vec<DetectedAlert>, HashMap<String, ContainerState>)> {
+) -> anyhow::Result<CheckResult> {
     let containers = docker
         .list_containers(Some(ListContainersOptions {
             all: true,
@@ -165,6 +182,7 @@ pub(crate) async fn check_containers(
         .await?;
 
     let mut alerts = Vec::new();
+    let mut recovered = Vec::new();
     let mut new_states = HashMap::new();
 
     for container in &containers {
@@ -213,12 +231,31 @@ pub(crate) async fn check_containers(
 
         // 異常検知
         let detected = detect_anomalies(&name, &current, prev_states.get(&name), config);
-        alerts.extend(detected);
 
+        // 正常復帰検知: 前回異常 → 今回正常
+        if detected.is_empty() {
+            if let Some(prev) = prev_states.get(&name) {
+                let was_abnormal = prev.status == "exited"
+                    || prev.status == "dead"
+                    || prev.health.as_deref() == Some("unhealthy")
+                    || prev.restart_count > config.restart_threshold as i64;
+                let is_healthy_now = current.status == "running"
+                    && current.health.as_deref() != Some("unhealthy");
+                if was_abnormal && is_healthy_now {
+                    recovered.push(name.clone());
+                }
+            }
+        }
+
+        alerts.extend(detected);
         new_states.insert(name, current);
     }
 
-    Ok((alerts, new_states))
+    Ok(CheckResult {
+        alerts,
+        recovered,
+        new_states,
+    })
 }
 
 /// 異常検知ロジック
@@ -276,6 +313,28 @@ pub(crate) fn detect_anomalies(
     }
 
     alerts
+}
+
+/// CP にアラート解決を送信
+async fn send_resolve(
+    client: &ProtocolClient,
+    server_slug: &str,
+    container_name: &str,
+) -> anyhow::Result<()> {
+    let channel = client.open_channel("server").await?;
+
+    channel
+        .request(
+            "alert_resolve",
+            json!({
+                "server_slug": server_slug,
+                "container_name": container_name,
+            }),
+        )
+        .await?;
+
+    channel.close().await.ok();
+    Ok(())
 }
 
 /// CP にアラートを送信
