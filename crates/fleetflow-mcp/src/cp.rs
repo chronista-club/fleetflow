@@ -7,6 +7,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use unison::network::client::ProtocolClient;
 
+/// Dashboard API のベース URL
+const DASHBOARD_BASE: &str = "http://127.0.0.1:32080";
+
 /// credentials.json の構造
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Credentials {
@@ -78,4 +81,65 @@ pub async fn request(
     }
 
     Ok(resp)
+}
+
+/// Dashboard HTTP API に GET リクエスト
+pub async fn http_get(path: &str) -> Result<Value> {
+    let url = format!("{}{}", DASHBOARD_BASE, path);
+    let token = load_access_token()?;
+
+    let client = reqwest::Client::new();
+    let mut req = client.get(&url);
+    if let Some(t) = &token {
+        req = req.header("Authorization", format!("Bearer {}", t));
+    }
+
+    let resp = req.send().await.context("HTTP GET 失敗")?;
+    let status = resp.status();
+    let body: Value = resp.json().await.context("JSON パース失敗")?;
+
+    if !status.is_success() {
+        let err = body["error"].as_str().unwrap_or("unknown error");
+        anyhow::bail!("HTTP {} — {}", status, err);
+    }
+
+    Ok(body)
+}
+
+/// Dashboard HTTP API に POST リクエスト
+pub async fn http_post(path: &str) -> Result<Value> {
+    let url = format!("{}{}", DASHBOARD_BASE, path);
+    let token = load_access_token()?;
+
+    let client = reqwest::Client::new();
+    let mut req = client.post(&url);
+    if let Some(t) = &token {
+        req = req.header("Authorization", format!("Bearer {}", t));
+    }
+
+    let resp = req.send().await.context("HTTP POST 失敗")?;
+    let status = resp.status();
+    let body: Value = resp.json().await.context("JSON パース失敗")?;
+
+    if !status.is_success() {
+        let err = body["error"].as_str().unwrap_or("unknown error");
+        anyhow::bail!("HTTP {} — {}", status, err);
+    }
+
+    Ok(body)
+}
+
+/// credentials.json から access_token を取得
+fn load_access_token() -> Result<Option<String>> {
+    let creds_path = dirs::config_dir()
+        .context("設定ディレクトリなし")?
+        .join("fleetflow/credentials.json");
+
+    if !creds_path.exists() {
+        return Ok(None);
+    }
+
+    let content = std::fs::read_to_string(&creds_path)?;
+    let creds: Credentials = serde_json::from_str(&content)?;
+    Ok(Some(creds.access_token))
 }

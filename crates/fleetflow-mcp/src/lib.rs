@@ -106,6 +106,26 @@ pub struct CpLogsParam {
     pub tail: Option<u64>,
 }
 
+/// ステージ指定パラメータ（project + stage）
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
+pub struct StagePathParam {
+    /// プロジェクト slug
+    pub project: String,
+    /// ステージ名
+    pub stage: String,
+}
+
+/// コンテナログ取得パラメータ
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
+pub struct ContainerLogParam {
+    /// プロジェクト slug
+    pub project: String,
+    /// ステージ名
+    pub stage: String,
+    /// コンテナ名
+    pub container: String,
+}
+
 // ============================================================================
 // MCP サーバー
 // ============================================================================
@@ -697,6 +717,244 @@ impl FleetFlowServer {
         Ok(result)
     }
 
+    // ============================================================================
+    // v3: Dashboard HTTP API 経由のツール（v0.13.0 追加分）
+    // ============================================================================
+
+    /// ステージ概要（1st ビュー）— アラート・デプロイ・サーバー状態付き
+    #[tool(
+        description = "テナントの全ステージ概要を取得します。アラート数、直近デプロイ結果、サーバー状態を含む優先度ソート済みの一覧です。"
+    )]
+    async fn fleetflow_cp_stages(&self) -> Result<String, String> {
+        let resp = cp::http_get("/api/stages")
+            .await
+            .map_err(|e| e.to_string())?;
+        let stages = resp["stages"].as_array();
+        let mut result = "ステージ一覧（優先度順）:\n\n".to_string();
+        if let Some(stages) = stages {
+            if stages.is_empty() {
+                result.push_str("  (ステージなし)");
+            } else {
+                result.push_str(&format!(
+                    "  {:<20} {:<10} {:<12} {:<10} {:<10} {}\n",
+                    "PROJECT", "STAGE", "SERVER", "STATUS", "DEPLOY", "ALERTS"
+                ));
+                result.push_str(&format!("  {}\n", "─".repeat(75)));
+                for s in stages {
+                    let alerts = s["alert_count"].as_i64().unwrap_or(0);
+                    let alert_str = if alerts > 0 {
+                        format!("⚠ {}", alerts)
+                    } else {
+                        "-".into()
+                    };
+                    result.push_str(&format!(
+                        "  {:<20} {:<10} {:<12} {:<10} {:<10} {}\n",
+                        s["project_name"].as_str().unwrap_or("N/A"),
+                        s["stage"].as_str().unwrap_or("N/A"),
+                        s["server_slug"].as_str().unwrap_or("-"),
+                        s["server_status"].as_str().unwrap_or("-"),
+                        s["last_deploy_status"].as_str().unwrap_or("-"),
+                        alert_str,
+                    ));
+                }
+            }
+        }
+        Ok(result)
+    }
+
+    /// ステージのサービス一覧
+    #[tool(
+        description = "指定ステージのサービス一覧を取得します。サービス名、Docker イメージ、稼働状態を表示します。"
+    )]
+    async fn fleetflow_cp_stage_services(
+        &self,
+        params: Parameters<StagePathParam>,
+    ) -> Result<String, String> {
+        let p = &params.0;
+        let path = format!("/api/stages/{}/{}/services", p.project, p.stage);
+        let resp = cp::http_get(&path).await.map_err(|e| e.to_string())?;
+        let services = resp["services"].as_array();
+        let mut result = format!("{}/{} サービス一覧:\n\n", p.project, p.stage);
+        if let Some(svcs) = services {
+            for s in svcs {
+                result.push_str(&format!(
+                    "  {} — {} ({})\n",
+                    s["slug"].as_str().unwrap_or("?"),
+                    s["image"].as_str().unwrap_or("?"),
+                    s["desired_status"].as_str().unwrap_or("?")
+                ));
+            }
+        }
+        Ok(result)
+    }
+
+    /// ステージのデプロイ履歴
+    #[tool(
+        description = "指定ステージの直近デプロイ履歴を取得します。コマンド、ステータス、実行時刻を表示します。"
+    )]
+    async fn fleetflow_cp_stage_deployments(
+        &self,
+        params: Parameters<StagePathParam>,
+    ) -> Result<String, String> {
+        let p = &params.0;
+        let path = format!("/api/stages/{}/{}/deployments", p.project, p.stage);
+        let resp = cp::http_get(&path).await.map_err(|e| e.to_string())?;
+        let deploys = resp["deployments"].as_array();
+        let mut result = format!("{}/{} デプロイ履歴:\n\n", p.project, p.stage);
+        if let Some(deps) = deploys {
+            for d in deps {
+                result.push_str(&format!(
+                    "  [{}] {} — {} ({})\n",
+                    d["status"].as_str().unwrap_or("?"),
+                    d["command"].as_str().unwrap_or("?"),
+                    d["server_slug"].as_str().unwrap_or("?"),
+                    d["started_at"].as_str().unwrap_or("?"),
+                ));
+            }
+        }
+        Ok(result)
+    }
+
+    /// Agent 経由で再デプロイ
+    #[tool(
+        description = "指定ステージを Fleet Agent 経由で再デプロイします。CP → Agent → docker compose up の流れで実行されます。"
+    )]
+    async fn fleetflow_cp_redeploy(
+        &self,
+        params: Parameters<StagePathParam>,
+    ) -> Result<String, String> {
+        let p = &params.0;
+        let path = format!("/api/stages/{}/{}/redeploy", p.project, p.stage);
+        let resp = cp::http_post(&path).await.map_err(|e| e.to_string())?;
+        Ok(serde_json::to_string_pretty(&resp).unwrap_or_else(|_| "OK".into()))
+    }
+
+    /// Agent 経由でサービス再起動
+    #[tool(
+        description = "指定サービスを Fleet Agent 経由で再起動します。CP → Agent → docker restart の流れで実行されます。"
+    )]
+    async fn fleetflow_cp_service_restart(
+        &self,
+        params: Parameters<CpContainerParam>,
+    ) -> Result<String, String> {
+        let p = &params.0;
+        let path = format!(
+            "/api/stages/{}/{}/restart/{}",
+            p.project, p.stage, p.service
+        );
+        let resp = cp::http_post(&path).await.map_err(|e| e.to_string())?;
+        Ok(serde_json::to_string_pretty(&resp).unwrap_or_else(|_| "OK".into()))
+    }
+
+    /// コンテナログ取得（LogRouter 経由）
+    #[tool(
+        description = "指定コンテナの直近ログを取得します。LogRouter のキャッシュから info 以上のログを返します。"
+    )]
+    async fn fleetflow_cp_container_logs_v2(
+        &self,
+        params: Parameters<ContainerLogParam>,
+    ) -> Result<String, String> {
+        let p = &params.0;
+        let path = format!("/api/stages/{}/{}/logs/{}", p.project, p.stage, p.container);
+        let resp = cp::http_get(&path).await.map_err(|e| e.to_string())?;
+        let logs = resp["logs"].as_array();
+        let mut result = format!("{} ログ:\n\n", p.container);
+        if let Some(entries) = logs {
+            if entries.is_empty() {
+                result.push_str("  (ログなし — Agent 未接続 or コンテナ未稼働)");
+            } else {
+                for l in entries {
+                    result.push_str(&format!(
+                        "[{}] [{}] {}\n",
+                        l["timestamp"].as_str().unwrap_or("?"),
+                        l["level"].as_str().unwrap_or("?"),
+                        l["message"].as_str().unwrap_or(""),
+                    ));
+                }
+            }
+        }
+        Ok(result)
+    }
+
+    /// ステージのアクティブアラート一覧
+    #[tool(
+        description = "指定ステージのアクティブなアラート一覧を取得します。コンテナ名、タイプ、重要度、メッセージを表示します。"
+    )]
+    async fn fleetflow_cp_alerts(
+        &self,
+        params: Parameters<StagePathParam>,
+    ) -> Result<String, String> {
+        let p = &params.0;
+        let path = format!("/api/stages/{}/{}/alerts", p.project, p.stage);
+        let resp = cp::http_get(&path).await.map_err(|e| e.to_string())?;
+        let alerts = resp["alerts"].as_array();
+        let mut result = format!("{}/{} アラート:\n\n", p.project, p.stage);
+        if let Some(items) = alerts {
+            if items.is_empty() {
+                result.push_str("  (アラートなし)");
+            } else {
+                for a in items {
+                    result.push_str(&format!(
+                        "  [{}] {} — {} — {}\n",
+                        a["severity"].as_str().unwrap_or("?"),
+                        a["container_name"].as_str().unwrap_or("?"),
+                        a["alert_type"].as_str().unwrap_or("?"),
+                        a["message"].as_str().unwrap_or(""),
+                    ));
+                }
+            }
+        }
+        Ok(result)
+    }
+
+    /// 接続中の Fleet Agent 一覧
+    #[tool(
+        description = "Control Plane に接続中の Fleet Agent 一覧を取得します。各サーバーの Agent バージョンを表示します。"
+    )]
+    async fn fleetflow_cp_agents(&self) -> Result<String, String> {
+        let resp = cp::http_get("/api/agents")
+            .await
+            .map_err(|e| e.to_string())?;
+        let agents = resp["agents"].as_array();
+        let mut result = "接続中 Agent:\n\n".to_string();
+        if let Some(items) = agents {
+            if items.is_empty() {
+                result.push_str("  (接続中の Agent なし)");
+            } else {
+                for a in items {
+                    result.push_str(&format!(
+                        "  {} — v{}\n",
+                        a["server_slug"].as_str().unwrap_or("?"),
+                        a["version"].as_str().unwrap_or("?"),
+                    ));
+                }
+            }
+        }
+        Ok(result)
+    }
+
+    /// テナントユーザー一覧
+    #[tool(
+        description = "現在のテナントに所属するユーザー一覧を取得します。owner/admin のみアクセス可能です。"
+    )]
+    async fn fleetflow_cp_tenant_users(&self) -> Result<String, String> {
+        let resp = cp::http_get("/api/tenant/users")
+            .await
+            .map_err(|e| e.to_string())?;
+        let users = resp["users"].as_array();
+        let mut result = "テナントユーザー:\n\n".to_string();
+        if let Some(items) = users {
+            for u in items {
+                result.push_str(&format!(
+                    "  {} — {}\n",
+                    u["auth0_sub"].as_str().unwrap_or("?"),
+                    u["role"].as_str().unwrap_or("?"),
+                ));
+            }
+        }
+        Ok(result)
+    }
+
     /// CP 経由でプロジェクトの詳細を取得
     #[tool(
         description = "指定プロジェクトの詳細情報を取得します。プロジェクト名、説明、作成日時を表示します。"
@@ -1066,6 +1324,16 @@ mod tests {
         "fleetflow_cp_container_stop",
         "fleetflow_cp_container_restart",
         "fleetflow_cp_container_logs",
+        // v3: Dashboard HTTP API 経由（v0.13.0 追加）
+        "fleetflow_cp_stages",
+        "fleetflow_cp_stage_services",
+        "fleetflow_cp_stage_deployments",
+        "fleetflow_cp_redeploy",
+        "fleetflow_cp_service_restart",
+        "fleetflow_cp_container_logs_v2",
+        "fleetflow_cp_alerts",
+        "fleetflow_cp_agents",
+        "fleetflow_cp_tenant_users",
     ];
 
     #[test]
@@ -1148,6 +1416,9 @@ mod tests {
             "fleetflow_cp_projects",
             "fleetflow_cp_servers",
             "fleetflow_cp_overview",
+            "fleetflow_cp_stages",
+            "fleetflow_cp_agents",
+            "fleetflow_cp_tenant_users",
         ];
         for tool in &tools {
             if parameterless.contains(&tool.name.as_ref()) {
