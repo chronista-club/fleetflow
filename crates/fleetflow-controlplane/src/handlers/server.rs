@@ -6,7 +6,7 @@ use tracing::{error, info};
 use unison::network::channel::UnisonChannel;
 use unison::network::server::ProtocolServer;
 
-use crate::model::{Server, ServerStatusUpdate};
+use crate::model::{Alert, Server, ServerStatusUpdate};
 use crate::server::AppState;
 
 pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
@@ -551,6 +551,85 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                             msg.id,
                                             "power-off",
                                             json!({ "error": "server provider not configured" }),
+                                        )
+                                        .await?;
+                                }
+                            }
+                        }
+                        "alert" => {
+                            let server_slug =
+                                payload["server_slug"].as_str().unwrap_or_default();
+                            let container_name =
+                                payload["container_name"].as_str().unwrap_or_default();
+                            let alert_type =
+                                payload["alert_type"].as_str().unwrap_or_default();
+                            let severity =
+                                payload["severity"].as_str().unwrap_or("warning");
+                            let message =
+                                payload["message"].as_str().unwrap_or_default();
+
+                            // server_slug → テナント解決
+                            let server = match state.db.get_server_by_slug(server_slug).await {
+                                Ok(Some(s)) => s,
+                                Ok(None) => {
+                                    channel
+                                        .send_response(
+                                            msg.id,
+                                            "alert",
+                                            json!({ "error": "server not found" }),
+                                        )
+                                        .await?;
+                                    continue;
+                                }
+                                Err(e) => {
+                                    error!(error = %e, "server lookup 失敗");
+                                    channel
+                                        .send_response(
+                                            msg.id,
+                                            "alert",
+                                            json!({ "error": e.to_string() }),
+                                        )
+                                        .await?;
+                                    continue;
+                                }
+                            };
+
+                            let alert = Alert {
+                                id: None,
+                                tenant: server.tenant.clone(),
+                                server_slug: server_slug.to_string(),
+                                container_name: container_name.to_string(),
+                                alert_type: alert_type.to_string(),
+                                severity: severity.to_string(),
+                                message: message.to_string(),
+                                resolved: false,
+                                resolved_at: None,
+                                created_at: None,
+                            };
+
+                            match state.db.upsert_alert(&alert).await {
+                                Ok(_) => {
+                                    info!(
+                                        server = server_slug,
+                                        container = container_name,
+                                        alert_type,
+                                        "アラート記録完了"
+                                    );
+                                    channel
+                                        .send_response(
+                                            msg.id,
+                                            "alert",
+                                            json!({ "ack": true }),
+                                        )
+                                        .await?;
+                                }
+                                Err(e) => {
+                                    error!(error = %e, "アラート記録失敗");
+                                    channel
+                                        .send_response(
+                                            msg.id,
+                                            "alert",
+                                            json!({ "error": e.to_string() }),
                                         )
                                         .await?;
                                 }

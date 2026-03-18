@@ -26,6 +26,14 @@ struct Cli {
     /// デプロイ許可ベースディレクトリ
     #[arg(long, env = "FLEET_AGENT_DEPLOY_BASE", default_value = "/opt/apps")]
     deploy_base: String,
+
+    /// モニター間隔（秒）
+    #[arg(long, env = "FLEET_AGENT_MONITOR_INTERVAL", default_value = "30")]
+    monitor_interval: u64,
+
+    /// リスタート閾値（この回数を超えたらアラート）
+    #[arg(long, env = "FLEET_AGENT_RESTART_THRESHOLD", default_value = "3")]
+    restart_threshold: u32,
 }
 
 #[tokio::main]
@@ -51,6 +59,8 @@ async fn main() -> Result<()> {
         server_slug: cli.server_slug,
         heartbeat_interval_secs: cli.heartbeat_interval,
         deploy_base: cli.deploy_base,
+        monitor_interval_secs: cli.monitor_interval,
+        restart_threshold: cli.restart_threshold,
     })
     .await
 }
