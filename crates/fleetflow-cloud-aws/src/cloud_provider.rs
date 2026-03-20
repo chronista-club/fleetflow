@@ -290,6 +290,37 @@ impl AwsCloudProvider {
         Ok(alloc_id)
     }
 
+    async fn list_managed_eips(&self) -> Result<Vec<(String, String)>, CloudError> {
+        let resp = self
+            .client
+            .describe_addresses()
+            .filters(
+                aws_sdk_ec2::types::Filter::builder()
+                    .name("tag:fleetflow.managed")
+                    .values("true")
+                    .build(),
+            )
+            .send()
+            .await
+            .map_err(|e| CloudError::ApiError(format!("describe_addresses failed: {e}")))?;
+
+        Ok(resp
+            .addresses()
+            .iter()
+            .filter_map(|addr| {
+                let alloc_id = addr.allocation_id()?.to_string();
+                let name = addr
+                    .tags()
+                    .iter()
+                    .find(|t| t.key() == Some("Name"))
+                    .and_then(|t| t.value())
+                    .unwrap_or_default()
+                    .to_string();
+                Some((name, alloc_id))
+            })
+            .collect())
+    }
+
     async fn release_eip(&self, alloc_id: &str) -> Result<(), CloudError> {
         info!(alloc_id = %alloc_id, "Releasing Elastic IP");
 
@@ -348,10 +379,13 @@ impl CloudProvider for AwsCloudProvider {
     async fn plan(&self, desired: &ResourceSet) -> fleetflow_cloud::Result<Plan> {
         let existing_subnets = self.list_managed_subnets().await?;
         let existing_sgs = self.list_managed_security_groups().await?;
+        let existing_eips = self.list_managed_eips().await?;
 
         let existing_subnet_names: Vec<&str> =
             existing_subnets.iter().map(|(n, _)| n.as_str()).collect();
         let existing_sg_names: Vec<&str> = existing_sgs.iter().map(|(n, _)| n.as_str()).collect();
+        let existing_eip_names: Vec<&str> =
+            existing_eips.iter().map(|(n, _)| n.as_str()).collect();
 
         let mut actions = Vec::new();
 
@@ -410,14 +444,25 @@ impl CloudProvider for AwsCloudProvider {
         // Elastic IP の plan
         for resource in desired.by_type("elastic-ip") {
             let name = &resource.id;
-            actions.push(Action {
-                id: format!("eip:{name}"),
-                action_type: ActionType::Create,
-                resource_type: "elastic-ip".into(),
-                resource_id: name.clone(),
-                description: format!("Allocate Elastic IP for '{name}'"),
-                details: HashMap::new(),
-            });
+            if existing_eip_names.contains(&name.as_str()) {
+                actions.push(Action {
+                    id: format!("eip:{name}"),
+                    action_type: ActionType::NoOp,
+                    resource_type: "elastic-ip".into(),
+                    resource_id: name.clone(),
+                    description: format!("Elastic IP '{name}' already exists"),
+                    details: HashMap::new(),
+                });
+            } else {
+                actions.push(Action {
+                    id: format!("eip:{name}"),
+                    action_type: ActionType::Create,
+                    resource_type: "elastic-ip".into(),
+                    resource_id: name.clone(),
+                    description: format!("Allocate Elastic IP for '{name}'"),
+                    details: HashMap::new(),
+                });
+            }
         }
 
         let plan = Plan::new(actions);
@@ -569,7 +614,15 @@ impl CloudProvider for AwsCloudProvider {
         let start = std::time::Instant::now();
         let mut result = ApplyResult::new();
 
-        // 逆順: SG → Subnet（EIP は list が未実装のため TODO）
+        // 逆順: EIP → SG → Subnet
+        let eips = self.list_managed_eips().await?;
+        for (name, alloc_id) in &eips {
+            match self.release_eip(alloc_id).await {
+                Ok(()) => result.add_success(format!("eip:{name}"), "EIP released".into()),
+                Err(e) => result.add_failure(format!("eip:{name}"), e.to_string()),
+            }
+        }
+
         let sgs = self.list_managed_security_groups().await?;
         for (name, sg_id) in &sgs {
             match self.delete_security_group(sg_id).await {
