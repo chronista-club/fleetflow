@@ -7,10 +7,10 @@ use std::collections::HashMap;
 
 use async_trait::async_trait;
 use aws_sdk_ec2::Client as Ec2Client;
+use fleetflow_cloud::CloudError;
 use fleetflow_cloud::action::{Action, ActionType, ApplyResult, Plan};
 use fleetflow_cloud::provider::{AuthStatus, CloudProvider, ResourceSet};
 use fleetflow_cloud::state::ProviderState;
-use fleetflow_cloud::CloudError;
 use tracing::{debug, info, warn};
 
 use crate::models::{PortSpec, SecurityGroupConfig, SecurityGroupRule, SubnetConfig};
@@ -181,8 +181,7 @@ impl AwsCloudProvider {
             .group_id(sg_id);
 
         for rule in rules {
-            let mut perm = aws_sdk_ec2::types::IpPermission::builder()
-                .ip_protocol(&rule.protocol);
+            let mut perm = aws_sdk_ec2::types::IpPermission::builder().ip_protocol(&rule.protocol);
 
             match &rule.port {
                 PortSpec::Single(port) => {
@@ -243,9 +242,7 @@ impl AwsCloudProvider {
             )
             .send()
             .await
-            .map_err(|e| {
-                CloudError::ApiError(format!("describe_security_groups failed: {e}"))
-            })?;
+            .map_err(|e| CloudError::ApiError(format!("describe_security_groups failed: {e}")))?;
 
         Ok(resp
             .security_groups()
@@ -325,12 +322,10 @@ impl CloudProvider for AwsCloudProvider {
             .send()
             .await
         {
-            Ok(_resp) => {
-                Ok(AuthStatus::ok(format!(
-                    "AWS authenticated (region: {}, vpc: {})",
-                    self.region, self.vpc_id
-                )))
-            }
+            Ok(_resp) => Ok(AuthStatus::ok(format!(
+                "AWS authenticated (region: {}, vpc: {})",
+                self.region, self.vpc_id
+            ))),
             Err(e) => Ok(AuthStatus::failed(format!("AWS auth failed: {e}"))),
         }
     }
@@ -356,8 +351,7 @@ impl CloudProvider for AwsCloudProvider {
 
         let existing_subnet_names: Vec<&str> =
             existing_subnets.iter().map(|(n, _)| n.as_str()).collect();
-        let existing_sg_names: Vec<&str> =
-            existing_sgs.iter().map(|(n, _)| n.as_str()).collect();
+        let existing_sg_names: Vec<&str> = existing_sgs.iter().map(|(n, _)| n.as_str()).collect();
 
         let mut actions = Vec::new();
 
@@ -473,16 +467,21 @@ impl CloudProvider for AwsCloudProvider {
         }
 
         // Delete は逆順: EIP → SG → Subnet
+        // aws_id が必須 — 欠落時はエラーとして記録
         for action in plan
             .actions_by_type(ActionType::Delete)
             .iter()
             .filter(|a| a.resource_type == "elastic-ip")
         {
-            if let Some(alloc_id) = action.details.get("aws_id").and_then(|v| v.as_str()) {
-                match self.release_eip(alloc_id).await {
+            match action.details.get("aws_id").and_then(|v| v.as_str()) {
+                Some(alloc_id) => match self.release_eip(alloc_id).await {
                     Ok(()) => result.add_success(action.id.clone(), "EIP released".into()),
                     Err(e) => result.add_failure(action.id.clone(), e.to_string()),
-                }
+                },
+                None => result.add_failure(
+                    action.id.clone(),
+                    "Missing aws_id for EIP deletion".into(),
+                ),
             }
         }
 
@@ -491,11 +490,15 @@ impl CloudProvider for AwsCloudProvider {
             .iter()
             .filter(|a| a.resource_type == "security-group")
         {
-            if let Some(sg_id) = action.details.get("aws_id").and_then(|v| v.as_str()) {
-                match self.delete_security_group(sg_id).await {
+            match action.details.get("aws_id").and_then(|v| v.as_str()) {
+                Some(sg_id) => match self.delete_security_group(sg_id).await {
                     Ok(()) => result.add_success(action.id.clone(), "SG deleted".into()),
                     Err(e) => result.add_failure(action.id.clone(), e.to_string()),
-                }
+                },
+                None => result.add_failure(
+                    action.id.clone(),
+                    "Missing aws_id for SG deletion".into(),
+                ),
             }
         }
 
@@ -504,11 +507,15 @@ impl CloudProvider for AwsCloudProvider {
             .iter()
             .filter(|a| a.resource_type == "subnet")
         {
-            if let Some(subnet_id) = action.details.get("aws_id").and_then(|v| v.as_str()) {
-                match self.delete_subnet(subnet_id).await {
+            match action.details.get("aws_id").and_then(|v| v.as_str()) {
+                Some(subnet_id) => match self.delete_subnet(subnet_id).await {
                     Ok(()) => result.add_success(action.id.clone(), "Subnet deleted".into()),
                     Err(e) => result.add_failure(action.id.clone(), e.to_string()),
-                }
+                },
+                None => result.add_failure(
+                    action.id.clone(),
+                    "Missing aws_id for subnet deletion".into(),
+                ),
             }
         }
 
@@ -518,7 +525,7 @@ impl CloudProvider for AwsCloudProvider {
 
     async fn destroy(&self, resource_id: &str) -> fleetflow_cloud::Result<()> {
         warn!(resource_id = %resource_id, "Destroying AWS resource");
-        // resource_id のフォーマット: "subnet:xxx" or "sg:xxx" or "eip:xxx"
+        // resource_id のフォーマット: "subnet:<name>" or "sg:<name>" or "eip:<alloc_id>"
         let parts: Vec<&str> = resource_id.splitn(2, ':').collect();
         if parts.len() != 2 {
             return Err(CloudError::InvalidConfig(format!(
@@ -526,10 +533,32 @@ impl CloudProvider for AwsCloudProvider {
             )));
         }
 
+        let name = parts[1];
         match parts[0] {
-            "subnet" => self.delete_subnet(parts[1]).await,
-            "sg" => self.delete_security_group(parts[1]).await,
-            "eip" => self.release_eip(parts[1]).await,
+            "subnet" => {
+                // 名前→AWS ID を解決
+                let subnets = self.list_managed_subnets().await?;
+                let aws_id = subnets
+                    .iter()
+                    .find(|(n, _)| n == name)
+                    .map(|(_, id)| id.as_str())
+                    .ok_or_else(|| {
+                        CloudError::ResourceNotFound(format!("Subnet '{name}' not found"))
+                    })?;
+                self.delete_subnet(aws_id).await
+            }
+            "sg" => {
+                let sgs = self.list_managed_security_groups().await?;
+                let aws_id = sgs
+                    .iter()
+                    .find(|(n, _)| n == name)
+                    .map(|(_, id)| id.as_str())
+                    .ok_or_else(|| {
+                        CloudError::ResourceNotFound(format!("Security group '{name}' not found"))
+                    })?;
+                self.delete_security_group(aws_id).await
+            }
+            "eip" => self.release_eip(name).await,
             other => Err(CloudError::InvalidConfig(format!(
                 "Unknown resource type: {other}"
             ))),
@@ -573,6 +602,10 @@ impl AwsCloudProvider {
                     .map_err(|e| CloudError::InvalidConfig(format!("Invalid subnet config: {e}")))
             })?;
 
+        config
+            .validate()
+            .map_err(CloudError::InvalidConfig)?;
+
         let subnet_id = self.create_subnet(&config).await?;
         Ok(format!("Subnet created: {subnet_id}"))
     }
@@ -586,6 +619,10 @@ impl AwsCloudProvider {
                 serde_json::from_value(v.clone())
                     .map_err(|e| CloudError::InvalidConfig(format!("Invalid SG config: {e}")))
             })?;
+
+        config
+            .validate()
+            .map_err(CloudError::InvalidConfig)?;
 
         let sg_id = self.create_security_group(&config).await?;
         Ok(format!("Security group created: {sg_id}"))

@@ -184,6 +184,17 @@ pub fn load_config(path: &Path) -> Result<DaemonConfig> {
                     fleetflow_controlplane::server_provider::ServerProviderKind::Sakura(provider),
                 );
             }
+            "aws" => {
+                let region = children
+                    .get("region")
+                    .and_then(|n| node_str(n))
+                    .unwrap_or("ap-northeast-1");
+                // AWS プロバイダーは async 初期化が必要なため、ここでは region だけ保持して
+                // 起動時に初期化する方式にする（config パース時点では tokio ランタイム未確定）
+                tracing::info!(region = region, "AWS provider configured (lazy init)");
+                // TODO: 起動時の lazy init 実装。暫定で warn を出す。
+                tracing::warn!("AWS provider: lazy init not yet implemented — use CP API to configure");
+            }
             other => {
                 tracing::warn!(
                     provider = other,
