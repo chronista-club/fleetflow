@@ -35,9 +35,7 @@ impl ServerProviderKind {
             Self::Sakura(p) => {
                 fleetflow_cloud::server_provider::ServerProvider::list_servers(p).await
             }
-            Self::Aws(p) => {
-                fleetflow_cloud::server_provider::ServerProvider::list_servers(p).await
-            }
+            Self::Aws(p) => fleetflow_cloud::server_provider::ServerProvider::list_servers(p).await,
             #[cfg(feature = "test-utils")]
             Self::Mock(_) => Ok(vec![]),
         }
