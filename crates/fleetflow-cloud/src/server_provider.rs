@@ -117,6 +117,28 @@ pub struct CreateServerRequest {
 
     /// プロバイダー固有の設定
     pub provider_config: Option<serde_json::Value>,
+
+    /// ネットワーク設定（AWS 等で使用。None の場合はプロバイダーデフォルト）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub network: Option<NetworkConfig>,
+}
+
+/// ネットワーク設定（サーバー作成時のネットワーク指定）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NetworkConfig {
+    /// Subnet ID
+    pub subnet_id: Option<String>,
+
+    /// Security Group ID 一覧
+    #[serde(default)]
+    pub security_group_ids: Vec<String>,
+
+    /// プライベート IP アドレス（固定指定する場合）
+    pub private_ip: Option<String>,
+
+    /// パブリック IP を割り当てるか
+    #[serde(default)]
+    pub assign_public_ip: bool,
 }
 
 #[cfg(test)]
@@ -163,6 +185,7 @@ mod tests {
             ssh_keys: vec!["my-key".into()],
             tags: vec!["fleetflow".into(), "worker".into()],
             provider_config: None,
+            network: None,
         };
 
         let json = serde_json::to_string(&request).unwrap();
@@ -170,6 +193,41 @@ mod tests {
         assert_eq!(deserialized.name, "fleet-worker-01");
         assert_eq!(deserialized.cpu, 2);
         assert_eq!(deserialized.memory_gb, 4);
+    }
+
+    #[test]
+    fn test_create_server_request_with_network() {
+        let request = CreateServerRequest {
+            name: "aws-web".into(),
+            cpu: 2,
+            memory_gb: 4,
+            disk_gb: None,
+            os_type: Some("ubuntu-24.04".into()),
+            ssh_keys: vec!["my-key".into()],
+            tags: vec![],
+            provider_config: None,
+            network: Some(NetworkConfig {
+                subnet_id: Some("subnet-abc123".into()),
+                security_group_ids: vec!["sg-def456".into()],
+                private_ip: None,
+                assign_public_ip: false,
+            }),
+        };
+
+        let json = serde_json::to_string(&request).unwrap();
+        let deserialized: CreateServerRequest = serde_json::from_str(&json).unwrap();
+        let net = deserialized.network.unwrap();
+        assert_eq!(net.subnet_id, Some("subnet-abc123".into()));
+        assert_eq!(net.security_group_ids, vec!["sg-def456"]);
+        assert!(!net.assign_public_ip);
+    }
+
+    #[test]
+    fn test_create_server_request_network_none_compat() {
+        // network フィールドなしの JSON でもデシリアライズ可能（後方互換）
+        let json = r#"{"name":"srv","cpu":2,"memory_gb":4,"ssh_keys":[],"tags":[]}"#;
+        let request: CreateServerRequest = serde_json::from_str(json).unwrap();
+        assert!(request.network.is_none());
     }
 
     #[test]
