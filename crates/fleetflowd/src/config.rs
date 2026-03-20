@@ -193,7 +193,9 @@ pub fn load_config(path: &Path) -> Result<DaemonConfig> {
                 // 起動時に初期化する方式にする（config パース時点では tokio ランタイム未確定）
                 tracing::info!(region = region, "AWS provider configured (lazy init)");
                 // TODO: 起動時の lazy init 実装。暫定で warn を出す。
-                tracing::warn!("AWS provider: lazy init not yet implemented — use CP API to configure");
+                tracing::warn!(
+                    "AWS provider: lazy init not yet implemented — use CP API to configure"
+                );
             }
             other => {
                 tracing::warn!(
