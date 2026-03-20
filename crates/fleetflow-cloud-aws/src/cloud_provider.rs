@@ -603,6 +603,7 @@ fn tag(key: &str, value: &str) -> aws_sdk_ec2::types::Tag {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use fleetflow_cloud::provider::ResourceConfig;
 
     #[test]
     fn test_plan_with_new_resources() {
