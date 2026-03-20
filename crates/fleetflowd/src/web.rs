@@ -934,14 +934,31 @@ async fn api_stage_alerts(
     }
 }
 
-/// 接続中の Agent 一覧
-async fn api_agents(State(state): State<Arc<WebState>>) -> impl IntoResponse {
-    let agents = state.app.agent_registry.list().await;
-    let items: Vec<Value> = agents
+/// 接続中の Agent 一覧（テナントスコープ）
+async fn api_agents(State(state): State<Arc<WebState>>, req: Request) -> impl IntoResponse {
+    let ctx = req.extensions().get::<AuthContext>().unwrap();
+
+    // テナントのサーバー一覧を取得してフィルタ
+    let tenant_servers = match state.app.db.list_servers_by_tenant(&ctx.tenant_slug).await {
+        Ok(s) => s,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": e.to_string() })),
+            )
+                .into_response();
+        }
+    };
+
+    let tenant_slugs: Vec<&str> = tenant_servers.iter().map(|s| s.slug.as_str()).collect();
+
+    let all_agents = state.app.agent_registry.list().await;
+    let items: Vec<Value> = all_agents
         .iter()
+        .filter(|(slug, _)| tenant_slugs.contains(&slug.as_str()))
         .map(|(slug, version)| json!({ "server_slug": slug, "version": version }))
         .collect();
-    Json(json!({ "agents": items }))
+    (StatusCode::OK, Json(json!({ "agents": items }))).into_response()
 }
 
 /// コンテナログ取得（スナップショット、テナント分離付き）

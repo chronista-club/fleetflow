@@ -141,23 +141,28 @@ pub async fn http_post_with_body(path: &str, body: Option<Value>) -> Result<Valu
     Ok(resp_body)
 }
 
-/// credentials.json から access_token を取得（プロセス内キャッシュ付き）
-/// fleet login でトークン更新された場合はプロセス再起動が必要。
-/// MCP サーバーは通常プロセスライフサイクルが短いため許容範囲。
+/// credentials.json から access_token を取得
+/// MCP サーバーはセッション中ずっと稼働するため、
+/// 毎回ファイルを読み直して期限切れを防ぐ。
 fn load_access_token() -> Result<Option<String>> {
-    static TOKEN: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
+    let creds_path = match dirs::config_dir() {
+        Some(d) => d.join("fleetflow/credentials.json"),
+        None => return Ok(None),
+    };
 
-    Ok(TOKEN
-        .get_or_init(|| {
-            let creds_path = dirs::config_dir().map(|d| d.join("fleetflow/credentials.json"))?;
+    if !creds_path.exists() {
+        return Ok(None);
+    }
 
-            if !creds_path.exists() {
-                return None;
-            }
+    let content = std::fs::read_to_string(&creds_path).context("credentials 読み込み失敗")?;
+    let creds: Credentials = serde_json::from_str(&content).context("credentials パース失敗")?;
 
-            let content = std::fs::read_to_string(&creds_path).ok()?;
-            let creds: Credentials = serde_json::from_str(&content).ok()?;
-            Some(creds.access_token)
-        })
-        .clone())
+    // 有効期限チェック
+    if let Ok(expires) = chrono::DateTime::parse_from_rfc3339(&creds.expires_at) {
+        if expires < chrono::Utc::now() {
+            return Ok(None); // 期限切れ → トークンなしで送信（サーバー側で 401）
+        }
+    }
+
+    Ok(Some(creds.access_token))
 }

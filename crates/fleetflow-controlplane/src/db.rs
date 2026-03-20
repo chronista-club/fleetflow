@@ -819,13 +819,18 @@ impl Database {
     }
 
     /// サーバーのアクティブアラート数を取得
-    pub async fn count_active_alerts_by_server(&self, server_slug: &str) -> Result<i64> {
+    pub async fn count_active_alerts_by_server(
+        &self,
+        server_slug: &str,
+        tenant_slug: &str,
+    ) -> Result<i64> {
         let mut result = self
             .db
             .query(
-                "SELECT count() AS count FROM alert WHERE server_slug = $server_slug AND resolved = false GROUP ALL",
+                "SELECT count() AS count FROM alert WHERE server_slug = $server_slug AND tenant.slug = $tenant_slug AND resolved = false GROUP ALL",
             )
             .bind(("server_slug", server_slug.to_string()))
+            .bind(("tenant_slug", tenant_slug.to_string()))
             .await
             .context("アラートカウント取得失敗")?;
         let row: Option<serde_json::Value> = result.take(0)?;
@@ -1372,7 +1377,10 @@ mod tests {
         assert_eq!(updated.message, "更新されたメッセージ");
 
         // アクティブアラートカウント
-        let count = db.count_active_alerts_by_server("vps-01").await.unwrap();
+        let count = db
+            .count_active_alerts_by_server("vps-01", "test-tenant")
+            .await
+            .unwrap();
         assert_eq!(count, 1);
 
         // 別タイプのアラートを追加
@@ -1384,12 +1392,18 @@ mod tests {
         };
         db.upsert_alert(&alert3).await.unwrap();
 
-        let count = db.count_active_alerts_by_server("vps-01").await.unwrap();
+        let count = db
+            .count_active_alerts_by_server("vps-01", "test-tenant")
+            .await
+            .unwrap();
         assert_eq!(count, 2);
 
         // 解決
         db.resolve_alerts("vps-01", "web").await.unwrap();
-        let count = db.count_active_alerts_by_server("vps-01").await.unwrap();
+        let count = db
+            .count_active_alerts_by_server("vps-01", "test-tenant")
+            .await
+            .unwrap();
         assert_eq!(count, 0);
     }
 }
