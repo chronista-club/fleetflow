@@ -1,0 +1,24 @@
+[package]
+name = "fleetflow-cloud-aws"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "AWS cloud provider for FleetFlow"
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+fleetflow-cloud = { path = "../fleetflow-cloud" }
+async-trait = "0.1"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { workspace = true, features = ["process"] }
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tokio-test = "0.4"

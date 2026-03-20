@@ -9,6 +9,7 @@ members = [
   "crates/fleetflow-cloud",
   "crates/fleetflow-cloud-sakura",
   "crates/fleetflow-cloud-cloudflare",
+  "crates/fleetflow-cloud-aws",
   "crates/fleetflow-mcp",
   "crates/fleetflow-registry",
   "crates/fleetflow-controlplane",
