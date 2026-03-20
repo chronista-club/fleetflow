@@ -3,18 +3,17 @@
 //! EC2 インスタンスの CRUD 操作を提供する。
 
 use aws_sdk_ec2::Client as Ec2Client;
-use fleetflow_cloud::server_provider::{
-    CreateServerRequest, ServerSpec, ServerStatus,
-};
 use fleetflow_cloud::CloudError;
+use fleetflow_cloud::server_provider::{CreateServerRequest, ServerSpec, ServerStatus};
 use tracing::{debug, info};
 
 use crate::instance_type::resolve_instance_type;
 
 /// AWS サーバープロバイダ
-#[allow(dead_code)]
 pub struct AwsServerProvider {
     client: Ec2Client,
+    /// CloudProvider (Phase 4) で使用予定
+    #[allow(dead_code)]
     region: String,
 }
 
@@ -45,12 +44,14 @@ impl AwsServerProvider {
     /// EC2 の describe_images で canonical/amazon の公式 AMI を検索する。
     async fn resolve_ami(&self, os_type: &str) -> Result<String, CloudError> {
         let (owner, name_pattern) = match os_type {
-            s if s.contains("ubuntu-24.04") || s.contains("ubuntu-noble") => {
-                ("099720109477", "ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*")
-            }
-            s if s.contains("ubuntu-22.04") || s.contains("ubuntu-jammy") => {
-                ("099720109477", "ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*")
-            }
+            s if s.contains("ubuntu-24.04") || s.contains("ubuntu-noble") => (
+                "099720109477",
+                "ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*",
+            ),
+            s if s.contains("ubuntu-22.04") || s.contains("ubuntu-jammy") => (
+                "099720109477",
+                "ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*",
+            ),
             s if s.contains("amazon-linux") || s.contains("al2023") => {
                 ("137112412989", "al2023-ami-2023.*-x86_64")
             }
@@ -89,15 +90,13 @@ impl AwsServerProvider {
         images.sort_by(|a, b| {
             b.creation_date()
                 .unwrap_or_default()
-                .cmp(&a.creation_date().unwrap_or_default())
+                .cmp(a.creation_date().unwrap_or_default())
         });
 
         images
             .first()
             .and_then(|img| img.image_id().map(String::from))
-            .ok_or_else(|| {
-                CloudError::ApiError(format!("No AMI found for OS: {os_type}"))
-            })
+            .ok_or_else(|| CloudError::ApiError(format!("No AMI found for OS: {os_type}")))
     }
 
     /// EC2 Instance → ServerSpec 変換
@@ -141,24 +140,23 @@ impl AwsServerProvider {
             status,
             ip_address: instance.public_ip_address().map(String::from),
             provider: "aws".into(),
-            zone: instance.placement()
+            zone: instance
+                .placement()
                 .and_then(|p| p.availability_zone())
                 .map(String::from),
             tags: instance
                 .tags()
                 .iter()
                 .filter(|t| {
-                    !t.key()
-                        .unwrap_or_default()
-                        .starts_with("fleetflow.")
+                    !t.key().unwrap_or_default().starts_with("fleetflow.")
                         && t.key() != Some("Name")
                 })
-                .filter_map(|t| {
-                    Some(format!(
+                .map(|t| {
+                    format!(
                         "{}={}",
                         t.key().unwrap_or_default(),
                         t.value().unwrap_or_default()
-                    ))
+                    )
                 })
                 .collect(),
         }
@@ -226,10 +224,7 @@ impl fleetflow_cloud::server_provider::ServerProvider for AwsServerProvider {
         let instance_type_str = resolve_instance_type(request.cpu, request.memory_gb)
             .map_err(fleetflow_cloud::CloudError::from)?;
 
-        let os_type = request
-            .os_type
-            .as_deref()
-            .unwrap_or("ubuntu-24.04");
+        let os_type = request.os_type.as_deref().unwrap_or("ubuntu-24.04");
 
         let ami_id = self.resolve_ami(os_type).await?;
 
@@ -249,13 +244,6 @@ impl fleetflow_cloud::server_provider::ServerProvider for AwsServerProvider {
             .instance_type(instance_type)
             .min_count(1)
             .max_count(1)
-            .key_name(
-                request
-                    .ssh_keys
-                    .first()
-                    .cloned()
-                    .unwrap_or_default(),
-            )
             .tag_specifications(
                 aws_sdk_ec2::types::TagSpecification::builder()
                     .resource_type(aws_sdk_ec2::types::ResourceType::Instance)
@@ -265,6 +253,11 @@ impl fleetflow_cloud::server_provider::ServerProvider for AwsServerProvider {
                     .tags(tag("fleetflow.memory_gb", &request.memory_gb.to_string()))
                     .build(),
             );
+
+        // Key Pair（指定がある場合のみ）
+        if let Some(key) = request.ssh_keys.first() {
+            run_req = run_req.key_name(key);
+        }
 
         // ネットワーク設定
         if let Some(ref network) = request.network {
@@ -281,13 +274,21 @@ impl fleetflow_cloud::server_provider::ServerProvider for AwsServerProvider {
             .await
             .map_err(|e| CloudError::ApiError(format!("run_instances failed: {e}")))?;
 
-        let instance = resp
-            .instances()
-            .first()
-            .ok_or_else(|| CloudError::ApiError("No instance returned from run_instances".into()))?;
+        let instance = resp.instances().first().ok_or_else(|| {
+            CloudError::ApiError("No instance returned from run_instances".into())
+        })?;
 
         let instance_id = instance.instance_id().unwrap_or_default();
         info!(instance_id = %instance_id, "EC2 instance created");
+
+        // run_instances 直後のステータスは pending。
+        // IP アドレスも未割当の場合がある。
+        // 起動完了の確認は get_server() で再取得すること。
+        let status = match instance.state().and_then(|s| s.name()) {
+            Some(aws_sdk_ec2::types::InstanceStateName::Running) => ServerStatus::Running,
+            Some(aws_sdk_ec2::types::InstanceStateName::Stopped) => ServerStatus::Stopped,
+            _ => ServerStatus::Unknown, // pending 等
+        };
 
         Ok(ServerSpec {
             id: instance_id.to_string(),
@@ -295,7 +296,7 @@ impl fleetflow_cloud::server_provider::ServerProvider for AwsServerProvider {
             cpu: Some(request.cpu),
             memory_gb: Some(request.memory_gb),
             disk_gb: request.disk_gb,
-            status: ServerStatus::Running,
+            status,
             ip_address: instance.public_ip_address().map(String::from),
             provider: "aws".into(),
             zone: instance
