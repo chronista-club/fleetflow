@@ -158,10 +158,10 @@ fn load_access_token() -> Result<Option<String>> {
     let creds: Credentials = serde_json::from_str(&content).context("credentials パース失敗")?;
 
     // 有効期限チェック
-    if let Ok(expires) = chrono::DateTime::parse_from_rfc3339(&creds.expires_at) {
-        if expires < chrono::Utc::now() {
-            return Ok(None); // 期限切れ → トークンなしで送信（サーバー側で 401）
-        }
+    if let Ok(expires) = chrono::DateTime::parse_from_rfc3339(&creds.expires_at)
+        && expires < chrono::Utc::now()
+    {
+        return Ok(None); // 期限切れ → トークンなしで送信（サーバー側で 401）
     }
 
     Ok(Some(creds.access_token))
