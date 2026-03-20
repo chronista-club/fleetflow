@@ -201,39 +201,41 @@ async fn test_engine_events_order() {
         .await;
     assert!(result.is_ok());
 
-    let collected = events.lock().unwrap();
+    {
+        let collected = events.lock().unwrap();
 
-    // StepStarted events should appear in order 1..5
-    let step_starts: Vec<u8> = collected
-        .iter()
-        .filter_map(|e| {
-            if let DeployEvent::StepStarted { step, .. } = e {
-                Some(*step)
-            } else {
-                None
-            }
-        })
-        .collect();
-    assert_eq!(step_starts, vec![1, 2, 3, 4, 5]);
+        // StepStarted events should appear in order 1..5
+        let step_starts: Vec<u8> = collected
+            .iter()
+            .filter_map(|e| {
+                if let DeployEvent::StepStarted { step, .. } = e {
+                    Some(*step)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        assert_eq!(step_starts, vec![1, 2, 3, 4, 5]);
 
-    // StepCompleted events should appear in order 1..5
-    let step_completions: Vec<u8> = collected
-        .iter()
-        .filter_map(|e| {
-            if let DeployEvent::StepCompleted { step } = e {
-                Some(*step)
-            } else {
-                None
-            }
-        })
-        .collect();
-    assert_eq!(step_completions, vec![1, 2, 3, 4, 5]);
+        // StepCompleted events should appear in order 1..5
+        let step_completions: Vec<u8> = collected
+            .iter()
+            .filter_map(|e| {
+                if let DeployEvent::StepCompleted { step } = e {
+                    Some(*step)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        assert_eq!(step_completions, vec![1, 2, 3, 4, 5]);
 
-    // Should end with Completed event
-    assert!(matches!(
-        collected.last(),
-        Some(DeployEvent::Completed { .. })
-    ));
+        // Should end with Completed event
+        assert!(matches!(
+            collected.last(),
+            Some(DeployEvent::Completed { .. })
+        ));
+    }
 
     // Cleanup
     let container_name = "engine-test-test-event-test";

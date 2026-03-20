@@ -239,8 +239,10 @@ async fn test_server_create_success() -> anyhow::Result<()> {
     assert_eq!(resp["cloud"]["name"].as_str().unwrap(), "fleet-worker-01");
     assert_eq!(resp["server"]["slug"].as_str().unwrap(), "fleet-worker-01");
 
-    let calls = calls.lock().unwrap();
-    assert_eq!(calls.len(), 1);
+    {
+        let calls = calls.lock().unwrap();
+        assert_eq!(calls.len(), 1);
+    }
 
     ch.close().await?;
     client.disconnect().await?;
@@ -318,8 +320,10 @@ async fn test_server_delete_with_cloud() -> anyhow::Result<()> {
         .await?;
     assert!(resp.get("error").is_none(), "delete 成功: {:?}", resp);
 
-    let calls = calls.lock().unwrap();
-    assert_eq!(calls.len(), 1);
+    {
+        let calls = calls.lock().unwrap();
+        assert_eq!(calls.len(), 1);
+    }
 
     ch.close().await?;
     client.disconnect().await?;
@@ -364,10 +368,12 @@ async fn test_server_power_on_success() -> anyhow::Result<()> {
         .await?;
 
     assert!(resp.get("error").is_none(), "power-on 成功: {:?}", resp);
-    assert_eq!(resp["ok"].as_bool().unwrap(), true);
+    assert!(resp["ok"].as_bool().unwrap());
 
-    let calls = calls.lock().unwrap();
-    assert_eq!(calls.len(), 1);
+    {
+        let calls = calls.lock().unwrap();
+        assert_eq!(calls.len(), 1);
+    }
 
     ch.close().await?;
     client.disconnect().await?;
@@ -387,10 +393,12 @@ async fn test_server_power_off_success() -> anyhow::Result<()> {
         .await?;
 
     assert!(resp.get("error").is_none(), "power-off 成功: {:?}", resp);
-    assert_eq!(resp["ok"].as_bool().unwrap(), true);
+    assert!(resp["ok"].as_bool().unwrap());
 
-    let calls = calls.lock().unwrap();
-    assert_eq!(calls.len(), 1);
+    {
+        let calls = calls.lock().unwrap();
+        assert_eq!(calls.len(), 1);
+    }
 
     ch.close().await?;
     client.disconnect().await?;

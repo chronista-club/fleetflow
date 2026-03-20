@@ -207,7 +207,7 @@ async fn cargo_install_update() -> anyhow::Result<()> {
 
     println!(
         "{}",
-        "cargo install --git https://github.com/chronista-club/fleetflow --force".cyan()
+        "cargo install --git https://github.com/chronista-club/fleetflow --package fleetflow --force".cyan()
     );
     println!();
 
@@ -216,6 +216,8 @@ async fn cargo_install_update() -> anyhow::Result<()> {
             "install",
             "--git",
             "https://github.com/chronista-club/fleetflow",
+            "--package",
+            "fleetflow",
             "--force",
         ])
         .status()?;

@@ -59,16 +59,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: バージョン一致チェック
+      - name: バージョン一致チェック (major.minor)
         run: |
           FLEET_VER=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)"/\1/')
           PLUGIN_VER=$(curl -sf https://raw.githubusercontent.com/chronista-club/claude-plugin-fleetflow/main/.claude-plugin/plugin.json | jq -r .version)
           echo "FleetFlow: $FLEET_VER"
           echo "Plugin:    $PLUGIN_VER"
-          if [ "$FLEET_VER" != "$PLUGIN_VER" ]; then
-            echo "::error::プラグインバージョン不一致: FleetFlow=$FLEET_VER, Plugin=$PLUGIN_VER"
-            echo "::error::claude-plugin-fleetflow のバージョンを $FLEET_VER に更新してからリリースしてください"
+          FLEET_MM=$(echo "$FLEET_VER" | cut -d. -f1,2)
+          PLUGIN_MM=$(echo "$PLUGIN_VER" | cut -d. -f1,2)
+          if [ "$FLEET_MM" != "$PLUGIN_MM" ]; then
+            echo "::error::プラグイン major.minor 不一致: FleetFlow=$FLEET_VER, Plugin=$PLUGIN_VER"
+            echo "::error::claude-plugin-fleetflow のバージョンを更新してからリリースしてください"
             exit 1
+          elif [ "$FLEET_VER" != "$PLUGIN_VER" ]; then
+            echo "::warning::パッチバージョン差異: FleetFlow=$FLEET_VER, Plugin=$PLUGIN_VER（許容）"
           else
             echo "✓ バージョン一致"
           fi
@@ -120,7 +124,7 @@ jobs:
           key: ${{ matrix.target }}
 
       - name: ビルド
-        run: cargo build --release --target ${{ matrix.target }}
+        run: cargo build --release --target ${{ matrix.target }} -p fleetflow
 
       - name: バイナリを圧縮
         run: |

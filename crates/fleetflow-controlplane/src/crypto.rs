@@ -188,7 +188,7 @@ mod tests {
     #[test]
     fn test_data_too_short() {
         let key = test_key();
-        let short = BASE64.encode(&[0u8; 10]);
+        let short = BASE64.encode([0u8; 10]);
         assert!(matches!(
             decrypt(&short, &key),
             Err(CryptoError::DataTooShort)
