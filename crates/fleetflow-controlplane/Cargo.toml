@@ -14,6 +14,7 @@ fleetflow-container.workspace = true
 fleetflow-cloud.workspace = true
 fleetflow-cloud-sakura.workspace = true
 fleetflow-cloud-cloudflare.workspace = true
+fleetflow-cloud-aws.workspace = true
 
 # Communication
 unison.workspace = true

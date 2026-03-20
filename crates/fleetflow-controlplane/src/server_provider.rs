@@ -12,6 +12,9 @@ pub enum ServerProviderKind {
     /// さくらクラウド（usacloud CLI 経由）
     Sakura(fleetflow_cloud_sakura::SakuraCloudProvider),
 
+    /// AWS（EC2 API 経由）
+    Aws(fleetflow_cloud_aws::AwsServerProvider),
+
     /// テスト用モック
     #[cfg(feature = "test-utils")]
     Mock(MockServerProvider),
@@ -21,6 +24,7 @@ impl ServerProviderKind {
     pub fn provider_name(&self) -> &str {
         match self {
             Self::Sakura(p) => fleetflow_cloud::server_provider::ServerProvider::provider_name(p),
+            Self::Aws(p) => fleetflow_cloud::server_provider::ServerProvider::provider_name(p),
             #[cfg(feature = "test-utils")]
             Self::Mock(m) => &m.name,
         }
@@ -31,6 +35,9 @@ impl ServerProviderKind {
             Self::Sakura(p) => {
                 fleetflow_cloud::server_provider::ServerProvider::list_servers(p).await
             }
+            Self::Aws(p) => {
+                fleetflow_cloud::server_provider::ServerProvider::list_servers(p).await
+            }
             #[cfg(feature = "test-utils")]
             Self::Mock(_) => Ok(vec![]),
         }
@@ -39,6 +46,9 @@ impl ServerProviderKind {
     pub async fn get_server(&self, server_id: &str) -> fleetflow_cloud::Result<ServerSpec> {
         match self {
             Self::Sakura(p) => {
+                fleetflow_cloud::server_provider::ServerProvider::get_server(p, server_id).await
+            }
+            Self::Aws(p) => {
                 fleetflow_cloud::server_provider::ServerProvider::get_server(p, server_id).await
             }
             #[cfg(feature = "test-utils")]
@@ -52,6 +62,9 @@ impl ServerProviderKind {
     ) -> fleetflow_cloud::Result<ServerSpec> {
         match self {
             Self::Sakura(p) => {
+                fleetflow_cloud::server_provider::ServerProvider::create_server(p, request).await
+            }
+            Self::Aws(p) => {
                 fleetflow_cloud::server_provider::ServerProvider::create_server(p, request).await
             }
             #[cfg(feature = "test-utils")]
@@ -71,6 +84,12 @@ impl ServerProviderKind {
                 )
                 .await
             }
+            Self::Aws(p) => {
+                fleetflow_cloud::server_provider::ServerProvider::delete_server(
+                    p, server_id, with_disks,
+                )
+                .await
+            }
             #[cfg(feature = "test-utils")]
             Self::Mock(m) => m.delete_server(server_id, with_disks),
         }
@@ -81,6 +100,9 @@ impl ServerProviderKind {
             Self::Sakura(p) => {
                 fleetflow_cloud::server_provider::ServerProvider::power_on(p, server_id).await
             }
+            Self::Aws(p) => {
+                fleetflow_cloud::server_provider::ServerProvider::power_on(p, server_id).await
+            }
             #[cfg(feature = "test-utils")]
             Self::Mock(m) => m.power_on(server_id),
         }
@@ -89,6 +111,9 @@ impl ServerProviderKind {
     pub async fn power_off(&self, server_id: &str) -> fleetflow_cloud::Result<()> {
         match self {
             Self::Sakura(p) => {
+                fleetflow_cloud::server_provider::ServerProvider::power_off(p, server_id).await
+            }
+            Self::Aws(p) => {
                 fleetflow_cloud::server_provider::ServerProvider::power_off(p, server_id).await
             }
             #[cfg(feature = "test-utils")]

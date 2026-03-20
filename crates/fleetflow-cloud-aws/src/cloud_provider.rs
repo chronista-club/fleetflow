@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use async_trait::async_trait;
 use aws_sdk_ec2::Client as Ec2Client;
 use fleetflow_cloud::action::{Action, ActionType, ApplyResult, Plan};
-use fleetflow_cloud::provider::{AuthStatus, CloudProvider, ResourceConfig, ResourceSet};
+use fleetflow_cloud::provider::{AuthStatus, CloudProvider, ResourceSet};
 use fleetflow_cloud::state::ProviderState;
 use fleetflow_cloud::CloudError;
 use tracing::{debug, info, warn};

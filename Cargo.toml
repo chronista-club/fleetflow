@@ -36,6 +36,7 @@ fleetflow-build = { version = "0.14.1", path = "crates/fleetflow-build" }
 fleetflow-cloud = { version = "0.14.1", path = "crates/fleetflow-cloud" }
 fleetflow-cloud-sakura = { version = "0.14.1", path = "crates/fleetflow-cloud-sakura" }
 fleetflow-cloud-cloudflare = { version = "0.14.1", path = "crates/fleetflow-cloud-cloudflare" }
+fleetflow-cloud-aws = { version = "0.14.1", path = "crates/fleetflow-cloud-aws" }
 fleetflow-mcp = { version = "0.14.1", path = "crates/fleetflow-mcp" }
 fleetflow-registry = { version = "0.14.1", path = "crates/fleetflow-registry" }
 fleetflow-controlplane = { version = "0.14.1", path = "crates/fleetflow-controlplane" }
