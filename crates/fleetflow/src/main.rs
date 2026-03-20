@@ -11,7 +11,7 @@ use colored::Colorize;
 use std::path::PathBuf;
 
 #[derive(Parser)]
-#[command(name = "fleet")]
+#[command(name = "fleet", version)]
 #[command(about = "伝える。動く。環境構築は、対話になった。", long_about = None)]
 struct Cli {
     #[command(subcommand)]
