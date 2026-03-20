@@ -6,8 +6,10 @@
 pub mod error;
 pub mod instance_type;
 pub mod models;
+pub mod server_provider;
 
 pub use error::AwsError;
 pub use models::{
     AwsConfig, AwsServerConfig, PortSpec, SecurityGroupConfig, SecurityGroupRule, SubnetConfig,
 };
+pub use server_provider::AwsServerProvider;
