@@ -18,6 +18,10 @@ pub struct SubnetConfig {
 impl SubnetConfig {
     /// CIDR の基本的なバリデーション
     pub fn validate(&self) -> Result<(), String> {
+        if self.name.is_empty() {
+            return Err("Subnet name is required".to_string());
+        }
+
         // CIDR 形式: x.x.x.x/n
         let parts: Vec<&str> = self.cidr.split('/').collect();
         if parts.len() != 2 {
@@ -89,6 +93,16 @@ mod tests {
         let subnet = SubnetConfig {
             name: "web".into(),
             cidr: "10.0.1.0/33".into(),
+            az: "ap-northeast-1a".into(),
+        };
+        assert!(subnet.validate().is_err());
+    }
+
+    #[test]
+    fn test_subnet_config_empty_name() {
+        let subnet = SubnetConfig {
+            name: "".into(),
+            cidr: "10.0.1.0/24".into(),
             az: "ap-northeast-1a".into(),
         };
         assert!(subnet.validate().is_err());

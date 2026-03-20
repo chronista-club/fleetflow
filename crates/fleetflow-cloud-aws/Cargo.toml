@@ -15,7 +15,6 @@ fleetflow-cloud = { path = "../fleetflow-cloud" }
 async-trait = "0.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-tokio = { workspace = true, features = ["process"] }
 anyhow.workspace = true
 thiserror.workspace = true
 tracing.workspace = true

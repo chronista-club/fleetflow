@@ -58,10 +58,7 @@ impl SecurityGroupRule {
             "tcp" | "udp" => {
                 // TCP/UDP はポート必須（All は不可）
                 if self.port == PortSpec::All {
-                    return Err(format!(
-                        "{} requires a port specification",
-                        self.protocol
-                    ));
+                    return Err(format!("{} requires a port specification", self.protocol));
                 }
             }
             "icmp" | "-1" => {
@@ -71,10 +68,10 @@ impl SecurityGroupRule {
         }
 
         // ポート範囲検証
-        if let PortSpec::Range(from, to) = self.port {
-            if from > to {
-                return Err(format!("Invalid port range: {from}-{to}"));
-            }
+        if let PortSpec::Range(from, to) = self.port
+            && from > to
+        {
+            return Err(format!("Invalid port range: {from}-{to}"));
         }
 
         // from 検証（空でないこと）

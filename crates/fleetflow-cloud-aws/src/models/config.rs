@@ -172,9 +172,10 @@ mod tests {
         let mut config = valid_config();
         config.servers[0].subnet = "nonexistent".into();
         let errs = config.validate().unwrap_err();
-        assert!(errs
-            .iter()
-            .any(|e| e.contains("subnet 'nonexistent' is not defined")));
+        assert!(
+            errs.iter()
+                .any(|e| e.contains("subnet 'nonexistent' is not defined"))
+        );
     }
 
     #[test]
@@ -182,9 +183,10 @@ mod tests {
         let mut config = valid_config();
         config.servers[0].security_group = "nonexistent".into();
         let errs = config.validate().unwrap_err();
-        assert!(errs
-            .iter()
-            .any(|e| e.contains("security-group 'nonexistent' is not defined")));
+        assert!(
+            errs.iter()
+                .any(|e| e.contains("security-group 'nonexistent' is not defined"))
+        );
     }
 
     #[test]

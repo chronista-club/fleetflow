@@ -124,7 +124,7 @@ pub struct CreateServerRequest {
 }
 
 /// ネットワーク設定（サーバー作成時のネットワーク指定）
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NetworkConfig {
     /// Subnet ID
     pub subnet_id: Option<String>,
