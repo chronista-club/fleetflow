@@ -120,11 +120,13 @@ async fn main() -> anyhow::Result<()> {
     println!();
 
     // Auth 設定の整合性チェック
-    if !cfg.server.auth.domain.is_empty() && cfg.auth0_client_id.is_empty() {
-        anyhow::bail!(
-            "auth.domain が設定されていますが auth0-client-id が未設定です。\
-             FLEETFLOW_AUTH0_CLIENT_ID 環境変数を設定するか、auth {{ domain \"\" }} で認証を無効化してください。"
-        );
+    if let Some(ref auth) = cfg.server.auth {
+        if !auth.domain.is_empty() && cfg.auth0_client_id.is_empty() {
+            anyhow::bail!(
+                "auth.domain が設定されていますが auth0-client-id が未設定です。\
+                 FLEETFLOW_AUTH0_CLIENT_ID 環境変数を設定するか、auth ブロックを削除して認証を無効化してください。"
+            );
+        }
     }
 
     // Control Plane サーバー起動

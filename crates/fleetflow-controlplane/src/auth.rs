@@ -7,6 +7,63 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::{RwLock, Semaphore};
 use tracing::{debug, info, warn};
 
+// ============================================================================
+// AuthProvider trait — OSS / SaaS 共通の認証抽象化
+// ============================================================================
+
+/// 認証プロバイダ（enum ディスパッチ）
+///
+/// OSS 版は `NoAuth`、SaaS 版は `Auth0` を使う。
+pub enum AuthProviderKind {
+    /// 認証なし（OSS / 開発用）— 全リクエストを許可
+    NoAuth,
+    /// Auth0 JWT 検証
+    Auth0(Auth0Verifier),
+}
+
+impl AuthProviderKind {
+    /// トークンを検証し、Claims を返す
+    pub async fn verify(&self, token: &str) -> Result<Claims> {
+        match self {
+            Self::NoAuth => Ok(Claims {
+                sub: "anonymous".into(),
+                aud: ClaimAudience::Single("local".into()),
+                iss: "fleetflow-oss".into(),
+                exp: u64::MAX,
+                iat: 0,
+                email: None,
+                permissions: vec![],
+            }),
+            Self::Auth0(verifier) => verifier.verify(token).await,
+        }
+    }
+
+    /// Auth ドメイン（Auth0 の場合は Auth0 ドメイン、NoAuth の場合は空）
+    pub fn domain(&self) -> &str {
+        match self {
+            Self::NoAuth => "",
+            Self::Auth0(v) => v.domain(),
+        }
+    }
+
+    /// Audience
+    pub fn audience(&self) -> &str {
+        match self {
+            Self::NoAuth => "",
+            Self::Auth0(v) => v.audience(),
+        }
+    }
+
+    /// NoAuth かどうか
+    pub fn is_no_auth(&self) -> bool {
+        matches!(self, Self::NoAuth)
+    }
+}
+
+// ============================================================================
+// Auth0 JWT Verifier
+// ============================================================================
+
 /// JWKS キャッシュの TTL（1 時間）
 const JWKS_CACHE_TTL: Duration = Duration::from_secs(3600);
 
@@ -242,3 +299,4 @@ impl Auth0Verifier {
         state.fetched_at = None;
     }
 }
+

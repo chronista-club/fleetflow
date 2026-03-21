@@ -5,7 +5,7 @@ use tracing::info;
 use unison::network::server::{ProtocolServer, ServerHandle};
 
 use crate::agent_registry::AgentRegistry;
-use crate::auth::{Auth0Config, Auth0Verifier};
+use crate::auth::{Auth0Config, Auth0Verifier, AuthProviderKind};
 use crate::db::{Database, DbConfig};
 use crate::handlers;
 use crate::log_router::LogRouter;
@@ -14,7 +14,8 @@ use crate::server_provider::ServerProviderKind;
 /// Shared application state for all channel handlers.
 pub struct AppState {
     pub db: Database,
-    pub auth: Auth0Verifier,
+    /// 認証プロバイダ（OSS: NoAuth、SaaS: Auth0）
+    pub auth: AuthProviderKind,
     /// クラウドプロバイダーのサーバー操作（オプション、未設定なら DB のみ操作）
     pub server_provider: Option<ServerProviderKind>,
     /// 接続中の Fleet Agent レジストリ
@@ -27,7 +28,8 @@ pub struct AppState {
 pub struct ServerConfig {
     pub listen_addr: String,
     pub db: DbConfig,
-    pub auth: Auth0Config,
+    /// Auth0 設定（None の場合は NoAuth = 認証なし）
+    pub auth: Option<Auth0Config>,
     /// クラウドプロバイダーのサーバー操作（オプション）
     pub server_provider: Option<ServerProviderKind>,
 }
@@ -37,10 +39,7 @@ impl Default for ServerConfig {
         Self {
             listen_addr: "[::1]:4510".into(),
             db: DbConfig::default(),
-            auth: Auth0Config {
-                domain: "anycreative.jp.auth0.com".into(),
-                audience: "https://api.fleetflow.run".into(),
-            },
+            auth: None,
             server_provider: None,
         }
     }
@@ -72,7 +71,13 @@ impl std::fmt::Debug for ServerConfig {
 pub async fn start(config: ServerConfig) -> Result<(ServerHandle, Arc<AppState>)> {
     // Initialize dependencies
     let db = Database::connect(&config.db).await?;
-    let auth = Auth0Verifier::new(&config.auth);
+    let auth = match config.auth {
+        Some(ref auth_config) => AuthProviderKind::Auth0(Auth0Verifier::new(auth_config)),
+        None => {
+            info!("Auth0 未設定 — NoAuth モード（認証なし）");
+            AuthProviderKind::NoAuth
+        }
+    };
 
     let state = Arc::new(AppState {
         db,

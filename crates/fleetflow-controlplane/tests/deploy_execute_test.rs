@@ -11,7 +11,7 @@ use unison::network::client::ProtocolClient;
 use unison::network::server::ProtocolServer;
 
 use fleetflow_controlplane::agent_registry::AgentRegistry;
-use fleetflow_controlplane::auth::{Auth0Config, Auth0Verifier};
+use fleetflow_controlplane::auth::AuthProviderKind;
 use fleetflow_controlplane::db::Database;
 use fleetflow_controlplane::handlers;
 use fleetflow_controlplane::log_router::LogRouter;
@@ -26,14 +26,9 @@ fn ensure_crypto_provider() {
 async fn start_test_server(port: u16) -> anyhow::Result<()> {
     ensure_crypto_provider();
     let db = Database::connect_memory().await?;
-    let auth = Auth0Verifier::new(&Auth0Config {
-        domain: "test.auth0.com".into(),
-        audience: "https://test.fleetflow.dev".into(),
-    });
-
     let state = Arc::new(AppState {
         db,
-        auth,
+        auth: AuthProviderKind::NoAuth,
         server_provider: None,
         agent_registry: AgentRegistry::new(),
         log_router: LogRouter::new(),

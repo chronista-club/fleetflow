@@ -154,16 +154,23 @@ pub fn load_config(path: &Path) -> Result<DaemonConfig> {
     if let Some(auth) = doc.get("auth")
         && let Some(children) = auth.children()
     {
-        let a = &mut config.server.auth;
+        let mut domain = String::new();
+        let mut audience = String::new();
         if let Some(node) = children.get("domain")
             && let Some(val) = node_str(node)
         {
-            a.domain = val.to_string();
+            domain = val.to_string();
         }
         if let Some(node) = children.get("audience")
             && let Some(val) = node_str(node)
         {
-            a.audience = val.to_string();
+            audience = val.to_string();
+        }
+        if !domain.is_empty() && !audience.is_empty() {
+            config.server.auth = Some(fleetflow_controlplane::auth::Auth0Config {
+                domain,
+                audience,
+            });
         }
     }
 
@@ -295,7 +302,10 @@ auth {
         assert_eq!(config.server.listen_addr, "0.0.0.0:5510");
         assert_eq!(config.server.db.endpoint, "ws://db.example.com:12000");
         assert_eq!(config.server.db.namespace, "myns");
-        assert_eq!(config.server.auth.domain, "example.auth0.com");
+        assert_eq!(
+            config.server.auth.as_ref().unwrap().domain,
+            "example.auth0.com"
+        );
         assert_eq!(config.web_addr, "0.0.0.0:8080");
         assert_eq!(config.auth0_client_id, "test-client-id-123");
         unsafe { std::env::remove_var("TEST_AUTH0_CLIENT") };
