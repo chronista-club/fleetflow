@@ -141,6 +141,66 @@ fn print_dry_run_plan(
     Ok(())
 }
 
+/// 静的サイトサービスの起動 — ビルド + wrangler pages dev
+async fn up_static(
+    project_root: &std::path::Path,
+    service_name: &str,
+    service: &fleetflow_core::Service,
+) -> anyhow::Result<()> {
+    println!();
+    println!(
+        "{}",
+        format!("▶ {} — 静的サイト dev サーバー起動", service_name)
+            .green()
+            .bold()
+    );
+
+    // ビルドコマンドの実行
+    if let Some(ref cmd) = service.command {
+        println!("  ビルド: {}", cmd.cyan());
+        let status = tokio::process::Command::new("sh")
+            .arg("-c")
+            .arg(cmd)
+            .current_dir(project_root)
+            .status()
+            .await?;
+        if !status.success() {
+            anyhow::bail!("ビルドコマンドが失敗しました: {cmd}");
+        }
+        println!("  {} ビルド完了", "✓".green());
+    }
+
+    let deploy = service.deploy.as_ref();
+    let output_dir = deploy
+        .and_then(|d| d.output.as_deref())
+        .unwrap_or("dist");
+    let output_path = project_root.join(output_dir);
+
+    println!(
+        "  dev サーバー: wrangler pages dev {}",
+        output_dir.cyan()
+    );
+
+    // wrangler pages dev をバックグラウンドで起動
+    let mut child = tokio::process::Command::new("wrangler")
+        .args(["pages", "dev", &output_path.to_string_lossy()])
+        .current_dir(project_root)
+        .spawn()
+        .map_err(|e| {
+            anyhow::anyhow!(
+                "wrangler pages dev の起動に失敗しました: {e}\nwrangler がインストールされているか確認してください"
+            )
+        })?;
+
+    println!("  {} dev サーバー起動 (PID: {})", "✓".green(), child.id().unwrap_or(0));
+    println!("  {} Ctrl+C で停止", "ℹ".blue());
+
+    // フォアグラウンドで待機（Ctrl+C で終了）
+    child.wait().await?;
+
+    Ok(())
+}
+
 pub async fn handle(
     config: &fleetflow_core::Flow,
     project_root: &std::path::Path,
@@ -177,23 +237,41 @@ pub async fn handle(
         println!("  • {}", service_name.cyan());
     }
 
-    // Docker接続
+    // 静的サイトサービスを先に起動（Docker 不要）
+    let (static_services, container_services): (Vec<_>, Vec<_>) =
+        stage_config.services.iter().partition(|name| {
+            config
+                .services
+                .get(name.as_str())
+                .is_some_and(|s| s.is_static())
+        });
+
+    for service_name in &static_services {
+        let service = config.services.get(service_name.as_str()).unwrap();
+        up_static(project_root, service_name, service).await?;
+    }
+
+    if container_services.is_empty() {
+        println!();
+        println!("{}", "✓ すべてのサービスが起動しました！".green().bold());
+        return Ok(());
+    }
+
+    // Docker接続（コンテナサービスがある場合のみ）
     println!();
     println!("{}", "Dockerに接続中...".blue());
     let docker_conn = docker::init_docker_with_error_handling().await?;
 
-    // ネットワーク作成 (#14)
     let network_name = fleetflow_container::get_network_name(&config.name, &stage_name);
     println!();
-    println!("{}", format!("🌐 ネットワーク: {}", network_name).blue());
-
+    println!("{}", format!("ネットワーク: {}", network_name).blue());
     docker::ensure_network(&docker_conn, &network_name).await?;
 
-    // 各サービスを起動
-    for service_name in &stage_config.services {
+    // 各コンテナサービスを起動
+    for service_name in &container_services {
         let service = config
             .services
-            .get(service_name)
+            .get(service_name.as_str())
             .ok_or_else(|| anyhow::anyhow!("サービス '{}' の定義が見つかりません", service_name))?;
 
         if service.image.is_none() {
