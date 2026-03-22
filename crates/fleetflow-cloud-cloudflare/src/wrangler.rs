@@ -58,6 +58,39 @@ impl Wrangler {
         Ok(String::from_utf8_lossy(&output.stdout).to_string())
     }
 
+    // ========== Pages Operations ==========
+
+    /// Cloudflare Pages にデプロイ
+    ///
+    /// `wrangler pages deploy <directory> --project-name <project>`
+    pub async fn pages_deploy(&self, directory: &str, project_name: &str) -> Result<PagesDeployResult> {
+        tracing::info!(
+            project = project_name,
+            directory = directory,
+            "Deploying to Cloudflare Pages"
+        );
+
+        let output = self
+            .run_command(&["pages", "deploy", directory, "--project-name", project_name])
+            .await?;
+
+        // wrangler pages deploy の出力から URL を抽出
+        let url = output
+            .lines()
+            .find(|line| line.contains("https://"))
+            .and_then(|line| {
+                line.split_whitespace()
+                    .find(|word| word.starts_with("https://"))
+            })
+            .map(String::from);
+
+        Ok(PagesDeployResult {
+            project: project_name.to_string(),
+            url,
+            output,
+        })
+    }
+
     // ========== R2 Bucket Operations ==========
 
     /// List all R2 buckets
@@ -146,6 +179,17 @@ pub struct WorkerConfig {
     pub script_path: String,
     pub routes: Vec<String>,
     pub vars: std::collections::HashMap<String, String>,
+}
+
+/// Cloudflare Pages デプロイ結果
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PagesDeployResult {
+    /// プロジェクト名
+    pub project: String,
+    /// デプロイ先 URL
+    pub url: Option<String>,
+    /// wrangler の出力
+    pub output: String,
 }
 
 /// DNS record information

@@ -24,6 +24,10 @@ use unison_kdl::{
 #[derive(Debug, Clone, Default, Serialize, Deserialize, KdlDeserialize, KdlSerialize)]
 #[kdl(name = "service")]
 pub struct Service {
+    /// サービスタイプ（container / static）。省略時は container。
+    #[serde(default)]
+    #[kdl(property, rename = "type")]
+    pub service_type: Option<ServiceType>,
     #[kdl(property)]
     pub image: Option<String>,
     #[kdl(property)]
@@ -45,6 +49,9 @@ pub struct Service {
     /// ビルド設定
     #[kdl(child)]
     pub build: Option<BuildConfig>,
+    /// デプロイ先設定（静的サイト等）
+    #[kdl(child)]
+    pub deploy: Option<DeployConfig>,
     /// ヘルスチェック設定
     #[kdl(child)]
     pub healthcheck: Option<HealthCheck>,
@@ -60,6 +67,75 @@ pub struct Service {
     /// サービス固有のコンテナレジストリURL（例: ghcr.io/owner）
     #[kdl(property)]
     pub registry: Option<String>,
+}
+
+/// サービスタイプ
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ServiceType {
+    /// Docker コンテナ（デフォルト）
+    Container,
+    /// 静的サイト（Cloudflare Pages / S3 等）
+    Static,
+}
+
+impl ServiceType {
+    pub fn parse(s: &str) -> Option<Self> {
+        match s.to_lowercase().as_str() {
+            "container" => Some(Self::Container),
+            "static" => Some(Self::Static),
+            _ => None,
+        }
+    }
+}
+
+impl<'de> FromKdlValue<'de> for ServiceType {
+    fn from_kdl_value(value: &'de KdlValue) -> unison_kdl::Result<Self> {
+        value
+            .as_string()
+            .and_then(Self::parse)
+            .ok_or_else(|| KdlError::type_mismatch("service type string (container|static)", value))
+    }
+}
+
+impl ToKdlValue for ServiceType {
+    fn to_kdl_value(&self) -> KdlValue {
+        KdlValue::String(
+            match self {
+                Self::Container => "container",
+                Self::Static => "static",
+            }
+            .to_string(),
+        )
+    }
+}
+
+impl ToKdlValue for &ServiceType {
+    fn to_kdl_value(&self) -> KdlValue {
+        (*self).to_kdl_value()
+    }
+}
+
+/// デプロイ先設定
+///
+/// KDL形式：
+/// ```kdl
+/// deploy provider="cloudflare-pages" project="my-project" {
+///     output "dist/"
+/// }
+/// ```
+#[derive(Debug, Clone, Default, Serialize, Deserialize, KdlDeserialize, KdlSerialize)]
+#[kdl(name = "deploy")]
+pub struct DeployConfig {
+    /// デプロイプロバイダ（cloudflare-pages / s3 等）
+    #[kdl(property)]
+    pub provider: Option<String>,
+    /// プロジェクト名（Cloudflare Pages のプロジェクト名等）
+    #[kdl(property)]
+    pub project: Option<String>,
+    /// 出力ディレクトリ（ビルド成果物の場所）
+    #[kdl(property)]
+    pub output: Option<String>,
 }
 
 /// 再起動ポリシー
@@ -291,6 +367,11 @@ impl WaitConfig {
 }
 
 impl Service {
+    /// 静的サイトサービスかどうか
+    pub fn is_static(&self) -> bool {
+        matches!(self.service_type, Some(ServiceType::Static))
+    }
+
     /// 他のServiceをマージする
     ///
     /// otherで定義されたフィールドが優先される（オーバーライド）。
@@ -299,6 +380,9 @@ impl Service {
     /// - HashMap<K, V>: 元の値にotherの値をマージ（otherが優先）
     pub fn merge(&mut self, other: Service) {
         // Option<T>フィールド: otherがSomeなら上書き
+        if other.service_type.is_some() {
+            self.service_type = other.service_type;
+        }
         if other.image.is_some() {
             self.image = other.image;
         }
@@ -310,6 +394,9 @@ impl Service {
         }
         if other.build.is_some() {
             self.build = other.build;
+        }
+        if other.deploy.is_some() {
+            self.deploy = other.deploy;
         }
         if other.healthcheck.is_some() {
             self.healthcheck = other.healthcheck;

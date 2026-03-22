@@ -175,11 +175,18 @@ pub async fn handle(
     }
     for service_name in &target_services {
         let svc = config.services.get(service_name);
-        let image = svc
-            .and_then(|s| s.image.as_ref())
-            .map(|s| s.as_str())
-            .unwrap_or("(イメージ未設定)");
-        println!("  • {} ({})", service_name.cyan(), image);
+        let desc = if svc.is_some_and(|s| s.is_static()) {
+            let provider = svc
+                .and_then(|s| s.deploy.as_ref())
+                .and_then(|d| d.provider.as_deref())
+                .unwrap_or("(未設定)");
+            format!("static → {provider}")
+        } else {
+            svc.and_then(|s| s.image.as_ref())
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| "(イメージ未設定)".to_string())
+        };
+        println!("  • {} ({})", service_name.cyan(), desc);
     }
 
     // dry-run モードの場合は実行計画を表示して終了
@@ -198,15 +205,30 @@ pub async fn handle(
         std::process::exit(2);
     }
 
-    // リモートステージ判定
-    let is_remote = !stage_config.servers.is_empty();
+    // 静的サイトサービスとコンテナサービスを分離
+    let (static_services, container_services): (Vec<_>, Vec<_>) =
+        target_services.iter().partition(|name| {
+            config
+                .services
+                .get(name.as_str())
+                .is_some_and(|s| s.is_static())
+        });
 
-    if is_remote {
-        // リモート: CP 経由で DeployEngine を実行
-        deploy_remote(config, &stage_name, &target_services, no_pull, no_prune).await?;
-    } else {
-        // ローカル: DeployEngine を直接実行
-        deploy_local(config, &stage_name, &target_services, no_pull, no_prune).await?;
+    // 静的サイトデプロイ
+    for service_name in &static_services {
+        deploy_static(config, project_root, service_name).await?;
+    }
+
+    // コンテナデプロイ（残りがあれば）
+    if !container_services.is_empty() {
+        let container_names: Vec<String> = container_services.into_iter().cloned().collect();
+        let is_remote = !stage_config.servers.is_empty();
+
+        if is_remote {
+            deploy_remote(config, &stage_name, &container_names, no_pull, no_prune).await?;
+        } else {
+            deploy_local(config, &stage_name, &container_names, no_pull, no_prune).await?;
+        }
     }
 
     println!();
@@ -216,6 +238,92 @@ pub async fn handle(
             .green()
             .bold()
     );
+
+    Ok(())
+}
+
+/// 静的サイトデプロイ — ビルド → プロバイダにデプロイ
+async fn deploy_static(
+    config: &fleetflow_core::Flow,
+    project_root: &std::path::Path,
+    service_name: &str,
+) -> anyhow::Result<()> {
+    let service = config
+        .services
+        .get(service_name)
+        .ok_or_else(|| anyhow::anyhow!("サービス '{}' の定義が見つかりません", service_name))?;
+
+    let deploy = service
+        .deploy
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("サービス '{}' に deploy 設定がありません", service_name))?;
+
+    let provider = deploy
+        .provider
+        .as_deref()
+        .ok_or_else(|| anyhow::anyhow!("deploy.provider が未設定です"))?;
+
+    println!();
+    println!(
+        "{}",
+        format!("■ {} — 静的サイトデプロイ", service_name)
+            .green()
+            .bold()
+    );
+
+    // ビルドコマンドの実行（service.command をシェルコマンドとして使う）
+    if let Some(ref cmd) = service.command {
+        println!("  ビルド: {}", cmd.cyan());
+        let status = tokio::process::Command::new("sh")
+            .arg("-c")
+            .arg(cmd)
+            .current_dir(project_root)
+            .status()
+            .await?;
+        if !status.success() {
+            anyhow::bail!("ビルドコマンドが失敗しました: {cmd}");
+        }
+        println!("  ✓ ビルド完了");
+    }
+
+    // プロバイダ別デプロイ
+    match provider {
+        "cloudflare-pages" => {
+            let project_name = deploy
+                .project
+                .as_deref()
+                .ok_or_else(|| anyhow::anyhow!("deploy.project が未設定です"))?;
+            let output_dir = deploy
+                .output
+                .as_deref()
+                .ok_or_else(|| anyhow::anyhow!("deploy.output が未設定です"))?;
+
+            let output_path = project_root.join(output_dir);
+            let output_str = output_path.to_string_lossy();
+
+            println!(
+                "  デプロイ: {} → Cloudflare Pages ({})",
+                output_dir.cyan(),
+                project_name.cyan()
+            );
+
+            let wrangler = fleetflow_cloud_cloudflare::Wrangler::new(None);
+            let result = wrangler.pages_deploy(&output_str, project_name).await
+                .map_err(|e| anyhow::anyhow!("Cloudflare Pages デプロイ失敗: {e}"))?;
+
+            if let Some(ref url) = result.url {
+                println!("  ✓ デプロイ完了: {}", url.green());
+            } else {
+                println!("  ✓ デプロイ完了");
+            }
+        }
+        other => {
+            anyhow::bail!(
+                "未対応のデプロイプロバイダ: {}（対応: cloudflare-pages）",
+                other
+            );
+        }
+    }
 
     Ok(())
 }

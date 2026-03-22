@@ -55,4 +55,6 @@ pub mod wrangler;
 pub use dns::{CloudflareDns, DnsConfig};
 pub use error::{CloudflareError, Result};
 pub use provider::CloudflareProvider;
-pub use wrangler::{DnsRecordInfo, R2BucketInfo, WorkerConfig, WorkerInfo, Wrangler};
+pub use wrangler::{
+    DnsRecordInfo, PagesDeployResult, R2BucketInfo, WorkerConfig, WorkerInfo, Wrangler,
+};
