@@ -4,13 +4,7 @@ use colored::Colorize;
 use fleetflow_container::{DeployEngine, DeployEvent, DeployRequest};
 
 /// 環境変数のキーがセンシティブかどうか判定する
-fn is_sensitive_key(key: &str) -> bool {
-    let lower = key.to_lowercase();
-    lower.contains("pass")
-        || lower.contains("secret")
-        || lower.contains("key")
-        || lower.contains("token")
-}
+use crate::utils::is_sensitive_key;
 
 /// dry-run モードでデプロイ計画を表示する
 fn print_dry_run_plan(

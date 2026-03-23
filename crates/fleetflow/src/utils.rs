@@ -72,6 +72,15 @@ pub fn filter_services(
         .collect())
 }
 
+/// 環境変数キーがセンシティブ（マスク対象）かどうかを判定
+pub fn is_sensitive_key(key: &str) -> bool {
+    let lower = key.to_lowercase();
+    lower.contains("pass")
+        || lower.contains("secret")
+        || lower.contains("key")
+        || lower.contains("token")
+}
+
 /// 変数を展開する ({{ VAR_NAME }} 形式)
 #[cfg(test)]
 pub fn expand_variables(

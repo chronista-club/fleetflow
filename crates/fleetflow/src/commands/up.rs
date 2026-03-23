@@ -51,13 +51,7 @@ async fn build_service_image(
 }
 
 /// 環境変数のキーがセンシティブかどうか判定する
-fn is_sensitive_key(key: &str) -> bool {
-    let lower = key.to_lowercase();
-    lower.contains("pass")
-        || lower.contains("secret")
-        || lower.contains("key")
-        || lower.contains("token")
-}
+use crate::utils::is_sensitive_key;
 
 /// dry-run モードで実行計画を表示する
 fn print_dry_run_plan(

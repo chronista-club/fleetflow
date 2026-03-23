@@ -825,7 +825,7 @@ async fn handle_cp(cmd: &CpCommands) -> anyhow::Result<()> {
                     commands::registry::handle_list(&registry);
                 }
                 RegistryCommands::Status => {
-                    commands::registry::handle_status(&registry);
+                    commands::registry::handle_status(&registry).await;
                 }
                 RegistryCommands::Sync => {
                     commands::registry::handle_sync(&registry).await?;
