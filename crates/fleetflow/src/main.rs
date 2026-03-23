@@ -567,8 +567,14 @@ async fn main() -> anyhow::Result<()> {
             let stage_name = stage.as_deref().or(stage_flag.as_deref());
             return commands::ps::handle_cp_query(Some(project), stage_name).await;
         }
-        Commands::Ps { global: true, .. } => {
-            return commands::ps::handle_cp_query(None, None).await;
+        Commands::Ps {
+            global: true,
+            stage,
+            stage_flag,
+            ..
+        } => {
+            let stage_name = stage.as_deref().or(stage_flag.as_deref());
+            return commands::ps::handle_cp_query(None, stage_name).await;
         }
         _ => {}
     }
