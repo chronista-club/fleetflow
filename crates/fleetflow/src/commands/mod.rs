@@ -1,5 +1,4 @@
 pub mod auth;
-pub mod cloud;
 pub mod cp;
 pub mod cp_client;
 pub mod daemon;
@@ -10,9 +9,4 @@ pub mod logs;
 pub mod ps;
 pub mod registry;
 pub mod restart;
-pub mod stage;
-pub mod start;
-pub mod status;
-pub mod stop;
 pub mod up;
-pub mod validate;

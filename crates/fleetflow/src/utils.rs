@@ -73,6 +73,7 @@ pub fn filter_services(
 }
 
 /// 変数を展開する ({{ VAR_NAME }} 形式)
+#[cfg(test)]
 pub fn expand_variables(
     value: &str,
     variables: &std::collections::HashMap<String, String>,
@@ -160,6 +161,7 @@ pub fn parse_duration(input: &str) -> anyhow::Result<u64> {
 }
 
 /// シェル用にエスケープ
+#[cfg(test)]
 pub fn shell_escape(s: &str) -> String {
     // シングルクォートでラップしてエスケープ
     format!("'{}'", s.replace('\'', "'\\''"))

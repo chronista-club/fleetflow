@@ -22,7 +22,7 @@ pub async fn connect() -> Result<(ProtocolClient, Credentials)> {
     if !creds_path.exists() {
         eprintln!("{}", "Control Plane に未ログインです。".red().bold());
         eprintln!();
-        eprintln!("  {} でログインしてください。", "fleet login".cyan());
+        eprintln!("  {} でログインしてください。", "fleet cp login".cyan());
         std::process::exit(1);
     }
 
@@ -37,7 +37,7 @@ pub async fn connect() -> Result<(ProtocolClient, Credentials)> {
     {
         eprintln!("{}", "認証トークンの有効期限が切れています。".red().bold());
         eprintln!();
-        eprintln!("  {} で再認証してください。", "fleet login".cyan());
+        eprintln!("  {} で再認証してください。", "fleet cp login".cyan());
         std::process::exit(1);
     }
 
