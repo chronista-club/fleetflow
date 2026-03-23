@@ -4,9 +4,9 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 /// Auth0 のデフォルト設定
-const AUTH0_DOMAIN: &str = "anycreative.auth0.com";
+const AUTH0_DOMAIN: &str = "anycreative.jp.auth0.com";
 const AUTH0_CLIENT_ID: &str = "fleetflow-cli";
-const AUTH0_AUDIENCE: &str = "https://api.fleetflow.dev";
+const AUTH0_AUDIENCE: &str = "https://api.fleetflow.run";
 
 /// Credentials file path: ~/.config/fleetflow/credentials.json
 fn credentials_path() -> Result<PathBuf> {
@@ -59,7 +59,7 @@ struct TokenErrorResponse {
 
 /// `fleet cp login` — Auth0 Device Authorization Flow
 pub async fn handle_login(api_endpoint: Option<String>) -> Result<()> {
-    let endpoint = api_endpoint.unwrap_or_else(|| "https://api.fleetflow.dev:4510".into());
+    let endpoint = api_endpoint.unwrap_or_else(|| "https://api.fleetflow.run:4510".into());
     let auth0_domain =
         std::env::var("FLEETFLOW_AUTH0_DOMAIN").unwrap_or_else(|_| AUTH0_DOMAIN.into());
     let client_id =
