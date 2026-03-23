@@ -308,36 +308,36 @@ enum Commands {
     /// クラウドインフラを管理（サーバー作成・削除・状態確認）
     #[command(subcommand)]
     Cloud(CloudCommands),
-    /// Control Plane デーモンを管理
+    /// [CP] Control Plane デーモンを管理
     #[command(subcommand)]
     Daemon(DaemonCommands),
-    /// テナント管理（Control Plane）
+    /// [CP] テナント管理
     #[command(subcommand)]
     Tenant(TenantCommands),
-    /// プロジェクト管理（Control Plane）
+    /// [CP] プロジェクト管理
     #[command(subcommand)]
     Project(ProjectCommands),
-    /// サーバー管理（Control Plane）
+    /// [CP] サーバー管理
     #[command(subcommand)]
     Server(ServerCommands),
-    /// Control Plane にログイン（Auth0 Device Authorization Flow）
+    /// [CP] Control Plane にログイン
     Login {
         /// API エンドポイント
         #[arg(long)]
         endpoint: Option<String>,
     },
-    /// Control Plane からログアウト
+    /// [CP] Control Plane からログアウト
     Logout,
-    /// 認証状態を確認
+    /// [CP] 認証状態を確認
     #[command(subcommand)]
     Auth(AuthCommands),
-    /// コスト管理（Control Plane）
+    /// [CP] コスト管理
     #[command(subcommand)]
     Cost(CostCommands),
-    /// DNS/ドメイン管理（Control Plane）
+    /// [CP] DNS/ドメイン管理
     #[command(subcommand)]
     Dns(DnsCommands),
-    /// リモートデプロイ（Control Plane 経由）
+    /// [CP] リモートデプロイ
     #[command(subcommand, name = "remote")]
     Remote(RemoteCommands),
 }
