@@ -63,7 +63,11 @@ impl Wrangler {
     /// Cloudflare Pages にデプロイ
     ///
     /// `wrangler pages deploy <directory> --project-name <project>`
-    pub async fn pages_deploy(&self, directory: &str, project_name: &str) -> Result<PagesDeployResult> {
+    pub async fn pages_deploy(
+        &self,
+        directory: &str,
+        project_name: &str,
+    ) -> Result<PagesDeployResult> {
         tracing::info!(
             project = project_name,
             directory = directory,

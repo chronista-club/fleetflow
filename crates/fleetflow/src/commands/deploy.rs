@@ -302,7 +302,9 @@ async fn deploy_static(
             );
 
             let wrangler = fleetflow_cloud_cloudflare::Wrangler::new(None);
-            let result = wrangler.pages_deploy(&output_str, project_name).await
+            let result = wrangler
+                .pages_deploy(&output_str, project_name)
+                .await
                 .map_err(|e| anyhow::anyhow!("Cloudflare Pages デプロイ失敗: {e}"))?;
 
             if let Some(ref url) = result.url {

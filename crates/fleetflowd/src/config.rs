@@ -167,10 +167,8 @@ pub fn load_config(path: &Path) -> Result<DaemonConfig> {
             audience = val.to_string();
         }
         if !domain.is_empty() && !audience.is_empty() {
-            config.server.auth = Some(fleetflow_controlplane::auth::Auth0Config {
-                domain,
-                audience,
-            });
+            config.server.auth =
+                Some(fleetflow_controlplane::auth::Auth0Config { domain, audience });
         }
     }
 

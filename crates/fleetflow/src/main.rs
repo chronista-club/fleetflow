@@ -32,7 +32,6 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     // ── Daily ──────────────────────────────────
-
     /// ステージを起動
     Up {
         /// ステージ名 (local, dev, stg, prod)
@@ -164,7 +163,6 @@ enum Commands {
     },
 
     // ── Ship ───────────────────────────────────
-
     /// Dockerイメージをビルド
     Build {
         /// ステージ名 (local, dev, stg, prod)
@@ -228,13 +226,11 @@ enum Commands {
     },
 
     // ── Admin ──────────────────────────────────
-
     /// Control Plane 管理
     #[command(subcommand)]
     Cp(CpCommands),
 
     // ── Util ───────────────────────────────────
-
     /// MCP (Model Context Protocol) サーバーを起動
     Mcp,
     /// FleetFlow自体を最新版に更新
@@ -733,8 +729,16 @@ async fn main() -> anyhow::Result<()> {
             since,
         } => {
             let stage = resolve_stage(stage, stage_flag);
-            commands::logs::handle(&config, &project_root, stage, &service, lines, follow, since)
-                .await?;
+            commands::logs::handle(
+                &config,
+                &project_root,
+                stage,
+                &service,
+                lines,
+                follow,
+                since,
+            )
+            .await?;
         }
         Commands::Exec {
             stage,
@@ -812,9 +816,7 @@ async fn main() -> anyhow::Result<()> {
 
 async fn handle_cp(cmd: &CpCommands) -> anyhow::Result<()> {
     match cmd {
-        CpCommands::Login { endpoint } => {
-            commands::auth::handle_login(endpoint.clone()).await
-        }
+        CpCommands::Login { endpoint } => commands::auth::handle_login(endpoint.clone()).await,
         CpCommands::Logout => commands::auth::handle_logout().await,
         CpCommands::Auth => commands::auth::handle_auth_status().await,
         CpCommands::Daemon(daemon_cmd) => commands::daemon::handle(daemon_cmd).await,
