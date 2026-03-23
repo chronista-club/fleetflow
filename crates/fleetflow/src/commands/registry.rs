@@ -71,7 +71,7 @@ pub fn handle_list(registry: &Registry) {
 
 /// fleet registry status — 各fleet × serverの稼働状態
 /// CP 接続可能な場合は横断クエリで実稼働状態を取得、不可の場合はルーティング情報のみ表示
-pub fn handle_status(registry: &Registry) {
+pub async fn handle_status(registry: &Registry) {
     println!(
         "{}  {}",
         "Fleet Registry:".bold(),
@@ -79,15 +79,8 @@ pub fn handle_status(registry: &Registry) {
     );
     println!();
 
-    // CP 接続を試みて実稼働状態を取得
-    let rt = tokio::runtime::Handle::try_current();
-    let cp_status = if rt.is_ok() {
-        // 既に tokio ランタイム内 — ブロック不可、スキップ
-        None
-    } else {
-        // CP に接続してステージ状態を取得（ベストエフォート）
-        try_fetch_cp_status()
-    };
+    // CP 接続を試みて実稼働状態を取得（ベストエフォート）
+    let cp_status: Option<Vec<serde_json::Value>> = try_fetch_cp_status().await;
 
     println!(
         "  {:<14} {:<10} {:<14} {}",
@@ -148,26 +141,22 @@ pub fn handle_status(registry: &Registry) {
         println!();
         println!(
             "  {}",
-            "ヒント: `fleet login` で CP に接続すると実稼働状態を表示します".dimmed()
+            "ヒント: `fleet cp login` で CP に接続すると実稼働状態を表示します".dimmed()
         );
     }
 }
 
 /// CP からステージ横断情報を取得（ベストエフォート）
-fn try_fetch_cp_status() -> Option<Vec<serde_json::Value>> {
+async fn try_fetch_cp_status() -> Option<Vec<serde_json::Value>> {
     use super::cp_client;
     use serde_json::json;
 
-    let rt = tokio::runtime::Runtime::new().ok()?;
-
-    rt.block_on(async {
-        let (client, _creds) = cp_client::connect().await.ok()?;
-        let resp = cp_client::request(&client, "stage", "list_across_projects", json!({}))
-            .await
-            .ok()?;
-        client.disconnect().await.ok();
-        resp["stages"].as_array().cloned()
-    })
+    let (client, _creds) = cp_client::connect().await.ok()?;
+    let resp = cp_client::request(&client, "stage", "list_across_projects", json!({}))
+        .await
+        .ok()?;
+    client.disconnect().await.ok();
+    resp["stages"].as_array().cloned()
 }
 
 /// fleet registry sync — Registry定義をControl Planeに同期

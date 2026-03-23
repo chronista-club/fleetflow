@@ -1,7 +1,6 @@
 mod build;
 mod commands;
 mod docker;
-mod play;
 mod self_update;
 mod tui;
 mod utils;
@@ -26,8 +25,13 @@ struct Cli {
     quiet: bool,
 }
 
+// ─────────────────────────────────────────────
+// Top-level commands: Daily(6) + Ship(2) + Util(3) + CP(1)
+// ─────────────────────────────────────────────
+
 #[derive(Subcommand)]
 enum Commands {
+    // ── Daily ──────────────────────────────────
     /// ステージを起動
     Up {
         /// ステージ名 (local, dev, stg, prod)
@@ -65,6 +69,46 @@ enum Commands {
         #[arg(short, long)]
         remove: bool,
     },
+    /// サービスまたはステージ全体を再起動
+    Restart {
+        /// ステージ名 (local, dev, stg, prod)
+        stage: Option<String>,
+        /// ステージ名 (-s/--stage フラグ、FLEET_STAGE 環境変数)
+        #[arg(
+            short = 's',
+            long = "stage",
+            env = "FLEET_STAGE",
+            conflicts_with = "stage",
+            hide = true
+        )]
+        stage_flag: Option<String>,
+        /// サービス名（省略時はステージ全体を再起動）
+        #[arg(short = 'n', long)]
+        service: Option<String>,
+    },
+    /// コンテナの一覧・状態を表示
+    Ps {
+        /// ステージ名 (local, dev, stg, prod)
+        stage: Option<String>,
+        /// ステージ名 (-s/--stage フラグ、FLEET_STAGE 環境変数)
+        #[arg(
+            short = 's',
+            long = "stage",
+            env = "FLEET_STAGE",
+            conflicts_with = "stage",
+            hide = true
+        )]
+        stage_flag: Option<String>,
+        /// 停止中のコンテナも表示
+        #[arg(short, long)]
+        all: bool,
+        /// Control Plane 横断: プロジェクト名で絞り込み
+        #[arg(long)]
+        project: Option<String>,
+        /// Control Plane 横断: 全プロジェクト・全ステージを表示
+        #[arg(long)]
+        global: bool,
+    },
     /// コンテナのログを表示
     Logs {
         /// ステージ名 (local, dev, stg, prod)
@@ -90,43 +134,6 @@ enum Commands {
         /// 指定時間以降のログを表示（例: 5m, 1h, 30s）
         #[arg(long)]
         since: Option<String>,
-    },
-    /// コンテナの一覧を表示
-    Ps {
-        /// ステージ名 (local, dev, stg, prod)
-        stage: Option<String>,
-        /// ステージ名 (-s/--stage フラグ、FLEET_STAGE 環境変数)
-        #[arg(
-            short = 's',
-            long = "stage",
-            env = "FLEET_STAGE",
-            conflicts_with = "stage",
-            hide = true
-        )]
-        stage_flag: Option<String>,
-        /// 停止中のコンテナも表示
-        #[arg(short, long)]
-        all: bool,
-        /// Control Plane 横断: プロジェクト名で絞り込み
-        #[arg(long)]
-        project: Option<String>,
-        /// Control Plane 横断: 全プロジェクト・全ステージを表示
-        #[arg(long)]
-        global: bool,
-    },
-    /// プロジェクトの状態を表示（設定 vs 実態）
-    Status {
-        /// ステージ名 (local, dev, stg, prod)
-        stage: Option<String>,
-        /// ステージ名 (-s/--stage フラグ、FLEET_STAGE 環境変数)
-        #[arg(
-            short = 's',
-            long = "stage",
-            env = "FLEET_STAGE",
-            conflicts_with = "stage",
-            hide = true
-        )]
-        stage_flag: Option<String>,
     },
     /// サービスコンテナ内でコマンドを実行
     Exec {
@@ -154,106 +161,8 @@ enum Commands {
         #[arg(last = true)]
         command: Vec<String>,
     },
-    /// サービスまたはステージ全体を再起動
-    Restart {
-        /// ステージ名 (local, dev, stg, prod)
-        stage: Option<String>,
-        /// ステージ名 (-s/--stage フラグ、FLEET_STAGE 環境変数)
-        #[arg(
-            short = 's',
-            long = "stage",
-            env = "FLEET_STAGE",
-            conflicts_with = "stage",
-            hide = true
-        )]
-        stage_flag: Option<String>,
-        /// サービス名（省略時はステージ全体を再起動）
-        #[arg(short = 'n', long)]
-        service: Option<String>,
-    },
-    /// サービスまたはステージ全体を停止
-    Stop {
-        /// ステージ名 (local, dev, stg, prod)
-        stage: Option<String>,
-        /// ステージ名 (-s/--stage フラグ、FLEET_STAGE 環境変数)
-        #[arg(
-            short = 's',
-            long = "stage",
-            env = "FLEET_STAGE",
-            conflicts_with = "stage",
-            hide = true
-        )]
-        stage_flag: Option<String>,
-        /// サービス名（省略時はステージ全体を停止）
-        #[arg(short = 'n', long)]
-        service: Option<String>,
-    },
-    /// サービスまたはステージ全体を起動
-    Start {
-        /// ステージ名 (local, dev, stg, prod)
-        stage: Option<String>,
-        /// ステージ名 (-s/--stage フラグ、FLEET_STAGE 環境変数)
-        #[arg(
-            short = 's',
-            long = "stage",
-            env = "FLEET_STAGE",
-            conflicts_with = "stage",
-            hide = true
-        )]
-        stage_flag: Option<String>,
-        /// サービス名（省略時はステージ全体を起動）
-        #[arg(short = 'n', long)]
-        service: Option<String>,
-    },
-    /// 設定を検証
-    Validate {
-        /// ステージ名 (local, dev, stg, prod)
-        stage: Option<String>,
-        /// ステージ名 (-s/--stage フラグ、FLEET_STAGE 環境変数)
-        #[arg(
-            short = 's',
-            long = "stage",
-            env = "FLEET_STAGE",
-            conflicts_with = "stage",
-            hide = true
-        )]
-        stage_flag: Option<String>,
-    },
-    /// バージョン情報を表示
-    Version,
-    /// FleetFlow自体を最新版に更新
-    #[command(name = "self-update")]
-    SelfUpdate,
-    /// ステージをデプロイ（CI/CD向け）
-    /// 既存コンテナを強制停止・削除し、最新イメージで再起動
-    Deploy {
-        /// ステージ名 (local, dev, stg, prod)
-        stage: Option<String>,
-        /// ステージ名 (-s/--stage フラグ、FLEET_STAGE 環境変数)
-        #[arg(
-            short = 's',
-            long = "stage",
-            env = "FLEET_STAGE",
-            conflicts_with = "stage",
-            hide = true
-        )]
-        stage_flag: Option<String>,
-        /// デプロイ対象のサービス（複数指定可、省略時は全サービス）
-        #[arg(short = 'n', long)]
-        service: Vec<String>,
-        /// イメージのpullをスキップ（デフォルトは常にpull）
-        #[arg(long)]
-        no_pull: bool,
-        /// デプロイ後の不要イメージ・ビルドキャッシュ削除をスキップ
-        #[arg(long)]
-        no_prune: bool,
-        /// 確認なしで実行
-        #[arg(short, long)]
-        yes: bool,
-        /// 実行せずに実行計画のみ表示
-        #[arg(long)]
-        dry_run: bool,
-    },
+
+    // ── Ship ───────────────────────────────────
     /// Dockerイメージをビルド
     Build {
         /// ステージ名 (local, dev, stg, prod)
@@ -286,67 +195,89 @@ enum Commands {
         #[arg(long)]
         no_cache: bool,
     },
-    /// ステージを管理（インフラ＋コンテナを統一的に操作）
-    #[command(subcommand)]
-    Stage(StageCommands),
-    /// MCP (Model Context Protocol) サーバーを起動
-    Mcp,
-    /// Playbookを実行（リモートサーバーでサービスを起動）
-    Play {
-        /// Playbook名
-        playbook: String,
+    /// ステージをデプロイ（pull→停止→再起動）
+    Deploy {
+        /// ステージ名 (local, dev, stg, prod)
+        stage: Option<String>,
+        /// ステージ名 (-s/--stage フラグ、FLEET_STAGE 環境変数)
+        #[arg(
+            short = 's',
+            long = "stage",
+            env = "FLEET_STAGE",
+            conflicts_with = "stage",
+            hide = true
+        )]
+        stage_flag: Option<String>,
+        /// デプロイ対象のサービス（複数指定可、省略時は全サービス）
+        #[arg(short = 'n', long)]
+        service: Vec<String>,
+        /// イメージのpullをスキップ（デフォルトは常にpull）
+        #[arg(long)]
+        no_pull: bool,
+        /// デプロイ後の不要イメージ・ビルドキャッシュ削除をスキップ
+        #[arg(long)]
+        no_prune: bool,
         /// 確認なしで実行
         #[arg(short, long)]
         yes: bool,
-        /// 起動前に最新イメージをpullする
+        /// 実行せずに実行計画のみ表示
         #[arg(long)]
-        pull: bool,
+        dry_run: bool,
     },
-    /// Fleet Registryを管理（複数fleetとサーバーの統合管理）
+
+    // ── Admin ──────────────────────────────────
+    /// Control Plane 管理
     #[command(subcommand)]
-    Registry(RegistryCommands),
-    /// クラウドインフラを管理（サーバー作成・削除・状態確認）
-    #[command(subcommand)]
-    Cloud(CloudCommands),
-    /// [CP] Control Plane デーモンを管理
-    #[command(subcommand)]
-    Daemon(DaemonCommands),
-    /// [CP] テナント管理
-    #[command(subcommand)]
-    Tenant(TenantCommands),
-    /// [CP] プロジェクト管理
-    #[command(subcommand)]
-    Project(ProjectCommands),
-    /// [CP] サーバー管理
-    #[command(subcommand)]
-    Server(ServerCommands),
-    /// [CP] Control Plane にログイン
+    Cp(CpCommands),
+
+    // ── Util ───────────────────────────────────
+    /// MCP (Model Context Protocol) サーバーを起動
+    Mcp,
+    /// FleetFlow自体を最新版に更新
+    #[command(name = "self-update")]
+    SelfUpdate,
+}
+
+// ─────────────────────────────────────────────
+// CP subcommands — fleet cp <subcommand>
+// ─────────────────────────────────────────────
+
+#[derive(Subcommand)]
+enum CpCommands {
+    /// CP にログイン
     Login {
         /// API エンドポイント
         #[arg(long)]
         endpoint: Option<String>,
     },
-    /// [CP] Control Plane からログアウト
+    /// CP からログアウト
     Logout,
-    /// [CP] 認証状態を確認
+    /// 認証状態を表示
+    Auth,
+    /// デーモン管理
     #[command(subcommand)]
-    Auth(AuthCommands),
-    /// [CP] コスト管理
+    Daemon(DaemonCommands),
+    /// テナント管理
+    #[command(subcommand)]
+    Tenant(TenantCommands),
+    /// プロジェクト管理
+    #[command(subcommand)]
+    Project(ProjectCommands),
+    /// サーバー管理
+    #[command(subcommand)]
+    Server(ServerCommands),
+    /// コスト管理
     #[command(subcommand)]
     Cost(CostCommands),
-    /// [CP] DNS/ドメイン管理
+    /// DNS/ドメイン管理
     #[command(subcommand)]
     Dns(DnsCommands),
-    /// [CP] リモートデプロイ
+    /// リモートデプロイ
     #[command(subcommand, name = "remote")]
     Remote(RemoteCommands),
-}
-
-/// 認証管理のサブコマンド
-#[derive(Subcommand)]
-enum AuthCommands {
-    /// 認証状態を表示
-    Status,
+    /// Fleet Registry 管理
+    #[command(subcommand)]
+    Registry(RegistryCommands),
 }
 
 /// デーモン管理のサブコマンド
@@ -554,99 +485,24 @@ enum RegistryCommands {
     },
 }
 
-/// クラウドインフラ管理のサブコマンド
-#[derive(Subcommand)]
-enum CloudCommands {
-    /// クラウドプロバイダーの認証状態を確認
-    Auth,
-    /// インフラの変更計画を表示（dry-run）
-    Plan {
-        /// ステージ名 (dev, pre, prod)
-        stage: String,
-    },
-    /// クラウドリソースを作成・更新
-    Up {
-        /// ステージ名 (dev, pre, prod)
-        stage: String,
-        /// 確認プロンプトをスキップ
-        #[arg(short = 'y', long)]
-        yes: bool,
-    },
-    /// クラウドリソースを削除
-    Down {
-        /// ステージ名 (dev, pre, prod)
-        stage: String,
-        /// 確認プロンプトをスキップ
-        #[arg(short = 'y', long)]
-        yes: bool,
-    },
-    /// クラウドリソースの状態を表示
-    Status {
-        /// ステージ名（省略時は全ステージ）
-        stage: Option<String>,
-    },
+// ─────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────
+
+/// stage 位置引数と -s フラグを統合する
+fn resolve_stage(positional: Option<String>, flag: Option<String>) -> Option<String> {
+    positional.or(flag)
 }
 
-/// ステージ管理のサブコマンド
-#[derive(Subcommand)]
-enum StageCommands {
-    /// ステージを起動（インフラ＋コンテナ）
-    Up {
-        /// ステージ名 (local, dev, pre, prod)
-        stage: String,
-        /// 確認プロンプトをスキップ
-        #[arg(short = 'y', long)]
-        yes: bool,
-        /// 起動前に最新イメージをpullする
-        #[arg(long)]
-        pull: bool,
-    },
-    /// ステージを停止
-    Down {
-        /// ステージ名 (local, dev, pre, prod)
-        stage: String,
-        /// サーバー電源をOFFにする（リモートステージのみ）
-        #[arg(long)]
-        suspend: bool,
-        /// サーバーを削除する（⚠️ 課金完全停止、データ削除）
-        #[arg(long)]
-        destroy: bool,
-        /// 確認プロンプトをスキップ
-        #[arg(short = 'y', long)]
-        yes: bool,
-    },
-    /// ステージの状態を表示
-    Status {
-        /// ステージ名 (local, dev, pre, prod)
-        stage: String,
-    },
-    /// ログを表示
-    Logs {
-        /// ステージ名 (local, dev, pre, prod)
-        stage: String,
-        /// 特定サービスのログのみ
-        #[arg(short = 'n', long)]
-        service: Option<String>,
-        /// リアルタイム追従
-        #[arg(short, long)]
-        follow: bool,
-        /// 最新N行
-        #[arg(short = 't', long, default_value = "100")]
-        tail: usize,
-    },
-    /// コンテナ一覧
-    Ps {
-        /// ステージ名（省略時は全ステージ）
-        stage: Option<String>,
-    },
-}
+// ─────────────────────────────────────────────
+// main
+// ─────────────────────────────────────────────
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
-    // Mcpコマンドは設定ファイル不要（ツール実行時に必要に応じてロード）
-    // stdoutはJSON-RPC通信に使うので、ログはファイルに出力
+    // ── MCP: stdout を JSON-RPC に使うので先に処理 ──
     if matches!(cli.command, Commands::Mcp) {
         use std::fs::OpenOptions;
         let log_file = OpenOptions::new()
@@ -666,12 +522,10 @@ async fn main() -> anyhow::Result<()> {
                 .init();
         }
 
-        // rmcp SDK ベースの MCP サーバーを起動（stdio トランスポート）
         return fleetflow_mcp::run_server().await;
     }
 
-    // 通常のCLIコマンドはstderrにログ出力
-    // -v/--verbose → debug, -q/--quiet → error, デフォルト → RUST_LOG or info
+    // ── ロギング初期化 ──
     let log_level = if cli.verbose {
         "debug"
     } else if cli.quiet {
@@ -688,54 +542,18 @@ async fn main() -> anyhow::Result<()> {
             .init();
     }
 
-    // Versionコマンドは設定ファイル不要
-    if matches!(cli.command, Commands::Version) {
-        println!("fleetflow {}", env!("CARGO_PKG_VERSION"));
-        return Ok(());
-    }
-
-    // SelfUpdateコマンドは設定ファイル不要
+    // ── 設定ファイル不要なコマンド ──
     if matches!(cli.command, Commands::SelfUpdate) {
         return self_update::self_update().await;
     }
 
-    // 認証コマンドは設定ファイル不要
+    // CP コマンドは設定ファイル不要
+    if let Commands::Cp(ref cp_cmd) = cli.command {
+        return handle_cp(cp_cmd).await;
+    }
+
+    // CP 横断クエリ（--project / --global）
     match &cli.command {
-        Commands::Login { endpoint } => {
-            return commands::auth::handle_login(endpoint.clone()).await;
-        }
-        Commands::Logout => {
-            return commands::auth::handle_logout().await;
-        }
-        Commands::Auth(auth_cmd) => match auth_cmd {
-            AuthCommands::Status => {
-                return commands::auth::handle_auth_status().await;
-            }
-        },
-        // デーモン管理（設定ファイル不要）
-        Commands::Daemon(daemon_cmd) => {
-            return commands::daemon::handle(daemon_cmd).await;
-        }
-        // CP リソース管理（設定ファイル不要）
-        Commands::Tenant(tenant_cmd) => {
-            return commands::cp::handle_tenant(tenant_cmd).await;
-        }
-        Commands::Project(project_cmd) => {
-            return commands::cp::handle_project(project_cmd).await;
-        }
-        Commands::Server(server_cmd) => {
-            return commands::cp::handle_server(server_cmd).await;
-        }
-        Commands::Cost(cost_cmd) => {
-            return commands::cp::handle_cost(cost_cmd).await;
-        }
-        Commands::Dns(dns_cmd) => {
-            return commands::cp::handle_dns(dns_cmd).await;
-        }
-        Commands::Remote(remote_cmd) => {
-            return commands::cp::handle_remote(remote_cmd).await;
-        }
-        // Control Plane 横断クエリ（設定ファイル不要）
         Commands::Ps {
             project: Some(project),
             stage,
@@ -745,45 +563,28 @@ async fn main() -> anyhow::Result<()> {
             let stage_name = stage.as_deref().or(stage_flag.as_deref());
             return commands::ps::handle_cp_query(Some(project), stage_name).await;
         }
-        Commands::Ps { global: true, .. } => {
-            return commands::ps::handle_cp_query(None, None).await;
+        Commands::Ps {
+            global: true,
+            stage,
+            stage_flag,
+            ..
+        } => {
+            let stage_name = stage.as_deref().or(stage_flag.as_deref());
+            return commands::ps::handle_cp_query(None, stage_name).await;
         }
         _ => {}
     }
 
-    // Registryコマンドは独自のファイル発見ロジックを使用
-    if let Commands::Registry(ref registry_cmd) = cli.command {
-        let (registry, root) = commands::registry::load_registry()?;
-        match registry_cmd {
-            RegistryCommands::List => {
-                commands::registry::handle_list(&registry);
-            }
-            RegistryCommands::Status => {
-                commands::registry::handle_status(&registry);
-            }
-            RegistryCommands::Sync => {
-                commands::registry::handle_sync(&registry).await?;
-            }
-            RegistryCommands::Deploy { fleet, stage, yes } => {
-                commands::registry::handle_deploy(&registry, &root, fleet, stage.as_deref(), *yes)
-                    .await?;
-            }
-        }
-        return Ok(());
-    }
-
-    // プロジェクトルートを検索
+    // ── プロジェクトルート検索 ──
     let project_root = match fleetflow_core::find_project_root() {
         Ok(root) => root,
         Err(fleetflow_core::FlowError::ProjectRootNotFound(_)) => {
-            // 設定ファイルが見つからない場合は初期化ウィザードを起動
             println!("{}", "設定ファイルが見つかりません。".yellow());
             println!("{}", "初期化ウィザードを起動します...".cyan());
             println!();
 
             match tui::run_init_wizard()? {
                 Some((path, content)) => {
-                    // 設定ファイルを作成
                     let config_path = if path.starts_with("~/") {
                         let home = dirs::home_dir()
                             .ok_or_else(|| anyhow::anyhow!("ホームディレクトリが見つかりません"))?;
@@ -792,12 +593,10 @@ async fn main() -> anyhow::Result<()> {
                         PathBuf::from(&path)
                     };
 
-                    // ディレクトリが存在しない場合は作成
                     if let Some(parent) = config_path.parent() {
                         std::fs::create_dir_all(parent)?;
                     }
 
-                    // ファイルを書き込み
                     std::fs::write(&config_path, content)?;
 
                     println!();
@@ -805,7 +604,7 @@ async fn main() -> anyhow::Result<()> {
                     println!("  {}", config_path.display().to_string().cyan());
                     println!();
                     println!("{}", "次のコマンドで環境を起動できます:".bold());
-                    println!("  {} up", "fleetflow".cyan());
+                    println!("  {} up", "fleet".cyan());
 
                     return Ok(());
                 }
@@ -818,82 +617,37 @@ async fn main() -> anyhow::Result<()> {
         Err(e) => return Err(e.into()),
     };
 
-    // プロジェクト全体をロード（fleet.kdl + stage固有設定 + localを自動マージ）
+    // ── stage ヒント抽出 & 設定ロード ──
     let stage_from_env = std::env::var("FLEET_STAGE").ok();
     let stage_name_hint: Option<&str> = match &cli.command {
         Commands::Up {
             stage, stage_flag, ..
-        } => stage.as_deref().or(stage_flag.as_deref()),
-        Commands::Down {
-            stage, stage_flag, ..
-        } => stage.as_deref().or(stage_flag.as_deref()),
-        Commands::Logs {
-            stage, stage_flag, ..
-        } => stage.as_deref().or(stage_flag.as_deref()),
-        Commands::Ps {
-            stage,
-            stage_flag,
-            project: _,
-            global: _,
-            ..
-        } => stage.as_deref().or(stage_flag.as_deref()),
-        Commands::Status {
-            stage, stage_flag, ..
-        } => stage.as_deref().or(stage_flag.as_deref()),
-        Commands::Exec {
-            stage, stage_flag, ..
-        } => stage.as_deref().or(stage_flag.as_deref()),
-        Commands::Restart {
-            stage, stage_flag, ..
-        } => stage.as_deref().or(stage_flag.as_deref()),
-        Commands::Stop {
-            stage, stage_flag, ..
-        } => stage.as_deref().or(stage_flag.as_deref()),
-        Commands::Start {
-            stage, stage_flag, ..
-        } => stage.as_deref().or(stage_flag.as_deref()),
-        Commands::Validate {
-            stage, stage_flag, ..
-        } => stage.as_deref().or(stage_flag.as_deref()),
-        Commands::Deploy {
-            stage, stage_flag, ..
-        } => stage.as_deref().or(stage_flag.as_deref()),
-        Commands::Build {
-            stage, stage_flag, ..
-        } => stage.as_deref().or(stage_flag.as_deref()),
-        Commands::Stage(stage_cmd) => match stage_cmd {
-            StageCommands::Up { stage, .. } => Some(stage.as_str()),
-            StageCommands::Down { stage, .. } => Some(stage.as_str()),
-            StageCommands::Status { stage } => Some(stage.as_str()),
-            StageCommands::Logs { stage, .. } => Some(stage.as_str()),
-            StageCommands::Ps { stage } => stage.as_deref(),
-        },
-        Commands::Registry(_) => None,
-        Commands::Cloud(cloud_cmd) => match cloud_cmd {
-            CloudCommands::Auth => None,
-            CloudCommands::Plan { stage } => Some(stage.as_str()),
-            CloudCommands::Up { stage, .. } => Some(stage.as_str()),
-            CloudCommands::Down { stage, .. } => Some(stage.as_str()),
-            CloudCommands::Status { stage } => stage.as_deref(),
-        },
-        Commands::Login { .. }
-        | Commands::Logout
-        | Commands::Auth(_)
-        | Commands::Daemon(_)
-        | Commands::Tenant(_)
-        | Commands::Project(_)
-        | Commands::Server(_)
-        | Commands::Cost(_)
-        | Commands::Dns(_)
-        | Commands::Remote(_) => {
-            unreachable!("CP commands are handled before config loading");
         }
+        | Commands::Down {
+            stage, stage_flag, ..
+        }
+        | Commands::Restart {
+            stage, stage_flag, ..
+        }
+        | Commands::Ps {
+            stage, stage_flag, ..
+        }
+        | Commands::Logs {
+            stage, stage_flag, ..
+        }
+        | Commands::Exec {
+            stage, stage_flag, ..
+        }
+        | Commands::Build {
+            stage, stage_flag, ..
+        }
+        | Commands::Deploy {
+            stage, stage_flag, ..
+        } => stage.as_deref().or(stage_flag.as_deref()),
         _ => stage_from_env.as_deref(),
     };
 
-    // --stage オプションで指定された場合、環境変数 FLEET_STAGE を設定
     if let Some(stage) = stage_name_hint {
-        // SAFETY: 環境変数は単一スレッドで設定されるため安全
         unsafe {
             std::env::set_var("FLEET_STAGE", stage);
         }
@@ -929,15 +683,16 @@ async fn main() -> anyhow::Result<()> {
         Err(e) => return Err(e.into()),
     };
 
-    // コマンドディスパッチ
+    // ── コマンドディスパッチ ──
     match cli.command {
+        // Daily
         Commands::Up {
             stage,
             stage_flag,
             pull,
             dry_run,
         } => {
-            let stage = stage.or(stage_flag);
+            let stage = resolve_stage(stage, stage_flag);
             commands::up::handle(&config, &project_root, stage, pull, dry_run).await?;
         }
         Commands::Down {
@@ -945,22 +700,25 @@ async fn main() -> anyhow::Result<()> {
             stage_flag,
             remove,
         } => {
-            let stage = stage.or(stage_flag);
+            let stage = resolve_stage(stage, stage_flag);
             commands::down::handle(&config, &project_root, stage, remove).await?;
+        }
+        Commands::Restart {
+            stage,
+            stage_flag,
+            service,
+        } => {
+            let stage = resolve_stage(stage, stage_flag);
+            commands::restart::handle(&config, service, stage).await?;
         }
         Commands::Ps {
             stage,
             stage_flag,
             all,
-            project: _,
-            global: _,
+            ..
         } => {
-            let stage = stage.or(stage_flag);
+            let stage = resolve_stage(stage, stage_flag);
             commands::ps::handle(&config, &project_root, stage, all).await?;
-        }
-        Commands::Status { stage, stage_flag } => {
-            let stage = stage.or(stage_flag);
-            commands::status::handle(&config, &project_root, stage).await?;
         }
         Commands::Logs {
             stage,
@@ -970,7 +728,7 @@ async fn main() -> anyhow::Result<()> {
             follow,
             since,
         } => {
-            let stage = stage.or(stage_flag);
+            let stage = resolve_stage(stage, stage_flag);
             commands::logs::handle(
                 &config,
                 &project_root,
@@ -982,58 +740,19 @@ async fn main() -> anyhow::Result<()> {
             )
             .await?;
         }
-        Commands::Restart {
+        Commands::Exec {
             stage,
             stage_flag,
             service,
+            interactive,
+            tty,
+            command,
         } => {
-            let stage = stage.or(stage_flag);
-            commands::restart::handle(&config, service, stage).await?;
+            let stage = resolve_stage(stage, stage_flag);
+            commands::exec::handle(&config, stage, service, command, interactive, tty).await?;
         }
-        Commands::Stop {
-            stage,
-            stage_flag,
-            service,
-        } => {
-            let stage = stage.or(stage_flag);
-            commands::stop::handle(&config, service, stage).await?;
-        }
-        Commands::Start {
-            stage,
-            stage_flag,
-            service,
-        } => {
-            let stage = stage.or(stage_flag);
-            commands::start::handle(&config, service, stage).await?;
-        }
-        Commands::Deploy {
-            stage,
-            stage_flag,
-            service,
-            no_pull,
-            no_prune,
-            yes,
-            dry_run,
-        } => {
-            let stage = stage.or(stage_flag);
-            commands::deploy::handle(
-                &config,
-                &project_root,
-                stage,
-                &service,
-                no_pull,
-                no_prune,
-                yes,
-                dry_run,
-            )
-            .await?;
-        }
-        Commands::Validate {
-            stage: _,
-            stage_flag: _,
-        } => {
-            commands::validate::handle().await?;
-        }
+
+        // Ship
         Commands::Build {
             stage,
             stage_flag,
@@ -1044,7 +763,7 @@ async fn main() -> anyhow::Result<()> {
             platform,
             no_cache,
         } => {
-            let stage = stage.or(stage_flag);
+            let stage = resolve_stage(stage, stage_flag);
             let stage_name = utils::determine_stage_name(stage, &config)?;
             build::handle_build_command(
                 &project_root,
@@ -1059,55 +778,78 @@ async fn main() -> anyhow::Result<()> {
             )
             .await?;
         }
-        Commands::Stage(stage_cmd) => {
-            commands::stage::handle(stage_cmd, &project_root, &config).await?;
-        }
-        Commands::Mcp => {
-            unreachable!("Mcp is handled before config loading");
-        }
-        Commands::SelfUpdate => {
-            unreachable!("SelfUpdate is handled before config loading");
-        }
-        Commands::Play {
-            playbook,
-            yes,
-            pull,
-        } => {
-            play::handle_play_command(&project_root, &playbook, yes, pull).await?;
-        }
-        Commands::Version => {
-            unreachable!("Version is handled before config loading");
-        }
-        Commands::Exec {
+        Commands::Deploy {
             stage,
             stage_flag,
             service,
-            interactive,
-            tty,
-            command,
+            no_pull,
+            no_prune,
+            yes,
+            dry_run,
         } => {
-            let stage = stage.or(stage_flag);
-            commands::exec::handle(&config, stage, service, command, interactive, tty).await?;
+            let stage = resolve_stage(stage, stage_flag);
+            commands::deploy::handle(
+                &config,
+                &project_root,
+                stage,
+                &service,
+                no_pull,
+                no_prune,
+                yes,
+                dry_run,
+            )
+            .await?;
         }
-        Commands::Cloud(cloud_cmd) => {
-            commands::cloud::handle(cloud_cmd, &config).await?;
-        }
-        Commands::Registry(_) => {
-            unreachable!("Registry is handled before config loading");
-        }
-        Commands::Login { .. }
-        | Commands::Logout
-        | Commands::Auth(_)
-        | Commands::Daemon(_)
-        | Commands::Tenant(_)
-        | Commands::Project(_)
-        | Commands::Server(_)
-        | Commands::Cost(_)
-        | Commands::Dns(_)
-        | Commands::Remote(_) => {
-            unreachable!("CP commands are handled before config loading");
-        }
+
+        // Util
+        Commands::Mcp => unreachable!("handled before config loading"),
+        Commands::SelfUpdate => unreachable!("handled before config loading"),
+        Commands::Cp(_) => unreachable!("handled before config loading"),
     }
 
     Ok(())
+}
+
+// ─────────────────────────────────────────────
+// CP command handler
+// ─────────────────────────────────────────────
+
+async fn handle_cp(cmd: &CpCommands) -> anyhow::Result<()> {
+    match cmd {
+        CpCommands::Login { endpoint } => commands::auth::handle_login(endpoint.clone()).await,
+        CpCommands::Logout => commands::auth::handle_logout().await,
+        CpCommands::Auth => commands::auth::handle_auth_status().await,
+        CpCommands::Daemon(daemon_cmd) => commands::daemon::handle(daemon_cmd).await,
+        CpCommands::Tenant(tenant_cmd) => commands::cp::handle_tenant(tenant_cmd).await,
+        CpCommands::Project(project_cmd) => commands::cp::handle_project(project_cmd).await,
+        CpCommands::Server(server_cmd) => commands::cp::handle_server(server_cmd).await,
+        CpCommands::Cost(cost_cmd) => commands::cp::handle_cost(cost_cmd).await,
+        CpCommands::Dns(dns_cmd) => commands::cp::handle_dns(dns_cmd).await,
+        CpCommands::Remote(remote_cmd) => commands::cp::handle_remote(remote_cmd).await,
+        CpCommands::Registry(registry_cmd) => {
+            let (registry, root) = commands::registry::load_registry()?;
+            match registry_cmd {
+                RegistryCommands::List => {
+                    commands::registry::handle_list(&registry);
+                }
+                RegistryCommands::Status => {
+                    commands::registry::handle_status(&registry).await;
+                }
+                RegistryCommands::Sync => {
+                    commands::registry::handle_sync(&registry).await?;
+                }
+                RegistryCommands::Deploy { fleet, stage, yes } => {
+                    commands::registry::handle_deploy(
+                        &registry,
+                        &root,
+                        fleet,
+                        stage.as_deref(),
+                        *yes,
+                    )
+                    .await?;
+                }
+            }
+            Ok(())
+        }
+    }
 }

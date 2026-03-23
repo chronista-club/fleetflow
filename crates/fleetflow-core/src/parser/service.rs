@@ -23,10 +23,7 @@ pub fn parse_service(node: &KdlNode) -> Result<(String, Service)> {
         if let Some(key) = entry.name() {
             match key.value() {
                 "type" | "service_type" => {
-                    service.service_type = entry
-                        .value()
-                        .as_string()
-                        .and_then(ServiceType::parse);
+                    service.service_type = entry.value().as_string().and_then(ServiceType::parse);
                 }
                 "command" => {
                     service.command = entry.value().as_string().map(|s| s.to_string());
@@ -38,10 +35,7 @@ pub fn parse_service(node: &KdlNode) -> Result<(String, Service)> {
                     service.version = entry.value().as_string().map(|s| s.to_string());
                 }
                 "restart" => {
-                    service.restart = entry
-                        .value()
-                        .as_string()
-                        .and_then(RestartPolicy::parse);
+                    service.restart = entry.value().as_string().and_then(RestartPolicy::parse);
                 }
                 "registry" => {
                     service.registry = entry.value().as_string().map(|s| s.to_string());

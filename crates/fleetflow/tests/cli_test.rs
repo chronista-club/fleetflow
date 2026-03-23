@@ -17,25 +17,14 @@ fn test_cli_help() {
         .stdout(predicate::str::contains("logs"));
 }
 
-/// バージョン表示が正しく動作することを確認
+/// バージョン表示が --version フラグで動作することを確認
 #[test]
 fn test_cli_version() {
     let mut cmd = Command::cargo_bin("fleet").unwrap();
-    cmd.arg("version")
+    cmd.arg("--version")
         .assert()
         .success()
-        .stdout(predicate::str::contains("fleetflow"));
-}
-
-/// validateコマンドのヘルプが正しく表示されることを確認
-#[test]
-fn test_validate_help() {
-    let mut cmd = Command::cargo_bin("fleet").unwrap();
-    cmd.arg("validate")
-        .arg("--help")
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("[STAGE]"));
+        .stdout(predicate::str::contains("fleet"));
 }
 
 /// upコマンドのヘルプが正しく表示されることを確認
@@ -67,17 +56,6 @@ fn test_down_help() {
 fn test_invalid_command() {
     let mut cmd = Command::cargo_bin("fleet").unwrap();
     cmd.arg("invalid-command").assert().failure();
-}
-
-/// ステージ未指定でvalidateを実行するとエラーになることを確認
-/// （プロジェクトディレクトリ外で実行）
-#[test]
-fn test_validate_without_project() {
-    let mut cmd = Command::cargo_bin("fleet").unwrap();
-    cmd.current_dir(std::env::temp_dir())
-        .arg("validate")
-        .assert()
-        .failure();
 }
 
 /// 位置引数でステージを指定できることを確認
@@ -133,4 +111,19 @@ fn test_exec_help() {
         .stdout(predicate::str::contains("[STAGE]"))
         .stdout(predicate::str::contains("--service"))
         .stdout(predicate::str::contains("[COMMAND]"));
+}
+
+/// CP サブコマンドのヘルプが表示されることを確認
+#[test]
+fn test_cp_help() {
+    let mut cmd = Command::cargo_bin("fleet").unwrap();
+    cmd.arg("cp")
+        .arg("--help")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("login"))
+        .stdout(predicate::str::contains("logout"))
+        .stdout(predicate::str::contains("daemon"))
+        .stdout(predicate::str::contains("tenant"))
+        .stdout(predicate::str::contains("server"));
 }

@@ -4,9 +4,9 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 /// Auth0 のデフォルト設定
-const AUTH0_DOMAIN: &str = "anycreative.auth0.com";
+const AUTH0_DOMAIN: &str = "anycreative.jp.auth0.com";
 const AUTH0_CLIENT_ID: &str = "fleetflow-cli";
-const AUTH0_AUDIENCE: &str = "https://api.fleetflow.dev";
+const AUTH0_AUDIENCE: &str = "https://api.fleetflow.run";
 
 /// Credentials file path: ~/.config/fleetflow/credentials.json
 fn credentials_path() -> Result<PathBuf> {
@@ -57,9 +57,9 @@ struct TokenErrorResponse {
     error_description: Option<String>,
 }
 
-/// `fleet login` — Auth0 Device Authorization Flow
+/// `fleet cp login` — Auth0 Device Authorization Flow
 pub async fn handle_login(api_endpoint: Option<String>) -> Result<()> {
-    let endpoint = api_endpoint.unwrap_or_else(|| "https://api.fleetflow.dev:4510".into());
+    let endpoint = api_endpoint.unwrap_or_else(|| "https://api.fleetflow.run:4510".into());
     let auth0_domain =
         std::env::var("FLEETFLOW_AUTH0_DOMAIN").unwrap_or_else(|_| AUTH0_DOMAIN.into());
     let client_id =
@@ -129,7 +129,7 @@ pub async fn handle_login(api_endpoint: Option<String>) -> Result<()> {
 
     let token = loop {
         if std::time::Instant::now() > deadline {
-            anyhow::bail!("認証がタイムアウトしました。再度 `fleet login` を実行してください。");
+            anyhow::bail!("認証がタイムアウトしました。再度 `fleet cp login` を実行してください。");
         }
 
         tokio::time::sleep(poll_interval).await;
@@ -168,7 +168,7 @@ pub async fn handle_login(api_endpoint: Option<String>) -> Result<()> {
                 }
                 "expired_token" => {
                     anyhow::bail!(
-                        "デバイスコードの有効期限が切れました。再度 `fleet login` を実行してください。"
+                        "デバイスコードの有効期限が切れました。再度 `fleet cp login` を実行してください。"
                     );
                 }
                 "access_denied" => {
@@ -256,7 +256,7 @@ pub async fn handle_auth_status() -> Result<()> {
 
     if !path.exists() {
         println!("{}", "未認証".red().bold());
-        println!("  `fleet login` でログインしてください。");
+        println!("  `fleet cp login` でログインしてください。");
         return Ok(());
     }
 
@@ -273,7 +273,7 @@ pub async fn handle_auth_status() -> Result<()> {
 
     if expired {
         println!("{}", "認証期限切れ".yellow().bold());
-        println!("  `fleet login` で再認証してください。");
+        println!("  `fleet cp login` で再認証してください。");
     } else {
         println!("{}", "認証済み".green().bold());
     }

@@ -51,13 +51,7 @@ async fn build_service_image(
 }
 
 /// 環境変数のキーがセンシティブかどうか判定する
-fn is_sensitive_key(key: &str) -> bool {
-    let lower = key.to_lowercase();
-    lower.contains("pass")
-        || lower.contains("secret")
-        || lower.contains("key")
-        || lower.contains("token")
-}
+use crate::utils::is_sensitive_key;
 
 /// dry-run モードで実行計画を表示する
 fn print_dry_run_plan(
@@ -171,15 +165,10 @@ async fn up_static(
     }
 
     let deploy = service.deploy.as_ref();
-    let output_dir = deploy
-        .and_then(|d| d.output.as_deref())
-        .unwrap_or("dist");
+    let output_dir = deploy.and_then(|d| d.output.as_deref()).unwrap_or("dist");
     let output_path = project_root.join(output_dir);
 
-    println!(
-        "  dev サーバー: wrangler pages dev {}",
-        output_dir.cyan()
-    );
+    println!("  dev サーバー: wrangler pages dev {}", output_dir.cyan());
 
     // wrangler pages dev をバックグラウンドで起動
     let mut child = tokio::process::Command::new("wrangler")
@@ -192,7 +181,11 @@ async fn up_static(
             )
         })?;
 
-    println!("  {} dev サーバー起動 (PID: {})", "✓".green(), child.id().unwrap_or(0));
+    println!(
+        "  {} dev サーバー起動 (PID: {})",
+        "✓".green(),
+        child.id().unwrap_or(0)
+    );
     println!("  {} Ctrl+C で停止", "ℹ".blue());
 
     // フォアグラウンドで待機（Ctrl+C で終了）

@@ -299,4 +299,3 @@ impl Auth0Verifier {
         state.fetched_at = None;
     }
 }
-
