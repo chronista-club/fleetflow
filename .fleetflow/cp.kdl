@@ -1,6 +1,6 @@
 // FleetFlow Control Plane — インフラ定義
-// `fleet cloud plan live -f .fleetflow/cp.kdl` で計画確認
-// `fleet cloud up live -f .fleetflow/cp.kdl --yes` で作成
+// `fleet up live -f .fleetflow/cp.kdl --dry-run` で計画確認
+// `fleet up live -f .fleetflow/cp.kdl` で起動
 
 project "fleetflow-cp"
 

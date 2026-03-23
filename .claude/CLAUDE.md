@@ -120,19 +120,20 @@ Dockerラベルで自動グループ化:
 ## CLIコマンド
 
 ```bash
-# 基本操作
-fleet up/down <stage>          # ステージ起動/停止
-fleet start/stop/restart <svc> # 個別サービス操作
-fleet ps / logs / exec <svc>   # 状態確認・ログ・実行
+# Daily（日常操作）
+fleet up/down/restart [-s stage] [-n svc]  # 起動/停止/再起動
+fleet ps/logs/exec [-s stage]              # 一覧/ログ/コンテナ実行
 
-# ビルド・デプロイ
-fleet build/deploy <stage>
+# Ship（ビルド・デプロイ）
+fleet build/deploy [-s stage]
 
-# Fleet Registry
-fleet registry list/status/deploy <fleet>
+# Admin（CP管理 — fleet cp 配下）
+fleet cp login/logout/auth                 # 認証
+fleet cp daemon/tenant/project/server      # リソース管理
+fleet cp cost/dns/remote/registry          # コスト・DNS・デプロイ・Registry
 
-# その他
-fleet validate / fleet mcp / fleet play <playbook> / fleet self-update
+# Util
+fleet mcp / fleet self-update / fleet --version
 ```
 
 ## 開発フェーズ

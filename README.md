@@ -119,35 +119,30 @@ service "app" {
 
 ## コマンド
 
-### コンテナ操作
+### 日常操作（Daily）
 
 ```bash
-fleet up [stage]              # ステージのコンテナを起動
+fleet up [stage]              # ステージを起動
 fleet up local --pull         # 最新イメージを pull してから起動
+fleet up local --dry-run      # 実行せず計画のみ表示（設定検証にも使える）
 fleet down [stage]            # 停止
 fleet down local --remove     # 停止 + コンテナ削除
-fleet ps [stage]              # コンテナ一覧
+fleet restart [stage]         # 再起動
+fleet restart -n web          # 特定サービスだけ再起動
+fleet ps [stage]              # コンテナ一覧・状態表示
 fleet logs [stage]            # ログ表示
 fleet logs local -n app       # 特定サービスのログ
 fleet logs local --follow     # リアルタイム追跡
+fleet exec -n <svc> -- <cmd>  # コンテナ内でコマンド実行
 ```
 
-### サービス単体
-
-```bash
-fleet start <service>                    # 起動
-fleet stop <service>                     # 停止
-fleet restart <service>                  # 再起動
-fleet exec -n <service> -- <command>     # コンテナ内でコマンド実行
-```
-
-ステージ指定は `--stage` / `-s` または `FLEET_STAGE` 環境変数:
+ステージ指定は位置引数、`-s` フラグ、または `FLEET_STAGE` 環境変数:
 
 ```bash
 fleet exec -n app -s local -- npm run migrate
 ```
 
-### ビルド・デプロイ
+### ビルド・デプロイ（Ship）
 
 ```bash
 fleet build [stage]                                      # Docker イメージをビルド
@@ -156,48 +151,30 @@ fleet deploy [stage]                                     # デプロイ（停止
 fleet deploy local --yes                                 # 確認なしで実行
 ```
 
-### クラウド連携
+### Control Plane 管理（CP）
 
-`fleet stage` はクラウドサーバーの作成からコンテナのデプロイまでを一括で行う。さくらのクラウドと Cloudflare に対応。
-
-```mermaid
-flowchart LR
-    A["fleet stage up live"] --> B["クラウドにサーバー作成"]
-    B --> C["SSH で接続"]
-    C --> D["Docker セットアップ"]
-    D --> E["コンテナをデプロイ"]
-```
+`fleet cp` 配下に管理系コマンドを集約:
 
 ```bash
-fleet stage up <stage>        # サーバー作成 + コンテナ起動
-fleet stage down <stage>      # コンテナ停止
-fleet stage status <stage>    # 状態表示
+fleet cp login                # CP にログイン（Auth0 Device Flow）
+fleet cp logout               # ログアウト
+fleet cp auth                 # 認証状態を確認
+fleet cp daemon start/stop    # デーモン管理
+fleet cp tenant list/create   # テナント管理
+fleet cp project list/create  # プロジェクト管理
+fleet cp server list/register # サーバー管理
+fleet cp cost list/summary    # コスト管理
+fleet cp dns list/create/sync # DNS 管理
+fleet cp remote deploy        # リモートデプロイ
+fleet cp registry list/deploy # 複数 Fleet 統合管理
 ```
 
-### Playbook
-
-リモートサーバーへの操作手順を KDL で定義し、再実行する:
+### ユーティリティ
 
 ```bash
-fleet play <playbook>         # 実行
-fleet play deploy-app --yes   # 確認なし
-```
-
-### Registry
-
-複数プロジェクトの fleet を一元管理する:
-
-```bash
-fleet registry list                              # 全 fleet とサーバーの一覧
-fleet registry deploy <fleet> -s live --yes      # SSH 経由でデプロイ
-```
-
-### その他
-
-```bash
-fleet validate      # 設定ファイルを検証
 fleet mcp           # MCP サーバーを起動（Claude Code 連携用）
-fleet version       # バージョン表示
+fleet self-update    # FleetFlow を最新版に更新
+fleet --version      # バージョン表示
 ```
 
 ---
@@ -228,11 +205,11 @@ fleetflow/
 │   ├── fleetflow-cloud-sakura/     # さくらのクラウド
 │   ├── fleetflow-cloud-cloudflare/ # Cloudflare
 │   ├── fleetflow-mcp/              # MCP サーバー
-│   └── fleetflow-registry/         # 複数 fleet 管理
-├── examples/                       # 設定ファイルのサンプル
+│   ├── fleetflow-registry/         # 複数 fleet 管理
+│   ├── fleetflow-controlplane/     # Control Plane ライブラリ
+│   ├── fleetflowd/                 # CP デーモン
+│   └── fleet-agent/                # サーバーエージェント
 ├── docs/
-│   ├── spec/                      # 仕様書
-│   ├── design/                    # 設計書
 │   └── guide/                     # 利用ガイド
 ```
 
