@@ -3,7 +3,7 @@
 use super::port::parse_port;
 use super::volume::parse_volume;
 use crate::error::{FlowError, Result};
-use crate::model::{BuildConfig, RestartPolicy, Service, WaitConfig};
+use crate::model::{BuildConfig, DeployConfig, RestartPolicy, Service, ServiceType, WaitConfig};
 use kdl::{KdlDocument, KdlNode};
 use std::path::PathBuf;
 
@@ -17,6 +17,39 @@ pub fn parse_service(node: &KdlNode) -> Result<(String, Service)> {
         .to_string();
 
     let mut service = Service::default();
+
+    // ノードのプロパティを読み取り（type="static" command="..." 等）
+    for entry in node.entries() {
+        if let Some(key) = entry.name() {
+            match key.value() {
+                "type" | "service_type" => {
+                    service.service_type = entry
+                        .value()
+                        .as_string()
+                        .and_then(ServiceType::parse);
+                }
+                "command" => {
+                    service.command = entry.value().as_string().map(|s| s.to_string());
+                }
+                "image" => {
+                    service.image = entry.value().as_string().map(|s| s.to_string());
+                }
+                "version" => {
+                    service.version = entry.value().as_string().map(|s| s.to_string());
+                }
+                "restart" => {
+                    service.restart = entry
+                        .value()
+                        .as_string()
+                        .and_then(RestartPolicy::parse);
+                }
+                "registry" => {
+                    service.registry = entry.value().as_string().map(|s| s.to_string());
+                }
+                _ => {}
+            }
+        }
+    }
 
     if let Some(children) = node.children() {
         for child in children.nodes() {
@@ -188,10 +221,17 @@ pub fn parse_service(node: &KdlNode) -> Result<(String, Service)> {
                         .and_then(|e| e.value().as_string())
                         .map(|s| s.to_string());
                 }
+                // デプロイ先設定
+                "deploy" => {
+                    service.deploy = Some(parse_deploy(child));
+                }
                 _ => {}
             }
         }
     }
+
+    // プロパティで設定されなかった場合、子ノードの command も読む
+    // （子ノード match 内で既に処理されているので、ここでは不要）
 
     // 注意: イメージ名の自動推測は parse_kdl_string() で全てのマージが完了した後に行う
     // ここでは行わない（マージ時に上書きされてしまうため）
@@ -441,6 +481,66 @@ pub fn parse_readiness(node: &KdlNode) -> crate::model::ReadinessCheck {
         timeout,
         interval,
     }
+}
+
+/// deploy ノードをパース
+///
+/// プロパティ形式:
+/// ```kdl
+/// deploy provider="cloudflare-pages" project="my-project" output="dist/"
+/// ```
+pub fn parse_deploy(node: &KdlNode) -> DeployConfig {
+    let mut config = DeployConfig::default();
+
+    // プロパティからパース
+    for entry in node.entries() {
+        if let Some(key) = entry.name() {
+            match key.value() {
+                "provider" => {
+                    config.provider = entry.value().as_string().map(|s| s.to_string());
+                }
+                "project" => {
+                    config.project = entry.value().as_string().map(|s| s.to_string());
+                }
+                "output" => {
+                    config.output = entry.value().as_string().map(|s| s.to_string());
+                }
+                _ => {}
+            }
+        }
+    }
+
+    // 子ノードからもパース（ブロック形式対応）
+    if let Some(children) = node.children() {
+        for child in children.nodes() {
+            match child.name().value() {
+                "provider" => {
+                    config.provider = child
+                        .entries()
+                        .first()
+                        .and_then(|e| e.value().as_string())
+                        .map(|s| s.to_string());
+                }
+                "project" => {
+                    config.project = child
+                        .entries()
+                        .first()
+                        .and_then(|e| e.value().as_string())
+                        .map(|s| s.to_string());
+                }
+                "output" => {
+                    config.output = child
+                        .entries()
+                        .first()
+                        .and_then(|e| e.value().as_string())
+                        .map(|s| s.to_string());
+                }
+                _ => {}
+            }
+        }
+    }
+
+    config
 }
 
 #[cfg(test)]

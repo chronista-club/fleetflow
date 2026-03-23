@@ -25,8 +25,8 @@ use unison_kdl::{
 #[kdl(name = "service")]
 pub struct Service {
     /// サービスタイプ（container / static）。省略時は container。
-    #[serde(default)]
-    #[kdl(property, rename = "type")]
+    #[serde(default, alias = "type")]
+    #[kdl(property(rename = "type"))]
     pub service_type: Option<ServiceType>,
     #[kdl(property)]
     pub image: Option<String>,

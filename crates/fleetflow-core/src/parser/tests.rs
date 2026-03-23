@@ -1,6 +1,46 @@
 use super::*;
-use crate::model::{Port, Protocol, Volume};
+use crate::model::{Port, Protocol, ServiceType, Volume};
 use unison_kdl::{KdlDeserialize, KdlNodeExt, KdlSerialize};
+
+#[test]
+fn test_parse_static_service() {
+    let kdl = r#"
+        service "web" type="static" command="bun run build" {
+            deploy provider="cloudflare-pages" project="my-project" output="dist/"
+        }
+        stage "live" {
+            service "web"
+        }
+    "#;
+
+    let flow = parse_kdl_string(kdl, "test".to_string()).unwrap();
+    let service = &flow.services["web"];
+
+    assert_eq!(service.service_type, Some(ServiceType::Static));
+    assert!(service.is_static());
+    assert_eq!(service.command, Some("bun run build".to_string()));
+
+    let deploy = service.deploy.as_ref().unwrap();
+    assert_eq!(deploy.provider, Some("cloudflare-pages".to_string()));
+    assert_eq!(deploy.project, Some("my-project".to_string()));
+    assert_eq!(deploy.output, Some("dist/".to_string()));
+}
+
+#[test]
+fn test_parse_container_service_no_type() {
+    // type 未指定の場合は service_type = None（コンテナとして扱う）
+    let kdl = r#"
+        service "db" {
+            image "postgres:16"
+        }
+    "#;
+
+    let flow = parse_kdl_string(kdl, "test".to_string()).unwrap();
+    let service = &flow.services["db"];
+
+    assert_eq!(service.service_type, None);
+    assert!(!service.is_static());
+}
 
 #[test]
 fn test_parse_simple_service() {
