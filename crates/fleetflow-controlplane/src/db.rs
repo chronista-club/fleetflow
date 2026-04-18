@@ -500,7 +500,14 @@ impl Database {
     pub async fn register_server(&self, server: &Server) -> Result<Server> {
         let mut result = self
             .db
-            .query("CREATE server CONTENT { tenant: $tenant, slug: $slug, provider: $provider, plan: $plan, ssh_host: $ssh_host, ssh_user: $ssh_user, deploy_path: $deploy_path, status: $status }")
+            .query(
+                "CREATE server CONTENT { \
+                    tenant: $tenant, slug: $slug, provider: $provider, plan: $plan, \
+                    ssh_host: $ssh_host, ssh_user: $ssh_user, deploy_path: $deploy_path, \
+                    status: $status, labels: $labels, capacity: $capacity, \
+                    allocated: $allocated, scheduling: $scheduling \
+                }",
+            )
             .bind(("tenant", server.tenant.clone()))
             .bind(("slug", server.slug.clone()))
             .bind(("provider", server.provider.clone()))
@@ -509,6 +516,11 @@ impl Database {
             .bind(("ssh_user", server.ssh_user.clone()))
             .bind(("deploy_path", server.deploy_path.clone()))
             .bind(("status", server.status.clone()))
+            // FSC-26 Phase B-1: Worker Pool labels / capacity / allocated / scheduling
+            .bind(("labels", server.labels.clone()))
+            .bind(("capacity", server.capacity.clone()))
+            .bind(("allocated", server.allocated.clone()))
+            .bind(("scheduling", server.scheduling.clone()))
             .await
             .context("サーバー登録失敗")?;
         let created: Option<Server> = result.take(0)?;
@@ -922,6 +934,25 @@ DEFINE FIELD IF NOT EXISTS status ON server TYPE string DEFAULT 'offline';
 DEFINE FIELD IF NOT EXISTS provision_version ON server TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS tool_versions ON server TYPE option<object>;
 DEFINE FIELD IF NOT EXISTS last_heartbeat_at ON server TYPE option<datetime>;
+-- Worker Pool membership 判定と Placement 決定に使うラベル群 (FSC-26 Phase B-1)
+DEFINE FIELD IF NOT EXISTS labels ON server TYPE option<object>;
+DEFINE FIELD IF NOT EXISTS labels.tier ON server TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS labels.region ON server TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS labels.class ON server TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS labels.arch ON server TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS labels.extras ON server TYPE option<object>;
+-- 物理リソース上限 (FSC-26 Phase B-1)
+DEFINE FIELD IF NOT EXISTS capacity ON server TYPE option<object>;
+DEFINE FIELD IF NOT EXISTS capacity.cpu_cores ON server TYPE option<int>;
+DEFINE FIELD IF NOT EXISTS capacity.memory_gb ON server TYPE option<int>;
+DEFINE FIELD IF NOT EXISTS capacity.disk_gb ON server TYPE option<int>;
+-- 現在使用中のリソース (FSC-26 Phase B-1、2-phase placement で increment/decrement)
+DEFINE FIELD IF NOT EXISTS allocated ON server TYPE option<object>;
+DEFINE FIELD IF NOT EXISTS allocated.cpu_cores ON server TYPE option<int>;
+DEFINE FIELD IF NOT EXISTS allocated.memory_gb ON server TYPE option<int>;
+-- 論理スケジューリング状態 (FSC-26 Phase B-1、物理 status と直交)
+-- 'schedulable' | 'cordon' | 'drain' — k8s Node Condition + cordon/drain 相当
+DEFINE FIELD IF NOT EXISTS scheduling ON server TYPE option<string> DEFAULT 'schedulable';
 DEFINE FIELD IF NOT EXISTS created_at ON server TYPE option<datetime> DEFAULT time::now();
 DEFINE FIELD IF NOT EXISTS updated_at ON server TYPE option<datetime> DEFAULT time::now();
 DEFINE INDEX IF NOT EXISTS idx_server_tenant_slug ON server FIELDS tenant, slug UNIQUE;
@@ -1100,17 +1131,119 @@ mod tests {
             provision_version: None,
             tool_versions: None,
             last_heartbeat_at: None,
+            // FSC-26 Phase B-1: 新 field は全て None で backward-compat 動作を確認
+            labels: None,
+            capacity: None,
+            allocated: None,
+            scheduling: None,
             created_at: None,
             updated_at: None,
         };
         let created = db.register_server(&server).await.unwrap();
         assert!(created.id.is_some());
+        // Backward-compat: 新 field が None でも register 成功
+        assert!(created.labels.is_none());
+        assert!(created.capacity.is_none());
 
         db.update_server_heartbeat("vps-01").await.unwrap();
 
         let servers = db.list_servers_by_tenant("anycreative").await.unwrap();
         assert_eq!(servers.len(), 1);
         assert_eq!(servers[0].slug, "vps-01");
+    }
+
+    // FSC-26 Phase B-1: Server に labels / capacity / allocated / scheduling を
+    // 付与して round-trip することを確認する
+    #[tokio::test]
+    async fn test_server_with_labels_crud() {
+        use crate::model::{ServerAllocated, ServerCapacity, ServerLabels, scheduling_state};
+
+        let db = Database::connect_memory().await.unwrap();
+
+        let tenant = db
+            .create_tenant(&Tenant {
+                id: None,
+                slug: "acme".into(),
+                name: "Acme Corp".into(),
+                auth0_org_id: None,
+                plan: "pro".into(),
+                dns_provider: None,
+                dns_domain: None,
+                dns_zone_id: None,
+                dns_api_token_encrypted: None,
+                created_at: None,
+                updated_at: None,
+            })
+            .await
+            .unwrap();
+
+        let server = Server {
+            id: None,
+            tenant: tenant.id.unwrap(),
+            slug: "worker-pro-01".into(),
+            provider: "sakura-cloud".into(),
+            plan: Some("4G/4CPU".into()),
+            ssh_host: "100.64.0.10".into(),
+            ssh_user: "root".into(),
+            deploy_path: "/opt/fleet".into(),
+            status: "online".into(),
+            provision_version: None,
+            tool_versions: None,
+            last_heartbeat_at: None,
+            labels: Some(ServerLabels {
+                tier: Some("pro".into()),
+                region: Some("tokyo".into()),
+                class: Some("dedicated".into()),
+                arch: Some("arm64".into()),
+                extras: None,
+            }),
+            capacity: Some(ServerCapacity {
+                cpu_cores: Some(4),
+                memory_gb: Some(8),
+                disk_gb: Some(80),
+            }),
+            allocated: Some(ServerAllocated {
+                cpu_cores: Some(0),
+                memory_gb: Some(0),
+            }),
+            scheduling: Some(scheduling_state::SCHEDULABLE.into()),
+            created_at: None,
+            updated_at: None,
+        };
+        let created = db.register_server(&server).await.unwrap();
+        assert!(created.id.is_some());
+
+        // Labels round-trip
+        let labels = created.labels.expect("labels should be persisted");
+        assert_eq!(labels.tier.as_deref(), Some("pro"));
+        assert_eq!(labels.region.as_deref(), Some("tokyo"));
+        assert_eq!(labels.class.as_deref(), Some("dedicated"));
+        assert_eq!(labels.arch.as_deref(), Some("arm64"));
+
+        // Capacity round-trip
+        let capacity = created.capacity.expect("capacity should be persisted");
+        assert_eq!(capacity.cpu_cores, Some(4));
+        assert_eq!(capacity.memory_gb, Some(8));
+        assert_eq!(capacity.disk_gb, Some(80));
+
+        // Allocated round-trip (初期値 0)
+        let allocated = created.allocated.expect("allocated should be persisted");
+        assert_eq!(allocated.cpu_cores, Some(0));
+        assert_eq!(allocated.memory_gb, Some(0));
+
+        // Scheduling state
+        assert_eq!(
+            created.scheduling.as_deref(),
+            Some(scheduling_state::SCHEDULABLE)
+        );
+
+        // リスト取得でも labels が保持されていること
+        let servers = db.list_servers_by_tenant("acme").await.unwrap();
+        assert_eq!(servers.len(), 1);
+        assert_eq!(
+            servers[0].labels.as_ref().and_then(|l| l.tier.as_deref()),
+            Some("pro")
+        );
     }
 
     /// テスト用ヘルパー: テナント作成
@@ -1258,6 +1391,10 @@ mod tests {
                 provision_version: None,
                 tool_versions: None,
                 last_heartbeat_at: None,
+                labels: None,
+                capacity: None,
+                allocated: None,
+                scheduling: None,
                 created_at: None,
                 updated_at: None,
             })
@@ -1343,6 +1480,10 @@ mod tests {
             provision_version: None,
             tool_versions: None,
             last_heartbeat_at: None,
+            labels: None,
+            capacity: None,
+            allocated: None,
+            scheduling: None,
             created_at: None,
             updated_at: None,
         })

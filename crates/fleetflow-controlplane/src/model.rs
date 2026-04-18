@@ -245,6 +245,53 @@ pub struct Container {
 // CP-006: Server
 // ─────────────────────────────────────────────
 
+/// Server labels — Worker Pool membership 判定と Placement 決定に使う
+/// (FSC-26 Phase B-1)
+#[derive(Debug, Clone, Default, Serialize, Deserialize, SurrealValue)]
+pub struct ServerLabels {
+    /// Tier label: "free" / "pro" / "enterprise" 等
+    pub tier: Option<String>,
+    /// Region label: "tokyo" / "osaka" 等
+    pub region: Option<String>,
+    /// Isolation class: "shared" / "dedicated" / "isolated" / "byoc"
+    pub class: Option<String>,
+    /// CPU architecture: "amd64" / "arm64"
+    pub arch: Option<String>,
+    /// 任意拡張ラベル
+    pub extras: Option<serde_json::Value>,
+}
+
+/// Server capacity — 物理リソース上限 (FSC-26 Phase B-1)
+#[derive(Debug, Clone, Default, Serialize, Deserialize, SurrealValue)]
+pub struct ServerCapacity {
+    pub cpu_cores: Option<i64>,
+    pub memory_gb: Option<i64>,
+    pub disk_gb: Option<i64>,
+}
+
+/// Server allocated — 現在使用中のリソース (FSC-26 Phase B-1)
+/// 2-phase placement の commit 時に加算され、release 時に減算される
+#[derive(Debug, Clone, Default, Serialize, Deserialize, SurrealValue)]
+pub struct ServerAllocated {
+    pub cpu_cores: Option<i64>,
+    pub memory_gb: Option<i64>,
+}
+
+/// Server scheduling state の文字列定数 (FSC-26 Phase B-1)
+/// 論理的なスケジューリング可否を表す。物理 `status` フィールドとは直交:
+/// - 物理 `status`: "online" / "offline" / ... (Tailscale / heartbeat の実態)
+/// - 論理 `scheduling`: "schedulable" / "cordon" / "drain" (Scheduler の判断)
+///
+/// k8s Node Condition + `kubectl cordon` / `kubectl drain` 相当。
+pub mod scheduling_state {
+    /// 新規配置可能、既存 placement も継続
+    pub const SCHEDULABLE: &str = "schedulable";
+    /// 新規配置停止、既存 placement は継続（計画 maintenance 前の準備）
+    pub const CORDON: &str = "cordon";
+    /// 既存 placement も退去予定、新規配置不可（廃止 or 大規模 maintenance）
+    pub const DRAIN: &str = "drain";
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, SurrealValue)]
 pub struct Server {
     pub id: Option<RecordId>,
@@ -261,6 +308,15 @@ pub struct Server {
     /// ツールバージョン情報（JSON: {"docker": "29.3.0", "tailscale": "1.94.2", ...}）
     pub tool_versions: Option<serde_json::Value>,
     pub last_heartbeat_at: Option<DateTime<Utc>>,
+    /// Worker Pool membership 判定用 labels (FSC-26 Phase B-1)
+    pub labels: Option<ServerLabels>,
+    /// 物理リソース上限 (FSC-26 Phase B-1)
+    pub capacity: Option<ServerCapacity>,
+    /// 現在使用中のリソース (FSC-26 Phase B-1)
+    pub allocated: Option<ServerAllocated>,
+    /// 論理スケジューリング状態 (FSC-26 Phase B-1)
+    /// `scheduling_state` モジュールの定数を使用。None = 未指定（schedulable 扱い）
+    pub scheduling: Option<String>,
     pub created_at: Option<DateTime<Utc>>,
     pub updated_at: Option<DateTime<Utc>>,
 }
