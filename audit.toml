@@ -1,0 +1,21 @@
+# cargo-audit 設定
+# CI の `mise run audit` = `cargo audit` がこのファイルを読む
+# （`deny.toml` は `cargo deny` 用で別ツール、同じ advisory でも両方に登録が必要）
+
+[advisories]
+ignore = [
+    # paste 1.0.15: unmaintained
+    # 経路: paste → ratatui 0.29.0 → fleetflow (TUI 描画用)
+    # 対応: ratatui upstream が paste 離脱を進行中、次 major 待ち
+    "RUSTSEC-2024-0436",
+
+    # rustls-pemfile 2.2.0: unmaintained
+    # 経路: rustls-pemfile → unison 0.3.3 → fleetflow (QUIC TLS pem パース)
+    # 対応: unison upstream が rustls v0.23 系移行待ち
+    "RUSTSEC-2025-0134",
+
+    # lru 0.12.5: unsound (IterMut の Stacked Borrows 違反)
+    # 経路: lru → ratatui 0.29.0 → fleetflow
+    # 対応: ratatui 次 major で lru 0.13+ 採用予定
+    "RUSTSEC-2026-0002",
+]
