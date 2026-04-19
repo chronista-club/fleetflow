@@ -65,6 +65,8 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                 dns_domain: payload["dns_domain"].as_str().map(String::from),
                                 dns_zone_id: payload["dns_zone_id"].as_str().map(String::from),
                                 dns_api_token_encrypted: None, // 暗号化は別チャネルで
+                                // FSC-26 Phase B-3: 初期作成では未設定、後続 API / manual で付与
+                                placement_policy: None,
                                 created_at: None,
                                 updated_at: None,
                             };

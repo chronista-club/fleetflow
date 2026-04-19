@@ -1,6 +1,14 @@
+use std::collections::BTreeMap;
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use surrealdb::types::{RecordId, SurrealValue};
+
+/// Label map — `{"tier": "pro", "region": "tokyo"}` 形式のキー値バッグ (FSC-26)
+///
+/// `serde_json::Value` で受ける手もあるが、SurrealDB bind 経由で
+/// Connection uninitialised が起きる事象を避けるため、素直な `BTreeMap` を使う。
+pub type LabelMap = BTreeMap<String, String>;
 
 // ─────────────────────────────────────────────
 // CP-001: Tenant
@@ -21,8 +29,69 @@ pub struct Tenant {
     pub dns_zone_id: Option<String>,
     /// 暗号化された API トークン（AES-256-GCM, base64）
     pub dns_api_token_encrypted: Option<String>,
+    /// Placement Policy — Scheduler 配置決定時の制約 (FSC-26 Phase B-3)
+    pub placement_policy: Option<PlacementPolicy>,
     pub created_at: Option<DateTime<Utc>>,
     pub updated_at: Option<DateTime<Utc>>,
+}
+
+/// Resource quota — tier に応じたテナント上限 (FSC-26 Phase B-3)
+#[derive(Debug, Clone, Default, Serialize, Deserialize, SurrealValue)]
+pub struct ResourceQuota {
+    pub max_stages: Option<i64>,
+    pub max_services_per_stage: Option<i64>,
+    pub cpu_cores: Option<i64>,
+    pub memory_gb: Option<i64>,
+}
+
+/// Fallback chain: required 一致 pool 枯渇時の緩和順序 (FSC-26 Phase B-3)
+#[derive(Debug, Clone, Default, Serialize, Deserialize, SurrealValue)]
+pub struct FallbackPolicy {
+    /// 緩和順序 (例: ["class", "region"])
+    pub relax_order: Option<Vec<String>>,
+    /// 最大緩和ホップ数
+    pub max_hops: Option<i64>,
+}
+
+/// Spread constraint: 配置分散保証 (k8s PodTopologySpread 相当、FSC-26 Phase B-3)
+#[derive(Debug, Clone, Default, Serialize, Deserialize, SurrealValue)]
+pub struct SpreadConstraint {
+    /// 分散 dimension (例: "region" / "class")
+    pub topology_key: Option<String>,
+    /// 許容する skew の最大値
+    pub max_skew: Option<i64>,
+}
+
+/// Placement strategy の文字列定数 (FSC-26 Phase B-3)
+///
+/// Scheduler がどの方針で pool 内 worker を選ぶかを指定する。
+pub mod placement_strategy {
+    /// Pool 内で広く分散配置（デフォルト、可用性重視）
+    pub const SPREAD_ACROSS_POOL: &str = "spread_across_pool";
+    /// 専有 Pool に詰め込み（enterprise isolated tenant 向け）
+    pub const PACK_INTO_DEDICATED: &str = "pack_into_dedicated";
+    /// 使用率の低い worker から埋める（コスト効率重視）
+    pub const FILL_LOWEST: &str = "fill_lowest";
+}
+
+/// Tenant の Placement Policy (FSC-26 Phase B-3)
+///
+/// Scheduler が配置決定時に参照。`tier` は tenant の SSOT（`required_labels.tier`
+/// には展開しない）、他は fallback / spread / strategy などの制御パラメータ。
+#[derive(Debug, Clone, Default, Serialize, Deserialize, SurrealValue)]
+pub struct PlacementPolicy {
+    /// "free" / "pro" / "enterprise" 等（tenant の SSOT）
+    pub tier: Option<String>,
+    /// tier 以外の soft preference
+    pub preferred_labels: Option<LabelMap>,
+    /// tier 上限
+    pub resource_quota: Option<ResourceQuota>,
+    /// Fallback chain
+    pub fallback_policy: Option<FallbackPolicy>,
+    /// Spread 制約
+    pub spread_constraint: Option<SpreadConstraint>,
+    /// Placement 戦略 (`placement_strategy` モジュールの定数)
+    pub strategy: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, SurrealValue, Default)]
@@ -317,6 +386,31 @@ pub struct Server {
     /// 論理スケジューリング状態 (FSC-26 Phase B-1)
     /// `scheduling_state` モジュールの定数を使用。None = 未指定（schedulable 扱い）
     pub scheduling: Option<String>,
+    /// 所属 Worker Pool (FSC-26 Phase B-2)
+    /// None = 未割当（通常は migration で `worker_pool:default` が入る）
+    pub pool_id: Option<RecordId>,
+    pub created_at: Option<DateTime<Utc>>,
+    pub updated_at: Option<DateTime<Utc>>,
+}
+
+// ─────────────────────────────────────────────
+// CP-006b: Worker Pool (FSC-26 Phase B-2)
+// ─────────────────────────────────────────────
+
+/// Worker Pool — 複数 Server を label で束ねた論理グループ (FSC-26 Phase B-2)
+///
+/// Placement 決定時に tenant は `required_labels` が全一致する pool を選び、
+/// pool 内の worker (server) から `preferred_labels` でランキングする。
+#[derive(Debug, Clone, Serialize, Deserialize, SurrealValue)]
+pub struct WorkerPool {
+    pub id: Option<RecordId>,
+    /// Pool 識別名 (例: "sakura-pro-tokyo" / "default")
+    pub name: String,
+    pub description: Option<String>,
+    /// Hard constraint: pool 所属条件（全ラベル一致必須）
+    pub required_labels: Option<LabelMap>,
+    /// Soft hint: pool 内での worker ranking に使う
+    pub preferred_labels: Option<LabelMap>,
     pub created_at: Option<DateTime<Utc>>,
     pub updated_at: Option<DateTime<Utc>>,
 }
