@@ -3,7 +3,10 @@
 
 [tools]
 # Rust toolchain
-rust = "1.94"
+# 1.95: `constant_time_eq@0.4.3` が rustc 1.95+ を要求するため bump。
+# Cargo.lock は gitignore 対象で CI は毎回 fresh resolve するため、
+# transitive dep の最新要求に追従する必要がある。
+rust = "1.95"
 
 [env]
 # Rustのデフォルト設定
