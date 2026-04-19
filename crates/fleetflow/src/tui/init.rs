@@ -146,20 +146,18 @@ pub fn run_init_wizard() -> io::Result<Option<(String, String)>> {
                 KeyCode::Backspace => {
                     state.previous_step();
                 }
-                KeyCode::Down | KeyCode::Char('j') => {
-                    if state.step == WizardStep::SelectTemplate {
-                        state.select_next_template();
-                    }
+                KeyCode::Down | KeyCode::Char('j')
+                    if state.step == WizardStep::SelectTemplate =>
+                {
+                    state.select_next_template();
                 }
-                KeyCode::Up | KeyCode::Char('k') => {
-                    if state.step == WizardStep::SelectTemplate {
-                        state.select_previous_template();
-                    }
+                KeyCode::Up | KeyCode::Char('k')
+                    if state.step == WizardStep::SelectTemplate =>
+                {
+                    state.select_previous_template();
                 }
-                KeyCode::Tab => {
-                    if state.step == WizardStep::SelectPath {
-                        state.cycle_config_path();
-                    }
+                KeyCode::Tab if state.step == WizardStep::SelectPath => {
+                    state.cycle_config_path();
                 }
                 _ => {}
             }
