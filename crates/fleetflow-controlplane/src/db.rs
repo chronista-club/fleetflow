@@ -101,15 +101,41 @@ impl Database {
     pub async fn create_tenant(&self, tenant: &Tenant) -> Result<Tenant> {
         let mut result = self
             .db
-            .query("CREATE tenant CONTENT { slug: $slug, name: $name, auth0_org_id: $auth0_org_id, plan: $plan }")
+            .query(
+                "CREATE tenant CONTENT { \
+                    slug: $slug, name: $name, auth0_org_id: $auth0_org_id, plan: $plan, \
+                    placement_policy: $placement_policy \
+                }",
+            )
             .bind(("slug", tenant.slug.clone()))
             .bind(("name", tenant.name.clone()))
             .bind(("auth0_org_id", tenant.auth0_org_id.clone()))
             .bind(("plan", tenant.plan.clone()))
+            // FSC-26 Phase B-3: Placement Policy
+            .bind(("placement_policy", tenant.placement_policy.clone()))
             .await
             .context("テナント作成失敗")?;
         let created: Option<Tenant> = result.take(0)?;
         created.context("テナント作成結果が空")
+    }
+
+    /// Placement Policy を更新 (FSC-26 Phase B-3)
+    ///
+    /// 注意: `PlacementPolicy` が内部に `serde_json::Value` を含むため、
+    /// `.bind()` 経由だと connection 破壊 (Connection uninitialised) が起きる。
+    /// struct ごと `$policy` へ bind する方式で回避する。
+    pub async fn update_tenant_placement_policy(
+        &self,
+        tenant_slug: &str,
+        policy: &PlacementPolicy,
+    ) -> Result<()> {
+        self.db
+            .query("UPDATE tenant SET placement_policy = $policy, updated_at = time::now() WHERE slug = $slug")
+            .bind(("slug", tenant_slug.to_string()))
+            .bind(("policy", policy.clone()))
+            .await
+            .context("Placement Policy 更新失敗")?;
+        Ok(())
     }
 
     pub async fn get_tenant_by_id(&self, id: &RecordId) -> Result<Option<Tenant>> {
@@ -505,7 +531,7 @@ impl Database {
                     tenant: $tenant, slug: $slug, provider: $provider, plan: $plan, \
                     ssh_host: $ssh_host, ssh_user: $ssh_user, deploy_path: $deploy_path, \
                     status: $status, labels: $labels, capacity: $capacity, \
-                    allocated: $allocated, scheduling: $scheduling \
+                    allocated: $allocated, scheduling: $scheduling, pool_id: $pool_id \
                 }",
             )
             .bind(("tenant", server.tenant.clone()))
@@ -521,10 +547,23 @@ impl Database {
             .bind(("capacity", server.capacity.clone()))
             .bind(("allocated", server.allocated.clone()))
             .bind(("scheduling", server.scheduling.clone()))
+            // FSC-26 Phase B-2: Worker Pool 参照
+            .bind(("pool_id", server.pool_id.clone()))
             .await
             .context("サーバー登録失敗")?;
         let created: Option<Server> = result.take(0)?;
         created.context("サーバー登録結果が空")
+    }
+
+    /// Server を Worker Pool に紐付け (FSC-26 Phase B-2)
+    pub async fn update_server_pool(&self, server_slug: &str, pool_id: &RecordId) -> Result<()> {
+        self.db
+            .query("UPDATE server SET pool_id = $pool_id, updated_at = time::now() WHERE slug = $slug")
+            .bind(("slug", server_slug.to_string()))
+            .bind(("pool_id", pool_id.clone()))
+            .await
+            .context("Server pool_id 更新失敗")?;
+        Ok(())
     }
 
     pub async fn list_servers_by_tenant(&self, tenant_slug: &str) -> Result<Vec<Server>> {
@@ -615,6 +654,52 @@ impl Database {
             .await
             .context("サーバー削除失敗")?;
         Ok(())
+    }
+
+    // ─────────────────────────────────────────
+    // WorkerPool CRUD (FSC-26 Phase B-2)
+    // ─────────────────────────────────────────
+
+    /// Worker Pool を新規作成 (FSC-26 Phase B-2)
+    ///
+    /// name の UNIQUE index があるため同名重複は失敗する。
+    pub async fn create_worker_pool(&self, pool: &WorkerPool) -> Result<WorkerPool> {
+        // id: None を明示し、SurrealDB 側で自動採番させる
+        let insert = WorkerPool {
+            id: None,
+            ..pool.clone()
+        };
+        let mut result = self
+            .db
+            .query("CREATE worker_pool CONTENT $data")
+            .bind(("data", insert))
+            .await
+            .context("Worker Pool 作成失敗")?;
+        let created: Option<WorkerPool> = result.take(0)?;
+        created.context("Worker Pool 作成結果が空")
+    }
+
+    /// name で Worker Pool を取得 (FSC-26 Phase B-2)
+    pub async fn get_worker_pool_by_name(&self, name: &str) -> Result<Option<WorkerPool>> {
+        let mut result = self
+            .db
+            .query("SELECT * FROM worker_pool WHERE name = $name LIMIT 1")
+            .bind(("name", name.to_string()))
+            .await
+            .context("Worker Pool 取得失敗")?;
+        let pools: Vec<WorkerPool> = result.take(0)?;
+        Ok(pools.into_iter().next())
+    }
+
+    /// 全 Worker Pool を列挙 (FSC-26 Phase B-2)
+    pub async fn list_worker_pools(&self) -> Result<Vec<WorkerPool>> {
+        let mut result = self
+            .db
+            .query("SELECT * FROM worker_pool ORDER BY name")
+            .await
+            .context("Worker Pool 一覧取得失敗")?;
+        let pools: Vec<WorkerPool> = result.take(0)?;
+        Ok(pools)
     }
 
     // ─────────────────────────────────────────
@@ -878,6 +963,26 @@ DEFINE FIELD IF NOT EXISTS dns_provider ON tenant TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS dns_domain ON tenant TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS dns_zone_id ON tenant TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS dns_api_token_encrypted ON tenant TYPE option<string>;
+
+-- FSC-26 Phase B-3: tenant.placement_policy (Scheduler 配置制約)
+DEFINE FIELD IF NOT EXISTS placement_policy ON tenant TYPE option<object>;
+DEFINE FIELD IF NOT EXISTS placement_policy.tier ON tenant TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS placement_policy.preferred_labels ON tenant TYPE option<object>;
+-- wildcard: placement_policy.preferred_labels は自由 key の string map
+DEFINE FIELD IF NOT EXISTS placement_policy.preferred_labels.* ON tenant TYPE string;
+DEFINE FIELD IF NOT EXISTS placement_policy.resource_quota ON tenant TYPE option<object>;
+DEFINE FIELD IF NOT EXISTS placement_policy.resource_quota.max_stages ON tenant TYPE option<int>;
+DEFINE FIELD IF NOT EXISTS placement_policy.resource_quota.max_services_per_stage ON tenant TYPE option<int>;
+DEFINE FIELD IF NOT EXISTS placement_policy.resource_quota.cpu_cores ON tenant TYPE option<int>;
+DEFINE FIELD IF NOT EXISTS placement_policy.resource_quota.memory_gb ON tenant TYPE option<int>;
+DEFINE FIELD IF NOT EXISTS placement_policy.fallback_policy ON tenant TYPE option<object>;
+DEFINE FIELD IF NOT EXISTS placement_policy.fallback_policy.relax_order ON tenant TYPE option<array<string>>;
+DEFINE FIELD IF NOT EXISTS placement_policy.fallback_policy.max_hops ON tenant TYPE option<int>;
+DEFINE FIELD IF NOT EXISTS placement_policy.spread_constraint ON tenant TYPE option<object>;
+DEFINE FIELD IF NOT EXISTS placement_policy.spread_constraint.topology_key ON tenant TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS placement_policy.spread_constraint.max_skew ON tenant TYPE option<int>;
+DEFINE FIELD IF NOT EXISTS placement_policy.strategy ON tenant TYPE option<string>;
+
 DEFINE FIELD IF NOT EXISTS created_at ON tenant TYPE option<datetime> DEFAULT time::now();
 DEFINE FIELD IF NOT EXISTS updated_at ON tenant TYPE option<datetime> DEFAULT time::now();
 DEFINE INDEX IF NOT EXISTS idx_tenant_slug ON tenant FIELDS slug UNIQUE;
@@ -953,9 +1058,38 @@ DEFINE FIELD IF NOT EXISTS allocated.memory_gb ON server TYPE option<int>;
 -- 論理スケジューリング状態 (FSC-26 Phase B-1、物理 status と直交)
 -- 'schedulable' | 'cordon' | 'drain' — k8s Node Condition + cordon/drain 相当
 DEFINE FIELD IF NOT EXISTS scheduling ON server TYPE option<string> DEFAULT 'schedulable';
+
+-- FSC-26 Phase B-2: server → worker_pool 参照
+DEFINE FIELD IF NOT EXISTS pool_id ON server TYPE option<record<worker_pool>>;
+
 DEFINE FIELD IF NOT EXISTS created_at ON server TYPE option<datetime> DEFAULT time::now();
 DEFINE FIELD IF NOT EXISTS updated_at ON server TYPE option<datetime> DEFAULT time::now();
 DEFINE INDEX IF NOT EXISTS idx_server_tenant_slug ON server FIELDS tenant, slug UNIQUE;
+
+-- FSC-26 Phase B-2: Worker Pool (複数 Server を label で束ねた論理グループ)
+DEFINE TABLE IF NOT EXISTS worker_pool SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS name ON worker_pool TYPE string;
+DEFINE FIELD IF NOT EXISTS description ON worker_pool TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS required_labels ON worker_pool TYPE option<object>;
+-- wildcard: required_labels は自由 key の string map として扱う
+DEFINE FIELD IF NOT EXISTS required_labels.* ON worker_pool TYPE string;
+DEFINE FIELD IF NOT EXISTS preferred_labels ON worker_pool TYPE option<object>;
+DEFINE FIELD IF NOT EXISTS preferred_labels.* ON worker_pool TYPE string;
+DEFINE FIELD IF NOT EXISTS created_at ON worker_pool TYPE option<datetime> DEFAULT time::now();
+DEFINE FIELD IF NOT EXISTS updated_at ON worker_pool TYPE option<datetime> DEFAULT time::now();
+DEFINE INDEX IF NOT EXISTS idx_worker_pool_name ON worker_pool FIELDS name UNIQUE;
+
+-- 初期データ: migration 時の移行先 pool (冪等に INSERT IGNORE)
+INSERT IGNORE INTO worker_pool {
+    id: worker_pool:default,
+    name: 'default',
+    description: 'migration 時の移行先。全 server をここに割当',
+    required_labels: {},
+    preferred_labels: {}
+};
+
+-- 既存 server で pool_id 未設定のものを default pool に紐付け (idempotent、launch 後も安全)
+UPDATE server SET pool_id = worker_pool:default WHERE pool_id = NONE;
 
 DEFINE TABLE IF NOT EXISTS cost_entry SCHEMAFULL;
 DEFINE FIELD IF NOT EXISTS tenant ON cost_entry TYPE record<tenant>;
@@ -1040,6 +1174,7 @@ mod tests {
             dns_domain: None,
             dns_zone_id: None,
             dns_api_token_encrypted: None,
+            placement_policy: None,
             created_at: None,
             updated_at: None,
         };
@@ -1073,6 +1208,7 @@ mod tests {
                 dns_domain: None,
                 dns_zone_id: None,
                 dns_api_token_encrypted: None,
+                placement_policy: None,
                 created_at: None,
                 updated_at: None,
             })
@@ -1112,6 +1248,7 @@ mod tests {
                 dns_domain: None,
                 dns_zone_id: None,
                 dns_api_token_encrypted: None,
+                placement_policy: None,
                 created_at: None,
                 updated_at: None,
             })
@@ -1136,6 +1273,7 @@ mod tests {
             capacity: None,
             allocated: None,
             scheduling: None,
+            pool_id: None,
             created_at: None,
             updated_at: None,
         };
@@ -1171,6 +1309,7 @@ mod tests {
                 dns_domain: None,
                 dns_zone_id: None,
                 dns_api_token_encrypted: None,
+                placement_policy: None,
                 created_at: None,
                 updated_at: None,
             })
@@ -1207,6 +1346,7 @@ mod tests {
                 memory_gb: Some(0),
             }),
             scheduling: Some(scheduling_state::SCHEDULABLE.into()),
+            pool_id: None,
             created_at: None,
             updated_at: None,
         };
@@ -1258,6 +1398,7 @@ mod tests {
             dns_domain: None,
             dns_zone_id: None,
             dns_api_token_encrypted: None,
+            placement_policy: None,
             created_at: None,
             updated_at: None,
         })
@@ -1395,6 +1536,7 @@ mod tests {
                 capacity: None,
                 allocated: None,
                 scheduling: None,
+                pool_id: None,
                 created_at: None,
                 updated_at: None,
             })
@@ -1484,6 +1626,7 @@ mod tests {
             capacity: None,
             allocated: None,
             scheduling: None,
+            pool_id: None,
             created_at: None,
             updated_at: None,
         })
@@ -1546,5 +1689,217 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(count, 0);
+    }
+
+    // ─────────────────────────────────────────
+    // FSC-26 Phase B-2 / B-3: Worker Pool + Placement Policy
+    // ─────────────────────────────────────────
+
+    /// Worker Pool の CRUD round-trip を確認 (FSC-26 Phase B-2)
+    #[tokio::test]
+    async fn test_worker_pool_crud() {
+        let db = Database::connect_memory().await.unwrap();
+
+        // schema apply で default pool が自動投入されていることを確認
+        let default_pool = db
+            .get_worker_pool_by_name("default")
+            .await
+            .unwrap()
+            .expect("default pool は schema apply で投入される");
+        assert_eq!(default_pool.name, "default");
+        assert!(default_pool.id.is_some());
+
+        // 追加 pool を label 付きで作成
+        let pro_pool = WorkerPool {
+            id: None,
+            name: "sakura-pro-tokyo".into(),
+            description: Some("Pro tier 向け、東京リージョン専用".into()),
+            required_labels: Some(std::collections::BTreeMap::from([
+                ("tier".into(), "pro".into()),
+                ("region".into(), "tokyo".into()),
+            ])),
+            preferred_labels: Some(std::collections::BTreeMap::from([(
+                "class".into(),
+                "dedicated".into(),
+            )])),
+            created_at: None,
+            updated_at: None,
+        };
+        let created = db.create_worker_pool(&pro_pool).await.unwrap();
+        assert!(created.id.is_some());
+        assert_eq!(created.name, "sakura-pro-tokyo");
+
+        // name で取得できてラベルも round-trip する
+        let found = db
+            .get_worker_pool_by_name("sakura-pro-tokyo")
+            .await
+            .unwrap()
+            .expect("pro pool should be persisted");
+        assert_eq!(
+            found.description.as_deref(),
+            Some("Pro tier 向け、東京リージョン専用")
+        );
+        let required = found.required_labels.expect("required_labels persisted");
+        assert_eq!(required.get("tier").map(String::as_str), Some("pro"));
+        assert_eq!(required.get("region").map(String::as_str), Some("tokyo"));
+
+        // list で default + pro の 2 件
+        let pools = db.list_worker_pools().await.unwrap();
+        assert_eq!(pools.len(), 2);
+
+        // name UNIQUE: 同名で作成すると失敗
+        let dup = db.create_worker_pool(&pro_pool).await;
+        assert!(dup.is_err(), "same name should fail due to UNIQUE index");
+    }
+
+    /// Server に pool_id を紐付けて round-trip (FSC-26 Phase B-2)
+    #[tokio::test]
+    async fn test_server_pool_association() {
+        let db = Database::connect_memory().await.unwrap();
+        let tenant = create_test_tenant(&db).await;
+
+        // default pool を取得
+        let default_pool = db
+            .get_worker_pool_by_name("default")
+            .await
+            .unwrap()
+            .expect("default pool exists");
+
+        // pool_id を持つ server を登録
+        let server = Server {
+            id: None,
+            tenant: tenant.id.clone().unwrap(),
+            slug: "worker-01".into(),
+            provider: "sakura-cloud".into(),
+            plan: Some("4G/4CPU".into()),
+            ssh_host: "100.64.0.20".into(),
+            ssh_user: "root".into(),
+            deploy_path: "/opt/fleet".into(),
+            status: "online".into(),
+            provision_version: None,
+            tool_versions: None,
+            last_heartbeat_at: None,
+            labels: None,
+            capacity: None,
+            allocated: None,
+            scheduling: None,
+            pool_id: default_pool.id.clone(),
+            created_at: None,
+            updated_at: None,
+        };
+        let created = db.register_server(&server).await.unwrap();
+        assert_eq!(
+            created.pool_id, default_pool.id,
+            "pool_id should round-trip"
+        );
+
+        // pool_id を別 pool に付け替え
+        let pro_pool = db
+            .create_worker_pool(&WorkerPool {
+                id: None,
+                name: "pro".into(),
+                description: None,
+                required_labels: None,
+                preferred_labels: None,
+                created_at: None,
+                updated_at: None,
+            })
+            .await
+            .unwrap();
+        db.update_server_pool("worker-01", pro_pool.id.as_ref().unwrap())
+            .await
+            .unwrap();
+
+        let moved = db
+            .get_server_by_slug("worker-01")
+            .await
+            .unwrap()
+            .expect("server exists");
+        assert_eq!(moved.pool_id, pro_pool.id);
+    }
+
+    /// Tenant に placement_policy を設定して round-trip (FSC-26 Phase B-3)
+    #[tokio::test]
+    async fn test_tenant_placement_policy() {
+        use crate::model::{
+            FallbackPolicy, PlacementPolicy, ResourceQuota, SpreadConstraint, placement_strategy,
+        };
+
+        let db = Database::connect_memory().await.unwrap();
+
+        // 最初は policy なし
+        let tenant = Tenant {
+            id: None,
+            slug: "pro-customer".into(),
+            name: "Pro Customer Inc".into(),
+            auth0_org_id: None,
+            plan: "pro".into(),
+            dns_provider: None,
+            dns_domain: None,
+            dns_zone_id: None,
+            dns_api_token_encrypted: None,
+            placement_policy: None,
+            created_at: None,
+            updated_at: None,
+        };
+        let created = db.create_tenant(&tenant).await.unwrap();
+        assert!(created.placement_policy.is_none());
+
+        // Placement Policy を更新
+        let policy = PlacementPolicy {
+            tier: Some("pro".into()),
+            preferred_labels: Some(std::collections::BTreeMap::from([(
+                "region".into(),
+                "tokyo".into(),
+            )])),
+            resource_quota: Some(ResourceQuota {
+                max_stages: Some(10),
+                max_services_per_stage: Some(20),
+                cpu_cores: Some(16),
+                memory_gb: Some(64),
+            }),
+            fallback_policy: Some(FallbackPolicy {
+                relax_order: Some(vec!["class".into(), "region".into()]),
+                max_hops: Some(2),
+            }),
+            spread_constraint: Some(SpreadConstraint {
+                topology_key: Some("region".into()),
+                max_skew: Some(1),
+            }),
+            strategy: Some(placement_strategy::SPREAD_ACROSS_POOL.into()),
+        };
+        db.update_tenant_placement_policy("pro-customer", &policy)
+            .await
+            .unwrap();
+
+        // Round-trip 確認
+        let found = db
+            .get_tenant_by_slug("pro-customer")
+            .await
+            .unwrap()
+            .expect("tenant exists");
+        let loaded = found
+            .placement_policy
+            .expect("policy should be persisted");
+        assert_eq!(loaded.tier.as_deref(), Some("pro"));
+        assert_eq!(
+            loaded.strategy.as_deref(),
+            Some(placement_strategy::SPREAD_ACROSS_POOL)
+        );
+
+        let quota = loaded.resource_quota.expect("quota persisted");
+        assert_eq!(quota.max_stages, Some(10));
+        assert_eq!(quota.cpu_cores, Some(16));
+
+        let fallback = loaded.fallback_policy.expect("fallback persisted");
+        assert_eq!(
+            fallback.relax_order.as_deref(),
+            Some(&["class".to_string(), "region".to_string()][..])
+        );
+        assert_eq!(fallback.max_hops, Some(2));
+
+        let spread = loaded.spread_constraint.expect("spread persisted");
+        assert_eq!(spread.topology_key.as_deref(), Some("region"));
+        assert_eq!(spread.max_skew, Some(1));
     }
 }

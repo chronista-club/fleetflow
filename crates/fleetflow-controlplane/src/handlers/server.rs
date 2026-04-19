@@ -97,6 +97,8 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                 capacity: None,
                                 allocated: None,
                                 scheduling: None,
+                                // FSC-26 Phase B-2: migration で worker_pool:default に紐付け
+                                pool_id: None,
                                 created_at: None,
                                 updated_at: None,
                             };
@@ -396,6 +398,8 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                 capacity: None,
                                 allocated: None,
                                 scheduling: None,
+                                // FSC-26 Phase B-2: migration で worker_pool:default に紐付け
+                                pool_id: None,
                                 created_at: None,
                                 updated_at: None,
                             };
