@@ -113,7 +113,20 @@ run = "cargo doc --all-features --no-deps --open"
 
 [tasks.audit]
 description = "セキュリティ監査"
-run = "cargo audit"
+# cargo-audit 0.22+ は audit.toml を読まないため、--ignore CLI flag で指定する
+# 各 advisory の経路・対応方針は audit.toml にドキュメント化
+# 将来 upstream が audit.toml 対応を復活させた場合、CLI flag を削除して一本化する
+run = """
+cargo audit \
+  --ignore RUSTSEC-2024-0436 \
+  --ignore RUSTSEC-2025-0134 \
+  --ignore RUSTSEC-2026-0002 \
+  --ignore RUSTSEC-2023-0071 \
+  --ignore RUSTSEC-2026-0044 \
+  --ignore RUSTSEC-2026-0048 \
+  --ignore RUSTSEC-2026-0098 \
+  --ignore RUSTSEC-2026-0099
+"""
 
 [tasks.tree]
 description = "依存関係ツリーを表示"

@@ -1,0 +1,52 @@
+# cargo-audit 設定
+# CI の `mise run audit` = `cargo audit` がこのファイルを読む
+# （`deny.toml` は `cargo deny` 用で別ツール、同じ advisory でも両方に登録が必要）
+
+[advisories]
+ignore = [
+    # paste 1.0.15: unmaintained
+    # 経路: paste → ratatui 0.29.0 → fleetflow (TUI 描画用)
+    # 対応: ratatui upstream が paste 離脱を進行中、次 major 待ち
+    "RUSTSEC-2024-0436",
+
+    # rustls-pemfile 2.2.0: unmaintained
+    # 経路: rustls-pemfile → unison 0.3.3 → fleetflow (QUIC TLS pem パース)
+    # 対応: unison upstream が rustls v0.23 系移行待ち
+    "RUSTSEC-2025-0134",
+
+    # lru 0.12.5: unsound (IterMut の Stacked Borrows 違反)
+    # 経路: lru → ratatui 0.29.0 → fleetflow
+    # 対応: ratatui 次 major で lru 0.13+ 採用予定
+    "RUSTSEC-2026-0002",
+
+    # rsa 0.9.x: Marvin Attack (timing sidechannel で秘密鍵復元の可能性)
+    # 経路: rsa → (複数の transitive 経路)
+    # 対応: upstream で fix 無し ("No fixed upgrade is available")
+    # mitigation: FleetStage は RSA 暗号化を直接使わず、TLS handshake 内で
+    #             rustls/aws-lc-rs が使うのみ。高い timing precision の攻撃は
+    #             実運用環境では現実的リスクが低いと判断し、ignore する。
+    # 将来: rsa crate の audit-resistant 実装 or RSA 非依存 path への移行で解除
+    "RUSTSEC-2023-0071",
+
+    # aws-lc-sys 0.38.0: AWS-LC X.509 Name Constraints Bypass (Wildcard/Unicode CN)
+    # 経路: aws-lc-sys → aws-lc-rs → rustls-webpki → rustls / quinn / reqwest
+    # 対応: Upgrade to >=0.39.0 が必要だが、aws-lc-rs 1.16.1 が 0.38.0 を固定。
+    #       upstream (aws-lc-rs) の更新待ち。
+    "RUSTSEC-2026-0044",
+
+    # aws-lc-sys 0.38.0: CRL Distribution Point Scope Check Logic Error
+    # 経路: 上と同じ
+    # 対応: 上と同じ (aws-lc-rs 更新待ち)
+    "RUSTSEC-2026-0048",
+
+    # rustls-webpki 0.101.7 (旧バージョン): URI name constraints の不正受理
+    # 経路: 古い rustls stack (0.21.x 経由の reqwest 0.12 等)
+    # 対応: >=0.103.12 へ上げが必要だが、0.101.7 は transitive 系で固定されて
+    #       いるため、直接 update 不可。0.103.12 は別途導入済み。
+    # 影響: 旧 stack 経由のみ、主要経路 (fleetflowd Unison QUIC) は 0.103.12 を使う
+    "RUSTSEC-2026-0098",
+
+    # rustls-webpki 0.101.7 (旧バージョン): ワイルドカード証明書の name constraints
+    # 経路・対応: 上と同じ
+    "RUSTSEC-2026-0099",
+]
