@@ -558,7 +558,9 @@ impl Database {
     /// Server を Worker Pool に紐付け (FSC-26 Phase B-2)
     pub async fn update_server_pool(&self, server_slug: &str, pool_id: &RecordId) -> Result<()> {
         self.db
-            .query("UPDATE server SET pool_id = $pool_id, updated_at = time::now() WHERE slug = $slug")
+            .query(
+                "UPDATE server SET pool_id = $pool_id, updated_at = time::now() WHERE slug = $slug",
+            )
             .bind(("slug", server_slug.to_string()))
             .bind(("pool_id", pool_id.clone()))
             .await
@@ -1878,9 +1880,7 @@ mod tests {
             .await
             .unwrap()
             .expect("tenant exists");
-        let loaded = found
-            .placement_policy
-            .expect("policy should be persisted");
+        let loaded = found.placement_policy.expect("policy should be persisted");
         assert_eq!(loaded.tier.as_deref(), Some("pro"));
         assert_eq!(
             loaded.strategy.as_deref(),
