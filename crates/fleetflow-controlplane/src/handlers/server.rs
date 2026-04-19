@@ -92,6 +92,11 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                     .map(String::from),
                                 tool_versions: payload.get("tool_versions").cloned(),
                                 last_heartbeat_at: None,
+                                // FSC-26 Phase B-1: register 経由では未設定、後続 API で付与
+                                labels: None,
+                                capacity: None,
+                                allocated: None,
+                                scheduling: None,
                                 created_at: None,
                                 updated_at: None,
                             };
@@ -386,6 +391,11 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                 provision_version: None,
                                 tool_versions: None,
                                 last_heartbeat_at: None,
+                                // FSC-26 Phase B-1: create 経由では未設定、後続 API で付与
+                                labels: None,
+                                capacity: None,
+                                allocated: None,
+                                scheduling: None,
                                 created_at: None,
                                 updated_at: None,
                             };

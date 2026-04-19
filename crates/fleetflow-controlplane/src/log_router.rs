@@ -161,7 +161,7 @@ impl LogRouter {
         }
 
         // timestamp でソートして最新 limit 件
-        results.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
+        results.sort_by_key(|r| r.timestamp);
         if results.len() > limit {
             results = results.split_off(results.len() - limit);
         }
