@@ -1128,18 +1128,19 @@ impl FleetFlowServer {
 
 impl ServerHandler for FleetFlowServer {
     fn get_info(&self) -> ServerInfo {
-        ServerInfo {
-            instructions: Some(
-                "FleetFlow MCP サーバー。KDLベースのコンテナオーケストレーションツールです。"
-                    .to_string(),
-            ),
-            ..Default::default()
-        }
+        // rmcp 1.1 で ServerInfo が #[non_exhaustive] 化 → struct literal 不可。
+        // Default を base に、mutable で instructions のみ上書き
+        let mut info = ServerInfo::default();
+        info.instructions = Some(
+            "FleetFlow MCP サーバー。KDLベースのコンテナオーケストレーションツールです。"
+                .to_string(),
+        );
+        info
     }
 
     async fn list_tools(
         &self,
-        _request: Option<PaginatedRequestParam>,
+        _request: Option<PaginatedRequestParams>,
         _context: RequestContext<RoleServer>,
     ) -> Result<ListToolsResult, McpError> {
         Ok(ListToolsResult {
@@ -1151,7 +1152,7 @@ impl ServerHandler for FleetFlowServer {
 
     async fn call_tool(
         &self,
-        request: CallToolRequestParam,
+        request: CallToolRequestParams,
         context: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, McpError> {
         let tool_context = ToolCallContext::new(self, request, context);

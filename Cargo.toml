@@ -84,7 +84,7 @@ tracing = "0.1"
 tracing-subscriber = "0.3"
 
 # MCP (Model Context Protocol)
-rmcp = { version = "0.12", features = ["server", "transport-io", "macros"] }
+rmcp = { version = "1.1", features = ["server", "transport-io", "macros"] }
 schemars = "1"
 
 # Utils
