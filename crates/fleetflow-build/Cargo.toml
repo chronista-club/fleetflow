@@ -26,7 +26,7 @@ http-body-util = "0.1"
 tar = "0.4"
 flate2 = "1.0"
 colored = "2.1"
-indicatif = "0.17"
+indicatif = "0.18"
 tracing.workspace = true
 tempfile.workspace = true
 
