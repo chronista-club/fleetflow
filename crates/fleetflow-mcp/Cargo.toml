@@ -36,4 +36,4 @@ unison.workspace = true
 rustls = { version = "0.23", default-features = false, features = ["ring"] }
 dirs = "6"
 chrono.workspace = true
-reqwest = { version = "0.13", default-features = false, features = ["json", "rustls-tls"] }
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
