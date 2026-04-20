@@ -84,11 +84,7 @@ impl Severity {
 type CooldownKey = (String, String);
 
 /// モニターループを実行
-pub async fn run_loop(
-    client: &Arc<ProtocolClient>,
-    server_slug: &str,
-    config: &MonitorConfig,
-) {
+pub async fn run_loop(client: &Arc<ProtocolClient>, server_slug: &str, config: &MonitorConfig) {
     let docker = match Docker::connect_with_local_defaults() {
         Ok(d) => d,
         Err(e) => {
@@ -195,10 +191,12 @@ pub(crate) async fn check_containers(
             None => continue,
         };
 
-        let status = state.status.as_ref().map(|s| s.to_string()).unwrap_or_default();
-        let restart_count = info
-            .restart_count
-            .unwrap_or(0);
+        let status = state
+            .status
+            .as_ref()
+            .map(|s| s.to_string())
+            .unwrap_or_default();
+        let restart_count = info.restart_count.unwrap_or(0);
         let health = state
             .health
             .as_ref()
@@ -268,10 +266,7 @@ pub(crate) fn detect_anomalies(
             container_name: container_name.to_string(),
             alert_type: AlertType::Unhealthy,
             severity: Severity::Warning,
-            message: format!(
-                "コンテナ {} が unhealthy",
-                container_name
-            ),
+            message: format!("コンテナ {} が unhealthy", container_name),
         });
     }
 

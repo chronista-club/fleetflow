@@ -806,11 +806,7 @@ impl Database {
     }
 
     /// コンテナ正常復帰時に該当アラートを解決済みにする
-    pub async fn resolve_alerts(
-        &self,
-        server_slug: &str,
-        container_name: &str,
-    ) -> Result<()> {
+    pub async fn resolve_alerts(&self, server_slug: &str, container_name: &str) -> Result<()> {
         self.db
             .query(
                 "UPDATE alert SET resolved = true, resolved_at = time::now() WHERE server_slug = $server_slug AND container_name = $container_name AND resolved = false",
@@ -833,9 +829,7 @@ impl Database {
             .await
             .context("アラートカウント取得失敗")?;
         let row: Option<serde_json::Value> = result.take(0)?;
-        Ok(row
-            .and_then(|v| v["count"].as_i64())
-            .unwrap_or(0))
+        Ok(row.and_then(|v| v["count"].as_i64()).unwrap_or(0))
     }
 }
 
