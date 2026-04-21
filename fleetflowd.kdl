@@ -21,7 +21,7 @@ web {
 
 auth {
     domain "anycreative.jp.auth0.com"
-    audience "https://api.fleetflow.run"
+    audience "https://api.fleetstage.cloud"
 }
 
 cloud {

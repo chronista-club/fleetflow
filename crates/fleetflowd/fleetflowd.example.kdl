@@ -27,9 +27,10 @@ database {
 }
 
 auth {
-    // Auth0 テナント設定
-    domain "anycreative.auth0.com"
-    audience "https://api.fleetflow.dev"
+    // Auth0 テナント設定 (Creo ID / FleetStage Control Plane)
+    // OSS 利用者は自前 Auth0 tenant に差し替え可
+    domain "anycreative.jp.auth0.com"
+    audience "https://api.fleetstage.cloud"
 }
 
 // health {
