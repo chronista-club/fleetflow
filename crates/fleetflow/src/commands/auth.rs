@@ -3,10 +3,17 @@ use colored::Colorize;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-/// Auth0 のデフォルト設定
+/// Auth0 のデフォルト設定 (Creo ID / FleetStage Control Plane)
+///
+/// OSS 利用者は下記 env var で上書き可能:
+///   - `FLEETFLOW_AUTH0_DOMAIN`
+///   - `FLEETFLOW_AUTH0_CLIENT_ID`
+///   - `FLEETFLOW_AUTH0_AUDIENCE`
+///   - `FLEETFLOW_CP_ENDPOINT`
 const AUTH0_DOMAIN: &str = "anycreative.jp.auth0.com";
-const AUTH0_CLIENT_ID: &str = "fleetflow-cli";
-const AUTH0_AUDIENCE: &str = "https://api.fleetflow.run";
+const AUTH0_CLIENT_ID: &str = "u3pDPrEoMl5lb9kSa0qHU9g8cDDN9I7N";
+const AUTH0_AUDIENCE: &str = "https://api.fleetstage.cloud";
+const DEFAULT_CP_ENDPOINT: &str = "https://cp.fleetstage.cloud:4510";
 
 /// Credentials file path: ~/.config/fleetflow/credentials.json
 fn credentials_path() -> Result<PathBuf> {
@@ -59,7 +66,9 @@ struct TokenErrorResponse {
 
 /// `fleet cp login` — Auth0 Device Authorization Flow
 pub async fn handle_login(api_endpoint: Option<String>) -> Result<()> {
-    let endpoint = api_endpoint.unwrap_or_else(|| "https://api.fleetflow.run:4510".into());
+    let endpoint = api_endpoint
+        .or_else(|| std::env::var("FLEETFLOW_CP_ENDPOINT").ok())
+        .unwrap_or_else(|| DEFAULT_CP_ENDPOINT.into());
     let auth0_domain =
         std::env::var("FLEETFLOW_AUTH0_DOMAIN").unwrap_or_else(|_| AUTH0_DOMAIN.into());
     let client_id =
