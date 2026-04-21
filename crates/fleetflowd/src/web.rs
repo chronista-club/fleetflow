@@ -84,7 +84,10 @@ pub async fn start(
             "/api/stages/{project}/{stage}/restart/{service}",
             post(api_service_restart),
         )
-        .route("/api/stages/{project}/{stage}/alerts", get(api_stage_alerts))
+        .route(
+            "/api/stages/{project}/{stage}/alerts",
+            get(api_stage_alerts),
+        )
         .route("/api/agents", get(api_agents))
         .route(
             "/api/stages/{project}/{stage}/logs/{container}",
