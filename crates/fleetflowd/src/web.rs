@@ -64,30 +64,33 @@ pub async fn start(
             get(api_tenant_users).post(api_tenant_users_create),
         )
         .route(
-            "/api/tenant/users/:sub",
+            "/api/tenant/users/{sub}",
             axum::routing::put(api_tenant_users_update).delete(api_tenant_users_delete),
         )
         .route(
-            "/api/stages/:project/:stage/services",
+            "/api/stages/{project}/{stage}/services",
             get(api_stage_services),
         )
         .route(
-            "/api/stages/:project/:stage/deployments",
+            "/api/stages/{project}/{stage}/deployments",
             get(api_stage_deployments),
         )
-        .route("/api/deployments/:id/log", get(api_deployment_log))
+        .route("/api/deployments/{id}/log", get(api_deployment_log))
         .route(
-            "/api/stages/:project/:stage/redeploy",
+            "/api/stages/{project}/{stage}/redeploy",
             post(api_stage_redeploy),
         )
         .route(
-            "/api/stages/:project/:stage/restart/:service",
+            "/api/stages/{project}/{stage}/restart/{service}",
             post(api_service_restart),
         )
-        .route("/api/stages/:project/:stage/alerts", get(api_stage_alerts))
+        .route(
+            "/api/stages/{project}/{stage}/alerts",
+            get(api_stage_alerts),
+        )
         .route("/api/agents", get(api_agents))
         .route(
-            "/api/stages/:project/:stage/logs/:container",
+            "/api/stages/{project}/{stage}/logs/{container}",
             get(api_container_logs),
         )
         .route("/api/dns/sync", post(api_dns_sync))
