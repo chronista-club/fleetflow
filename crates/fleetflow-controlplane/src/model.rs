@@ -505,3 +505,154 @@ pub struct Deployment {
     pub finished_at: Option<DateTime<Utc>>,
     pub created_at: Option<DateTime<Utc>>,
 }
+
+// ─────────────────────────────────────────────
+// CP-010: Volume (Persistence Volume Tier P-1)
+//
+// fleetstage の tenant 永続データを格納する disk object の抽象。
+// Compute (container) と独立した lifecycle を持つ、Storage 側 SSOT。
+// 詳細設計: fleetstage repo docs/design/20-persistence-volume-tier.md
+// ─────────────────────────────────────────────
+
+/// Disk Tier の string 定数 (5 段階、D0〜D4)。
+///
+/// CLI / API / KDL で文字列値として流通するため、const で統一。
+pub mod volume_tier {
+    /// D0: container scratch、container 寿命のみ
+    pub const EPHEMERAL: &str = "ephemeral";
+    /// D1: VPS 内 local disk、VPS 寿命と一致、Creo 既存を BYO で受け入れる tier
+    pub const LOCAL_VOLUME: &str = "local-volume";
+    /// D2: Sakura ディスク等の独立 disk オブジェクト、detach/attach 可
+    pub const ATTACHED_DISK: &str = "attached-disk";
+    /// D3: object storage が SSOT、disk は cache (v2 future)
+    pub const OBJECT_BACKED: &str = "object-backed";
+    /// D4: SurrealDB Cloud 等 managed service
+    pub const MANAGED_CLOUD: &str = "managed-cloud";
+
+    pub const ALL: &[&str] = &[
+        EPHEMERAL,
+        LOCAL_VOLUME,
+        ATTACHED_DISK,
+        OBJECT_BACKED,
+        MANAGED_CLOUD,
+    ];
+
+    pub fn is_valid(s: &str) -> bool {
+        ALL.contains(&s)
+    }
+}
+
+/// Volume の lifecycle 状態。
+pub mod volume_state {
+    /// 作成中 (attached-disk 等の provisioning 途中)
+    pub const PROVISIONING: &str = "provisioning";
+    /// server に attach 済で使用中
+    pub const ATTACHED: &str = "attached";
+    /// 既存 attach を解除、再 attach 可
+    pub const DETACHED: &str = "detached";
+    /// 退役、但し削除禁止原則により物理的には保持
+    pub const ARCHIVED: &str = "archived";
+    /// tier migration 中
+    pub const MIGRATING: &str = "migrating";
+    /// provision / attach 失敗状態
+    pub const FAILED: &str = "failed";
+
+    pub const ALL: &[&str] = &[
+        PROVISIONING,
+        ATTACHED,
+        DETACHED,
+        ARCHIVED,
+        MIGRATING,
+        FAILED,
+    ];
+
+    pub fn is_valid(s: &str) -> bool {
+        ALL.contains(&s)
+    }
+}
+
+/// Backup policy (tenant or volume level)
+#[derive(Debug, Clone, Default, Serialize, Deserialize, SurrealValue)]
+pub struct VolumeBackupPolicy {
+    /// cron expression (UTC), None = inherit from tenant default
+    pub schedule: Option<String>,
+    /// `surreal export` 等の logical backup を取るか
+    pub logical: Option<bool>,
+    /// disk snapshot 等の physical snapshot を取るか
+    pub physical_snapshot: Option<bool>,
+    /// backup 保持日数
+    pub retention_days: Option<i64>,
+    /// off-site backup の格納先 (例: "s3://fleetstage-backups/tenant/")
+    pub destination: Option<String>,
+}
+
+/// Persistent Volume — tenant の永続データを保持する disk 抽象。
+///
+/// 1 volume = 1 disk object (D2) / 1 mount path (D1) / 1 bucket (D3) / 1 managed DB (D4)。
+/// Compute (Current) の lifecycle と独立し、detach/attach や tier migration を可能にする。
+#[derive(Debug, Clone, Serialize, Deserialize, SurrealValue)]
+pub struct Volume {
+    pub id: Option<RecordId>,
+    pub tenant: RecordId,
+    /// 所属 project (optional: tenant 全体共有の volume もありうる)
+    pub project: Option<RecordId>,
+    /// 所属 stage (optional)
+    pub stage: Option<RecordId>,
+    pub slug: String,
+    /// Disk Tier: `volume_tier` モジュールの定数を使用
+    pub tier: String,
+    /// 容量 (bytes)、BYO の場合は unknown = None
+    pub size_bytes: Option<i64>,
+    /// container にマウントされる path (例: "/var/lib/surrealdb")
+    pub mount: String,
+    /// 現在 attach されている server、detached の場合は None
+    pub server: Option<RecordId>,
+    /// プロバイダ名 (例: "sakura-cloud", "local", "s3", "surrealdb-cloud")
+    pub provider: String,
+    /// provider 側のリソース ID (disk ID, bucket ARN 等)、BYO の場合は None
+    pub provider_resource_id: Option<String>,
+    /// at-rest 暗号化
+    pub encryption: bool,
+    /// バックアップ policy (tenant default を継承可)
+    pub backup_policy: Option<VolumeBackupPolicy>,
+    /// tenant 所有 disk を fleetstage registry に adopt した BYO か
+    pub bring_your_own: bool,
+    /// 現在の lifecycle 状態: `volume_state` モジュールの定数
+    pub state: String,
+    pub created_at: Option<DateTime<Utc>>,
+    pub updated_at: Option<DateTime<Utc>>,
+}
+
+/// Volume snapshot の種別
+pub mod volume_snapshot_kind {
+    /// Sakura disk snapshot 等、provider 側 atomic snapshot
+    pub const DISK_SNAPSHOT: &str = "disk-snapshot";
+    /// `surreal export` 等 logical backup
+    pub const SURREAL_EXPORT: &str = "surreal-export";
+    /// rsync + tar archive の off-site copy
+    pub const RSYNC_TAR: &str = "rsync-tar";
+
+    pub const ALL: &[&str] = &[DISK_SNAPSHOT, SURREAL_EXPORT, RSYNC_TAR];
+
+    pub fn is_valid(s: &str) -> bool {
+        ALL.contains(&s)
+    }
+}
+
+/// Volume の snapshot / backup 記録。
+#[derive(Debug, Clone, Serialize, Deserialize, SurrealValue)]
+pub struct VolumeSnapshot {
+    pub id: Option<RecordId>,
+    pub volume: RecordId,
+    /// snapshot 種別: `volume_snapshot_kind` モジュールの定数
+    pub kind: String,
+    /// provider 側の snapshot / archive ID
+    pub provider_resource_id: Option<String>,
+    /// off-site 格納先 URL (例: "s3://.../backup.surql.gz")
+    pub location_url: Option<String>,
+    /// snapshot サイズ (bytes)、取得時不明なら None
+    pub size_bytes: Option<i64>,
+    pub taken_at: Option<DateTime<Utc>>,
+    /// 保持期限、越えたら cleanup 対象
+    pub retention_until: Option<DateTime<Utc>>,
+}

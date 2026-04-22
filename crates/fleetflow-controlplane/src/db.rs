@@ -952,6 +952,175 @@ impl Database {
         let alerts: Vec<Alert> = result.take(0)?;
         Ok(alerts)
     }
+
+    // ─────────────────────────────────────────
+    // Volume CRUD (Persistence Volume Tier P-1, 2026-04-23)
+    //
+    // 詳細設計: fleetstage repo docs/design/20-persistence-volume-tier.md
+    // ─────────────────────────────────────────
+
+    /// Volume を新規作成。
+    ///
+    /// `tier` と `state` は model の定数に従う (volume_tier / volume_state モジュール参照)。
+    pub async fn create_volume(&self, volume: &Volume) -> Result<Volume> {
+        if !volume_tier::is_valid(&volume.tier) {
+            anyhow::bail!("invalid volume tier: {}", volume.tier);
+        }
+        if !volume_state::is_valid(&volume.state) {
+            anyhow::bail!("invalid volume state: {}", volume.state);
+        }
+        let mut result = self
+            .db
+            .query(
+                "CREATE volume CONTENT { \
+                    tenant: $tenant, project: $project, stage: $stage, \
+                    slug: $slug, tier: $tier, size_bytes: $size_bytes, mount: $mount, \
+                    server: $server, provider: $provider, provider_resource_id: $provider_resource_id, \
+                    encryption: $encryption, backup_policy: $backup_policy, \
+                    bring_your_own: $bring_your_own, state: $state \
+                }",
+            )
+            .bind(("tenant", volume.tenant.clone()))
+            .bind(("project", volume.project.clone()))
+            .bind(("stage", volume.stage.clone()))
+            .bind(("slug", volume.slug.clone()))
+            .bind(("tier", volume.tier.clone()))
+            .bind(("size_bytes", volume.size_bytes))
+            .bind(("mount", volume.mount.clone()))
+            .bind(("server", volume.server.clone()))
+            .bind(("provider", volume.provider.clone()))
+            .bind(("provider_resource_id", volume.provider_resource_id.clone()))
+            .bind(("encryption", volume.encryption))
+            .bind(("backup_policy", volume.backup_policy.clone()))
+            .bind(("bring_your_own", volume.bring_your_own))
+            .bind(("state", volume.state.clone()))
+            .await
+            .context("Volume 作成失敗")?;
+        let created: Option<Volume> = result.take(0)?;
+        created.context("Volume 作成結果が空")
+    }
+
+    /// BYO (bring-your-own) volume を既存 tenant + server 配下に adopt する。
+    /// 既存 disk に一切触れず、fleetstage registry に登録するのみ。
+    pub async fn adopt_volume(
+        &self,
+        tenant_id: &RecordId,
+        server_id: &RecordId,
+        slug: &str,
+        mount: &str,
+        tier: &str,
+    ) -> Result<Volume> {
+        if !volume_tier::is_valid(tier) {
+            anyhow::bail!("invalid volume tier: {}", tier);
+        }
+        let volume = Volume {
+            id: None,
+            tenant: tenant_id.clone(),
+            project: None,
+            stage: None,
+            slug: slug.to_string(),
+            tier: tier.to_string(),
+            size_bytes: None,
+            mount: mount.to_string(),
+            server: Some(server_id.clone()),
+            provider: "local".to_string(),
+            provider_resource_id: None,
+            encryption: false,
+            backup_policy: None,
+            bring_your_own: true,
+            state: volume_state::ATTACHED.to_string(),
+            created_at: None,
+            updated_at: None,
+        };
+        self.create_volume(&volume).await
+    }
+
+    pub async fn get_volume_by_slug(
+        &self,
+        tenant_id: &RecordId,
+        slug: &str,
+    ) -> Result<Option<Volume>> {
+        let mut result = self
+            .db
+            .query("SELECT * FROM volume WHERE tenant = $tenant AND slug = $slug LIMIT 1")
+            .bind(("tenant", tenant_id.clone()))
+            .bind(("slug", slug.to_string()))
+            .await
+            .context("Volume 取得失敗")?;
+        let volumes: Vec<Volume> = result.take(0)?;
+        Ok(volumes.into_iter().next())
+    }
+
+    pub async fn list_volumes_by_tenant(&self, tenant_id: &RecordId) -> Result<Vec<Volume>> {
+        let mut result = self
+            .db
+            .query("SELECT * FROM volume WHERE tenant = $tenant ORDER BY slug")
+            .bind(("tenant", tenant_id.clone()))
+            .await
+            .context("Volume 一覧取得失敗")?;
+        let volumes: Vec<Volume> = result.take(0)?;
+        Ok(volumes)
+    }
+
+    pub async fn update_volume_state(&self, volume_id: &RecordId, new_state: &str) -> Result<()> {
+        if !volume_state::is_valid(new_state) {
+            anyhow::bail!("invalid volume state: {}", new_state);
+        }
+        self.db
+            .query("UPDATE $id SET state = $state, updated_at = time::now()")
+            .bind(("id", volume_id.clone()))
+            .bind(("state", new_state.to_string()))
+            .await
+            .context("Volume state 更新失敗")?;
+        Ok(())
+    }
+
+    // ─────────────────────────────────────────
+    // VolumeSnapshot CRUD
+    // ─────────────────────────────────────────
+
+    pub async fn create_volume_snapshot(
+        &self,
+        snapshot: &VolumeSnapshot,
+    ) -> Result<VolumeSnapshot> {
+        if !volume_snapshot_kind::is_valid(&snapshot.kind) {
+            anyhow::bail!("invalid volume snapshot kind: {}", snapshot.kind);
+        }
+        let mut result = self
+            .db
+            .query(
+                "CREATE volume_snapshot CONTENT { \
+                    volume: $volume, kind: $kind, \
+                    provider_resource_id: $provider_resource_id, \
+                    location_url: $location_url, size_bytes: $size_bytes, \
+                    retention_until: $retention_until \
+                }",
+            )
+            .bind(("volume", snapshot.volume.clone()))
+            .bind(("kind", snapshot.kind.clone()))
+            .bind((
+                "provider_resource_id",
+                snapshot.provider_resource_id.clone(),
+            ))
+            .bind(("location_url", snapshot.location_url.clone()))
+            .bind(("size_bytes", snapshot.size_bytes))
+            .bind(("retention_until", snapshot.retention_until))
+            .await
+            .context("VolumeSnapshot 作成失敗")?;
+        let created: Option<VolumeSnapshot> = result.take(0)?;
+        created.context("VolumeSnapshot 作成結果が空")
+    }
+
+    pub async fn list_volume_snapshots(&self, volume_id: &RecordId) -> Result<Vec<VolumeSnapshot>> {
+        let mut result = self
+            .db
+            .query("SELECT * FROM volume_snapshot WHERE volume = $volume ORDER BY taken_at DESC")
+            .bind(("volume", volume_id.clone()))
+            .await
+            .context("VolumeSnapshot 一覧取得失敗")?;
+        let snapshots: Vec<VolumeSnapshot> = result.take(0)?;
+        Ok(snapshots)
+    }
 }
 
 /// SurrealDB schema definition.
@@ -1150,6 +1319,46 @@ DEFINE FIELD IF NOT EXISTS resolved_at ON alert TYPE option<datetime>;
 DEFINE FIELD IF NOT EXISTS created_at ON alert TYPE option<datetime> DEFAULT time::now();
 DEFINE INDEX IF NOT EXISTS idx_alert_tenant ON alert FIELDS tenant;
 DEFINE INDEX IF NOT EXISTS idx_alert_active ON alert FIELDS server_slug, container_name, alert_type, resolved;
+
+-- CP-010: Volume (Persistence Volume Tier P-1, 2026-04-23)
+-- 詳細設計: fleetstage repo docs/design/20-persistence-volume-tier.md
+DEFINE TABLE IF NOT EXISTS volume SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS tenant ON volume TYPE record<tenant>;
+DEFINE FIELD IF NOT EXISTS project ON volume TYPE option<record<project>>;
+DEFINE FIELD IF NOT EXISTS stage ON volume TYPE option<record<stage>>;
+DEFINE FIELD IF NOT EXISTS slug ON volume TYPE string;
+DEFINE FIELD IF NOT EXISTS tier ON volume TYPE string
+  ASSERT $value IN ["ephemeral", "local-volume", "attached-disk", "object-backed", "managed-cloud"];
+DEFINE FIELD IF NOT EXISTS size_bytes ON volume TYPE option<int>;
+DEFINE FIELD IF NOT EXISTS mount ON volume TYPE string;
+DEFINE FIELD IF NOT EXISTS server ON volume TYPE option<record<server>>;
+DEFINE FIELD IF NOT EXISTS provider ON volume TYPE string;
+DEFINE FIELD IF NOT EXISTS provider_resource_id ON volume TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS encryption ON volume TYPE bool DEFAULT false;
+DEFINE FIELD IF NOT EXISTS backup_policy ON volume TYPE option<object>;
+DEFINE FIELD IF NOT EXISTS backup_policy.schedule ON volume TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS backup_policy.logical ON volume TYPE option<bool>;
+DEFINE FIELD IF NOT EXISTS backup_policy.physical_snapshot ON volume TYPE option<bool>;
+DEFINE FIELD IF NOT EXISTS backup_policy.retention_days ON volume TYPE option<int>;
+DEFINE FIELD IF NOT EXISTS backup_policy.destination ON volume TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS bring_your_own ON volume TYPE bool DEFAULT false;
+DEFINE FIELD IF NOT EXISTS state ON volume TYPE string
+  ASSERT $value IN ["provisioning", "attached", "detached", "archived", "migrating", "failed"];
+DEFINE FIELD IF NOT EXISTS created_at ON volume TYPE option<datetime> DEFAULT time::now();
+DEFINE FIELD IF NOT EXISTS updated_at ON volume TYPE option<datetime> DEFAULT time::now();
+DEFINE INDEX IF NOT EXISTS idx_volume_tenant_slug ON volume FIELDS tenant, slug UNIQUE;
+
+-- CP-010b: VolumeSnapshot
+DEFINE TABLE IF NOT EXISTS volume_snapshot SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS volume ON volume_snapshot TYPE record<volume>;
+DEFINE FIELD IF NOT EXISTS kind ON volume_snapshot TYPE string
+  ASSERT $value IN ["disk-snapshot", "surreal-export", "rsync-tar"];
+DEFINE FIELD IF NOT EXISTS provider_resource_id ON volume_snapshot TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS location_url ON volume_snapshot TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS size_bytes ON volume_snapshot TYPE option<int>;
+DEFINE FIELD IF NOT EXISTS taken_at ON volume_snapshot TYPE option<datetime> DEFAULT time::now();
+DEFINE FIELD IF NOT EXISTS retention_until ON volume_snapshot TYPE option<datetime>;
+DEFINE INDEX IF NOT EXISTS idx_volume_snapshot_volume ON volume_snapshot FIELDS volume;
 "#;
 
 #[cfg(test)]
@@ -1901,5 +2110,310 @@ mod tests {
         let spread = loaded.spread_constraint.expect("spread persisted");
         assert_eq!(spread.topology_key.as_deref(), Some("region"));
         assert_eq!(spread.max_skew, Some(1));
+    }
+
+    // ─────────────────────────────────────────
+    // Volume tests (Persistence Volume Tier P-1, 2026-04-23)
+    // ─────────────────────────────────────────
+
+    async fn seed_tenant_and_server(db: &Database) -> (RecordId, RecordId) {
+        let tenant = db
+            .create_tenant(&Tenant {
+                id: None,
+                slug: "chronista-club".into(),
+                name: "Chronista Club".into(),
+                auth0_org_id: None,
+                plan: "enterprise".into(),
+                dns_provider: None,
+                dns_domain: None,
+                dns_zone_id: None,
+                dns_api_token_encrypted: None,
+                placement_policy: None,
+                created_at: None,
+                updated_at: None,
+            })
+            .await
+            .unwrap();
+        let server = db
+            .register_server(&Server {
+                id: None,
+                tenant: tenant.id.clone().unwrap(),
+                slug: "creo-prod".into(),
+                provider: "sakura-cloud".into(),
+                plan: None,
+                ssh_host: "10.0.0.1".into(),
+                ssh_user: "root".into(),
+                deploy_path: "/opt/apps".into(),
+                status: "offline".into(),
+                provision_version: None,
+                tool_versions: None,
+                last_heartbeat_at: None,
+                labels: None,
+                capacity: None,
+                allocated: None,
+                scheduling: None,
+                pool_id: None,
+                created_at: None,
+                updated_at: None,
+            })
+            .await
+            .unwrap();
+        (tenant.id.unwrap(), server.id.unwrap())
+    }
+
+    #[tokio::test]
+    async fn volume_tier_constants_match_schema_assertions() {
+        // schema の ASSERT $value IN [...] 列と volume_tier::ALL が一致することを保証する
+        // (リネーム・追加時に片方だけ更新して drift する事故を予防)
+        let expected = [
+            "ephemeral",
+            "local-volume",
+            "attached-disk",
+            "object-backed",
+            "managed-cloud",
+        ];
+        assert_eq!(volume_tier::ALL, expected);
+        for tier in &expected {
+            assert!(volume_tier::is_valid(tier));
+        }
+        assert!(!volume_tier::is_valid("unknown-tier"));
+    }
+
+    #[tokio::test]
+    async fn volume_state_constants_match_schema_assertions() {
+        let expected = [
+            "provisioning",
+            "attached",
+            "detached",
+            "archived",
+            "migrating",
+            "failed",
+        ];
+        assert_eq!(volume_state::ALL, expected);
+        for s in &expected {
+            assert!(volume_state::is_valid(s));
+        }
+        assert!(!volume_state::is_valid("deleted"));
+    }
+
+    #[tokio::test]
+    async fn adopt_volume_creates_byo_entry_without_touching_data() {
+        let db = Database::connect_memory().await.unwrap();
+        let (tenant_id, server_id) = seed_tenant_and_server(&db).await;
+
+        // Creo 既存の SurrealDB ディスクを local-volume として adopt
+        let adopted = db
+            .adopt_volume(
+                &tenant_id,
+                &server_id,
+                "surrealdb-legacy",
+                "/var/lib/surrealdb/prod",
+                volume_tier::LOCAL_VOLUME,
+            )
+            .await
+            .unwrap();
+
+        assert!(adopted.id.is_some());
+        assert_eq!(adopted.slug, "surrealdb-legacy");
+        assert_eq!(adopted.tier, "local-volume");
+        assert_eq!(adopted.mount, "/var/lib/surrealdb/prod");
+        assert!(adopted.bring_your_own, "adopt は BYO flag を立てる");
+        assert_eq!(adopted.state, "attached");
+        assert_eq!(adopted.provider, "local");
+        assert!(adopted.size_bytes.is_none(), "BYO は size unknown");
+        assert!(adopted.server.is_some());
+    }
+
+    #[tokio::test]
+    async fn list_volumes_returns_tenant_scoped_results() {
+        let db = Database::connect_memory().await.unwrap();
+        let (tenant_id, server_id) = seed_tenant_and_server(&db).await;
+
+        db.adopt_volume(
+            &tenant_id,
+            &server_id,
+            "vol-a",
+            "/mnt/a",
+            volume_tier::LOCAL_VOLUME,
+        )
+        .await
+        .unwrap();
+        db.adopt_volume(
+            &tenant_id,
+            &server_id,
+            "vol-b",
+            "/mnt/b",
+            volume_tier::ATTACHED_DISK,
+        )
+        .await
+        .unwrap();
+
+        let volumes = db.list_volumes_by_tenant(&tenant_id).await.unwrap();
+        assert_eq!(volumes.len(), 2);
+        let slugs: Vec<_> = volumes.iter().map(|v| v.slug.as_str()).collect();
+        assert_eq!(slugs, vec!["vol-a", "vol-b"]);
+
+        let fetched = db
+            .get_volume_by_slug(&tenant_id, "vol-a")
+            .await
+            .unwrap()
+            .expect("vol-a 取得できるべき");
+        assert_eq!(fetched.mount, "/mnt/a");
+    }
+
+    #[tokio::test]
+    async fn update_volume_state_transitions_through_lifecycle() {
+        let db = Database::connect_memory().await.unwrap();
+        let (tenant_id, server_id) = seed_tenant_and_server(&db).await;
+
+        let vol = db
+            .adopt_volume(
+                &tenant_id,
+                &server_id,
+                "vol-x",
+                "/mnt/x",
+                volume_tier::LOCAL_VOLUME,
+            )
+            .await
+            .unwrap();
+        let vol_id = vol.id.unwrap();
+
+        db.update_volume_state(&vol_id, volume_state::DETACHED)
+            .await
+            .unwrap();
+        db.update_volume_state(&vol_id, volume_state::ARCHIVED)
+            .await
+            .unwrap();
+
+        let after = db
+            .get_volume_by_slug(&tenant_id, "vol-x")
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            after.state, "archived",
+            "削除禁止原則により最終状態は archived で保持される"
+        );
+    }
+
+    #[tokio::test]
+    async fn update_volume_state_rejects_invalid_value() {
+        let db = Database::connect_memory().await.unwrap();
+        let (tenant_id, server_id) = seed_tenant_and_server(&db).await;
+
+        let vol = db
+            .adopt_volume(
+                &tenant_id,
+                &server_id,
+                "vol-y",
+                "/mnt/y",
+                volume_tier::LOCAL_VOLUME,
+            )
+            .await
+            .unwrap();
+        let vol_id = vol.id.unwrap();
+
+        let err = db
+            .update_volume_state(&vol_id, "deleted")
+            .await
+            .expect_err("invalid state は拒否されるべき");
+        assert!(err.to_string().contains("invalid volume state"));
+    }
+
+    #[tokio::test]
+    async fn create_volume_rejects_invalid_tier() {
+        let db = Database::connect_memory().await.unwrap();
+        let (tenant_id, _) = seed_tenant_and_server(&db).await;
+
+        let bad = Volume {
+            id: None,
+            tenant: tenant_id,
+            project: None,
+            stage: None,
+            slug: "bad".into(),
+            tier: "nonexistent-tier".into(),
+            size_bytes: None,
+            mount: "/mnt/bad".into(),
+            server: None,
+            provider: "local".into(),
+            provider_resource_id: None,
+            encryption: false,
+            backup_policy: None,
+            bring_your_own: false,
+            state: volume_state::PROVISIONING.to_string(),
+            created_at: None,
+            updated_at: None,
+        };
+        let err = db.create_volume(&bad).await.expect_err("invalid tier");
+        assert!(err.to_string().contains("invalid volume tier"));
+    }
+
+    #[tokio::test]
+    async fn volume_snapshot_crud_records_disk_snapshot() {
+        let db = Database::connect_memory().await.unwrap();
+        let (tenant_id, server_id) = seed_tenant_and_server(&db).await;
+
+        let vol = db
+            .adopt_volume(
+                &tenant_id,
+                &server_id,
+                "vol-snap",
+                "/mnt/snap",
+                volume_tier::ATTACHED_DISK,
+            )
+            .await
+            .unwrap();
+        let vol_id = vol.id.unwrap();
+
+        let snap = db
+            .create_volume_snapshot(&VolumeSnapshot {
+                id: None,
+                volume: vol_id.clone(),
+                kind: volume_snapshot_kind::DISK_SNAPSHOT.to_string(),
+                provider_resource_id: Some("sakura:archive:xyz".into()),
+                location_url: None,
+                size_bytes: Some(12_345_678),
+                taken_at: None,
+                retention_until: None,
+            })
+            .await
+            .unwrap();
+        assert!(snap.id.is_some());
+
+        let list = db.list_volume_snapshots(&vol_id).await.unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].kind, "disk-snapshot");
+        assert_eq!(list[0].size_bytes, Some(12_345_678));
+    }
+
+    #[tokio::test]
+    async fn volume_snapshot_rejects_invalid_kind() {
+        let db = Database::connect_memory().await.unwrap();
+        let (tenant_id, server_id) = seed_tenant_and_server(&db).await;
+
+        let vol = db
+            .adopt_volume(
+                &tenant_id,
+                &server_id,
+                "vol-k",
+                "/mnt/k",
+                volume_tier::LOCAL_VOLUME,
+            )
+            .await
+            .unwrap();
+        let err = db
+            .create_volume_snapshot(&VolumeSnapshot {
+                id: None,
+                volume: vol.id.unwrap(),
+                kind: "unknown-kind".into(),
+                provider_resource_id: None,
+                location_url: None,
+                size_bytes: None,
+                taken_at: None,
+                retention_until: None,
+            })
+            .await
+            .expect_err("invalid kind");
+        assert!(err.to_string().contains("invalid volume snapshot kind"));
     }
 }
