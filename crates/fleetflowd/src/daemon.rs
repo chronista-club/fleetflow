@@ -54,6 +54,14 @@ pub enum DaemonStatus {
 pub fn check_status(pid_path: &Path) -> Result<DaemonStatus> {
     match read_pid_file(pid_path)? {
         Some(pid) => {
+            // 自身の PID と一致する場合は Stale 扱い。
+            //
+            // docker container 内では PID 1 が init プロセスとして常に生存しているため、
+            // 前回異常終了で pid_file に PID 1 が残ると、再起動した自分自身を
+            // 「既存プロセス」と誤検知して crash loop する問題を回避する。
+            if pid == std::process::id() {
+                return Ok(DaemonStatus::Stale(pid));
+            }
             if is_process_alive(pid) {
                 Ok(DaemonStatus::Running(pid))
             } else {
@@ -61,5 +69,65 @@ pub fn check_status(pid_path: &Path) -> Result<DaemonStatus> {
             }
         }
         None => Ok(DaemonStatus::Stopped),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+
+    fn temp_pid_path(suffix: &str) -> std::path::PathBuf {
+        let mut p = std::env::temp_dir();
+        p.push(format!(
+            "fleetflowd-test-{}-{}.pid",
+            std::process::id(),
+            suffix
+        ));
+        p
+    }
+
+    #[test]
+    fn check_status_returns_stopped_when_file_absent() {
+        let path = temp_pid_path("absent");
+        let _ = std::fs::remove_file(&path);
+
+        let status = check_status(&path).unwrap();
+        assert!(matches!(status, DaemonStatus::Stopped));
+    }
+
+    #[test]
+    fn check_status_returns_stale_for_self_pid() {
+        // 再現: 前回異常終了で pid_file に自身の PID が残った状況
+        // (docker container で PID 1 が残って再起動した場合に相当)
+        let path = temp_pid_path("self");
+        let mut f = std::fs::File::create(&path).unwrap();
+        write!(f, "{}", std::process::id()).unwrap();
+        drop(f);
+
+        let status = check_status(&path).unwrap();
+        assert!(
+            matches!(status, DaemonStatus::Stale(_)),
+            "self-PID が書かれた pid_file は Stale 扱いになるべき"
+        );
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn check_status_returns_stale_for_dead_pid() {
+        // 絶対に存在しない巨大 PID (Linux の pid_max は通常 2^22 程度)
+        let path = temp_pid_path("dead");
+        let mut f = std::fs::File::create(&path).unwrap();
+        write!(f, "{}", u32::MAX - 1).unwrap();
+        drop(f);
+
+        let status = check_status(&path).unwrap();
+        assert!(
+            matches!(status, DaemonStatus::Stale(_)),
+            "死んでいる PID は Stale 扱いになるべき"
+        );
+
+        let _ = std::fs::remove_file(&path);
     }
 }
