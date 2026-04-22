@@ -55,6 +55,7 @@ pub async fn start(
         .route("/api/projects", get(api_projects))
         .route("/api/servers", get(api_servers))
         .route("/api/overview", get(api_overview))
+        .route("/api/tenant/overview", get(api_tenant_overview))
         .route("/api/dns", get(api_dns))
         .route("/api/health-check", post(api_health_check))
         .route("/api/deployments", get(api_deployments))
@@ -332,6 +333,89 @@ async fn api_overview(State(state): State<Arc<WebState>>, req: Request) -> impl 
         )
             .into_response(),
     }
+}
+
+/// `/api/tenant/overview` — operator console 用に tenant + projects + stages を 1 shot で返す
+///
+/// 返す shape (fleetstage-operator UI `OperatorOverview.tsx` 互換):
+/// ```json
+/// {
+///   "tenant": { "slug": "...", "name": "..." },
+///   "projects": [{
+///     "slug": "...", "name": "...",
+///     "stages": [{ "slug": "...", "status": "running|pending|failed|unknown" }]
+///   }]
+/// }
+/// ```
+///
+/// `status` は stage の直近デプロイ (`last_deploy_status`) から導出。
+/// デプロイ履歴が無ければ `"unknown"`。
+async fn api_tenant_overview(
+    State(state): State<Arc<WebState>>,
+    req: Request,
+) -> impl IntoResponse {
+    let ctx = req.extensions().get::<AuthContext>().unwrap();
+
+    // 1. tenant 情報
+    let tenant = match state.app.db.get_tenant_by_slug(&ctx.tenant_slug).await {
+        Ok(Some(t)) => t,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "error": "tenant not found" })),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": e.to_string() })),
+            )
+                .into_response();
+        }
+    };
+
+    // 2. stage overviews (server_status, last_deploy_status 同梱)
+    let overviews = match state.app.db.list_stage_overviews(&ctx.tenant_slug).await {
+        Ok(o) => o,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": e.to_string() })),
+            )
+                .into_response();
+        }
+    };
+
+    // 3. project_slug ごとに stages を grouping (BTreeMap で slug 順に安定化)
+    use std::collections::BTreeMap;
+    let mut projects: BTreeMap<String, (String, Vec<Value>)> = BTreeMap::new();
+    for ov in overviews {
+        // last_deploy_status を優先、なければ "unknown"
+        let status = ov
+            .last_deploy_status
+            .clone()
+            .unwrap_or_else(|| "unknown".to_string());
+        let stage_json = json!({ "slug": ov.slug, "status": status });
+        projects
+            .entry(ov.project_slug.clone())
+            .or_insert_with(|| (ov.project_name.clone(), vec![]))
+            .1
+            .push(stage_json);
+    }
+    let projects_json: Vec<Value> = projects
+        .into_iter()
+        .map(|(slug, (name, stages))| json!({ "slug": slug, "name": name, "stages": stages }))
+        .collect();
+
+    (
+        StatusCode::OK,
+        Json(json!({
+            "tenant": { "slug": tenant.slug, "name": tenant.name },
+            "projects": projects_json,
+        })),
+    )
+        .into_response()
 }
 
 async fn api_dns(State(state): State<Arc<WebState>>, req: Request) -> impl IntoResponse {
