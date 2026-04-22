@@ -10,6 +10,7 @@ use serde_json::json;
 use super::cp_client;
 use crate::{
     CostCommands, DnsCommands, ProjectCommands, RemoteCommands, ServerCommands, TenantCommands,
+    VolumeCommands,
 };
 
 pub async fn handle_tenant(cmd: &TenantCommands) -> Result<()> {
@@ -704,5 +705,119 @@ pub async fn handle_remote(cmd: &RemoteCommands) -> Result<()> {
     }
 
     client.disconnect().await.ok();
+    Ok(())
+}
+
+/// Persistence Volume コマンド (Tier P-2, 2026-04-23)
+pub async fn handle_volume(cmd: &VolumeCommands) -> Result<()> {
+    match cmd {
+        VolumeCommands::List => {
+            let (client, creds) = cp_client::connect().await?;
+
+            println!("{}", "Volume 一覧".bold());
+            println!();
+
+            let tenant_slug = creds.tenant_slug.as_deref().unwrap_or("default");
+            let resp = cp_client::request(
+                &client,
+                "volume",
+                "list",
+                json!({ "tenant_slug": tenant_slug }),
+            )
+            .await?;
+
+            if let Some(err) = resp["error"].as_str() {
+                println!("{} {}", "エラー:".red(), err);
+                client.disconnect().await.ok();
+                return Ok(());
+            }
+
+            if let Some(volumes) = resp["volumes"].as_array() {
+                if volumes.is_empty() {
+                    println!("{}", "Volume がありません。".dimmed());
+                } else {
+                    println!(
+                        "{}",
+                        format!(
+                            "{:<20} {:<16} {:<30} {:<10} {:<6}",
+                            "SLUG", "TIER", "MOUNT", "STATE", "BYO"
+                        )
+                        .bold()
+                    );
+                    println!("{}", "─".repeat(88).dimmed());
+                    for v in volumes {
+                        println!(
+                            "{:<20} {:<16} {:<30} {:<10} {:<6}",
+                            v["slug"].as_str().unwrap_or("-").cyan(),
+                            v["tier"].as_str().unwrap_or("-"),
+                            v["mount"].as_str().unwrap_or("-").dimmed(),
+                            v["state"].as_str().unwrap_or("-"),
+                            if v["bring_your_own"].as_bool().unwrap_or(false) {
+                                "yes".yellow().to_string()
+                            } else {
+                                "no".dimmed().to_string()
+                            },
+                        );
+                    }
+                }
+            }
+
+            client.disconnect().await.ok();
+        }
+        VolumeCommands::Adopt {
+            slug,
+            server,
+            mount,
+            tier,
+        } => {
+            let (client, creds) = cp_client::connect().await?;
+
+            println!("{}", "Volume adopt (BYO)".bold());
+            println!("  データには一切触れません。CP registry に record を作成します。");
+            println!();
+
+            let tenant_slug = creds.tenant_slug.as_deref().unwrap_or("default");
+            let resp = cp_client::request(
+                &client,
+                "volume",
+                "adopt",
+                json!({
+                    "tenant_slug": tenant_slug,
+                    "server_slug": server,
+                    "slug": slug,
+                    "mount": mount,
+                    "tier": tier,
+                }),
+            )
+            .await?;
+
+            if let Some(err) = resp["error"].as_str() {
+                println!("{} {}", "エラー:".red(), err);
+            } else if let Some(volume) = resp.get("volume") {
+                println!("{}", "Adopted 🎉".green().bold());
+                println!(
+                    "  Slug:   {}",
+                    volume["slug"].as_str().unwrap_or("N/A").cyan()
+                );
+                println!("  Tier:   {}", volume["tier"].as_str().unwrap_or("N/A"));
+                println!(
+                    "  Mount:  {}",
+                    volume["mount"].as_str().unwrap_or("N/A").dimmed()
+                );
+                println!("  Server: {}", server.cyan());
+                println!(
+                    "  BYO:    {}",
+                    if volume["bring_your_own"].as_bool().unwrap_or(false) {
+                        "yes".yellow().to_string()
+                    } else {
+                        "no".dimmed().to_string()
+                    }
+                );
+            }
+
+            client.disconnect().await.ok();
+        }
+    }
+
     Ok(())
 }
