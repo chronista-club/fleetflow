@@ -95,6 +95,9 @@ pub async fn start(
             get(api_container_logs),
         )
         .route("/api/dns/sync", post(api_dns_sync))
+        // Persistence Volume Tier P-2 (2026-04-23)
+        .route("/api/v1/volumes", get(api_volumes))
+        .route("/api/v1/volumes/adopt", post(api_volume_adopt))
         .layer(middleware::from_fn_with_state(
             web_state.clone(),
             auth_middleware,
@@ -1435,6 +1438,230 @@ async fn api_tenant_users_delete(
             Json(json!({ "error": e.to_string() })),
         )
             .into_response(),
+    }
+}
+
+// ============================================================================
+// Volume API (Persistence Volume Tier P-2, 2026-04-23)
+//
+// tenant の永続データを格納する disk 抽象を操作する endpoint 群。
+// 詳細設計: fleetstage repo docs/design/20-persistence-volume-tier.md
+// ============================================================================
+
+/// GET /api/v1/volumes — tenant scoped volume 一覧
+async fn api_volumes(State(state): State<Arc<WebState>>, req: Request) -> impl IntoResponse {
+    let ctx = req.extensions().get::<AuthContext>().unwrap();
+
+    let tenant = match state.app.db.get_tenant_by_slug(&ctx.tenant_slug).await {
+        Ok(Some(t)) => t,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "error": "Tenant not found" })),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": e.to_string() })),
+            )
+                .into_response();
+        }
+    };
+
+    let tenant_id = tenant.id.expect("tenant.id should exist after fetch");
+    match state.app.db.list_volumes_by_tenant(&tenant_id).await {
+        Ok(volumes) => {
+            let items: Vec<Value> = volumes
+                .iter()
+                .map(|v| {
+                    json!({
+                        "slug": v.slug,
+                        "tier": v.tier,
+                        "mount": v.mount,
+                        "size_bytes": v.size_bytes,
+                        "provider": v.provider,
+                        "provider_resource_id": v.provider_resource_id,
+                        "encryption": v.encryption,
+                        "bring_your_own": v.bring_your_own,
+                        "state": v.state,
+                        "created_at": v.created_at.map(|d| d.to_rfc3339()),
+                        "updated_at": v.updated_at.map(|d| d.to_rfc3339()),
+                    })
+                })
+                .collect();
+            (StatusCode::OK, Json(json!({ "volumes": items }))).into_response()
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": e.to_string() })),
+        )
+            .into_response(),
+    }
+}
+
+/// POST /api/v1/volumes/adopt — 既存 disk を BYO (bring-your-own) で registry 登録
+///
+/// リクエスト body:
+/// ```json
+/// {
+///   "server": "creo-prod",
+///   "slug": "surrealdb-legacy",
+///   "mount": "/var/lib/surrealdb/prod",
+///   "tier": "local-volume"
+/// }
+/// ```
+///
+/// データには一切触れない。fleetstage CP DB に record を作成するだけ。
+async fn api_volume_adopt(State(state): State<Arc<WebState>>, req: Request) -> impl IntoResponse {
+    let ctx = req
+        .extensions()
+        .get::<AuthContext>()
+        .expect("AuthContext missing")
+        .clone();
+
+    // 認可チェック: owner/admin のみ (インフラ操作)
+    if !ctx.can_operate() {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({ "error": "Insufficient permissions" })),
+        )
+            .into_response();
+    }
+
+    let body = match axum::body::to_bytes(req.into_body(), 1024 * 16).await {
+        Ok(b) => b,
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({ "error": format!("invalid body: {}", e) })),
+            )
+                .into_response();
+        }
+    };
+    let payload: Value = match serde_json::from_slice(&body) {
+        Ok(v) => v,
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({ "error": format!("invalid JSON: {}", e) })),
+            )
+                .into_response();
+        }
+    };
+
+    let server_slug = match payload["server"].as_str() {
+        Some(s) if !s.is_empty() => s.to_string(),
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({ "error": "`server` required" })),
+            )
+                .into_response();
+        }
+    };
+    let slug = match payload["slug"].as_str() {
+        Some(s) if !s.is_empty() => s.to_string(),
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({ "error": "`slug` required" })),
+            )
+                .into_response();
+        }
+    };
+    let mount = match payload["mount"].as_str() {
+        Some(s) if !s.is_empty() => s.to_string(),
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({ "error": "`mount` required" })),
+            )
+                .into_response();
+        }
+    };
+    let tier = payload["tier"]
+        .as_str()
+        .unwrap_or(fleetflow_controlplane::model::volume_tier::LOCAL_VOLUME)
+        .to_string();
+
+    // tenant 解決
+    let tenant = match state.app.db.get_tenant_by_slug(&ctx.tenant_slug).await {
+        Ok(Some(t)) => t,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "error": "Tenant not found" })),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": e.to_string() })),
+            )
+                .into_response();
+        }
+    };
+    let tenant_id = tenant.id.expect("tenant.id should exist after fetch");
+
+    // server 解決 (tenant 配下の server であることを確認)
+    let server = match state.app.db.get_server_by_slug(&server_slug).await {
+        Ok(Some(s)) => s,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "error": format!("Server `{}` not found", server_slug) })),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": e.to_string() })),
+            )
+                .into_response();
+        }
+    };
+    if server.tenant != tenant_id {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({ "error": "Server does not belong to this tenant" })),
+        )
+            .into_response();
+    }
+    let server_id = server.id.expect("server.id should exist after fetch");
+
+    match state
+        .app
+        .db
+        .adopt_volume(&tenant_id, &server_id, &slug, &mount, &tier)
+        .await
+    {
+        Ok(volume) => (
+            StatusCode::CREATED,
+            Json(json!({
+                "volume": {
+                    "slug": volume.slug,
+                    "tier": volume.tier,
+                    "mount": volume.mount,
+                    "bring_your_own": volume.bring_your_own,
+                    "state": volume.state,
+                    "server_slug": server_slug,
+                }
+            })),
+        )
+            .into_response(),
+        Err(e) => {
+            let msg = e.to_string();
+            let status = if msg.contains("invalid volume tier") || msg.contains("invalid") {
+                StatusCode::BAD_REQUEST
+            } else {
+                StatusCode::INTERNAL_SERVER_ERROR
+            };
+            (status, Json(json!({ "error": msg }))).into_response()
+        }
     }
 }
 

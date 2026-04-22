@@ -278,6 +278,9 @@ enum CpCommands {
     /// Fleet Registry 管理
     #[command(subcommand)]
     Registry(RegistryCommands),
+    /// Persistence Volume 管理 (Disk Tier、BYO 登録ほか)
+    #[command(subcommand)]
+    Volume(VolumeCommands),
 }
 
 /// デーモン管理のサブコマンド
@@ -482,6 +485,35 @@ enum RegistryCommands {
         /// 確認なしで実行
         #[arg(short, long)]
         yes: bool,
+    },
+}
+
+/// Persistence Volume 管理のサブコマンド
+///
+/// Disk Tier (ephemeral / local-volume / attached-disk / object-backed / managed-cloud)
+/// の volume を操作する。詳細: fleetstage repo docs/design/20-persistence-volume-tier.md
+#[derive(Subcommand)]
+pub enum VolumeCommands {
+    /// テナント配下の volume 一覧
+    List,
+    /// 既存 disk を fleetstage registry に adopt (BYO, データ非接触)
+    ///
+    /// tenant が既に自前で運用している disk (例: Creo Memories の既存 SurrealDB
+    /// データが格納された VPS 内 mount) を、fleetstage 管理下に登録する。
+    /// データには一切触れず、CP DB に record を作るのみ。
+    Adopt {
+        /// Volume の slug (tenant 内でユニーク)
+        #[arg(long)]
+        slug: String,
+        /// adopt 対象の server slug (該当 disk がマウントされている VPS)
+        #[arg(long)]
+        server: String,
+        /// コンテナにマウントされる path (例: /var/lib/surrealdb/prod)
+        #[arg(long)]
+        mount: String,
+        /// Disk Tier (local-volume 固定推奨、attached-disk 等は P-4 以降)
+        #[arg(long, default_value = "local-volume")]
+        tier: String,
     },
 }
 
@@ -851,5 +883,6 @@ async fn handle_cp(cmd: &CpCommands) -> anyhow::Result<()> {
             }
             Ok(())
         }
+        CpCommands::Volume(volume_cmd) => commands::cp::handle_volume(volume_cmd).await,
     }
 }

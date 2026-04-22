@@ -9,6 +9,7 @@ pub mod server;
 pub mod service;
 pub mod stage;
 pub mod tenant;
+pub mod volume;
 
 use std::sync::Arc;
 use unison::network::server::ProtocolServer;
@@ -28,4 +29,5 @@ pub async fn register_all(server: &ProtocolServer, state: Arc<AppState>) {
     dns::register(server, state.clone()).await;
     deploy::register(server, state.clone()).await;
     agent::register(server, state.clone()).await;
+    volume::register(server, state.clone()).await;
 }
