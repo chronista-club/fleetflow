@@ -1,5 +1,7 @@
 //! Agent コアループ — CP 接続 + コマンド受信 + ハートビート
 
+use std::collections::HashMap;
+use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
@@ -137,6 +139,9 @@ async fn command_loop(
                 };
                 channel.send_response(msg.id, "status", response).await?;
             }
+            "build" => {
+                handle_build(&channel, msg.id, &payload).await?;
+            }
             "ping" => {
                 channel
                     .send_response(msg.id, "ping", json!({ "pong": true }))
@@ -217,6 +222,199 @@ async fn handle_deploy(
     // チャネル送信エラーのみ伝播（ネットワーク断）
     channel
         .send_response(request_id, "deploy", response)
+        .await?;
+
+    Ok(())
+}
+
+/// Build Tier v1 — "build" コマンドハンドラ
+///
+/// payload: { git_url, git_ref, dockerfile, image, job_id }
+///
+/// 1. work dir 作成 (/var/lib/fleet-agent/builds/<job-id>/)
+/// 2. git clone
+/// 3. fleetflow_build::ImageBuilder で docker build
+/// 4. docker push (shellout)
+/// 5. 完了 event を CP に送信
+async fn handle_build(
+    channel: &UnisonChannel,
+    request_id: u64,
+    payload: &serde_json::Value,
+) -> Result<()> {
+    let git_url = payload["git_url"].as_str().unwrap_or_default();
+    let git_ref = payload["git_ref"].as_str().unwrap_or("main");
+    let dockerfile = payload["dockerfile"].as_str().unwrap_or("Dockerfile");
+    let image = payload["image"].as_str().unwrap_or_default();
+    let job_id = payload["job_id"].as_str().unwrap_or("unknown");
+
+    if git_url.is_empty() {
+        channel
+            .send_response(
+                request_id,
+                "build",
+                json!({ "status": "failed", "error": "git_url required" }),
+            )
+            .await?;
+        return Ok(());
+    }
+
+    // work dir: /var/lib/fleet-agent/builds/<job-id>/
+    let work_dir = std::path::PathBuf::from(format!("/var/lib/fleet-agent/builds/{}", job_id));
+    if let Err(e) = std::fs::create_dir_all(&work_dir) {
+        channel
+            .send_response(
+                request_id,
+                "build",
+                json!({ "status": "failed", "error": format!("work dir 作成失敗: {}", e) }),
+            )
+            .await?;
+        return Ok(());
+    }
+
+    // git clone
+    info!(git_url, git_ref, job_id, "git clone 開始");
+    let clone_result = std::process::Command::new("git")
+        .args(["clone", "--depth=1", "--branch", git_ref, git_url, "."])
+        .current_dir(&work_dir)
+        .status();
+
+    match clone_result {
+        Ok(status) if status.success() => {
+            info!(job_id, "git clone 完了");
+        }
+        Ok(status) => {
+            let err = format!("git clone failed (exit code: {:?})", status.code());
+            error!(job_id, error = %err, "git clone 失敗");
+            channel
+                .send_response(
+                    request_id,
+                    "build",
+                    json!({ "status": "failed", "error": err }),
+                )
+                .await?;
+            return Ok(());
+        }
+        Err(e) => {
+            let err = format!("git clone shellout 失敗: {}", e);
+            error!(job_id, error = %err);
+            channel
+                .send_response(
+                    request_id,
+                    "build",
+                    json!({ "status": "failed", "error": err }),
+                )
+                .await?;
+            return Ok(());
+        }
+    }
+
+    // docker build via fleetflow-build ImageBuilder
+    let start_ms = std::time::Instant::now();
+    let docker = match bollard::Docker::connect_with_local_defaults() {
+        Ok(d) => d,
+        Err(e) => {
+            let err = format!("docker daemon 接続失敗: {}", e);
+            error!(job_id, error = %err);
+            channel
+                .send_response(
+                    request_id,
+                    "build",
+                    json!({ "status": "failed", "error": err }),
+                )
+                .await?;
+            return Ok(());
+        }
+    };
+
+    let builder = fleetflow_build::ImageBuilder::new(docker);
+    let context_path = work_dir.clone();
+    let dockerfile_path = work_dir.join(dockerfile);
+
+    info!(job_id, image, "docker build 開始");
+    let build_result = builder
+        .build_image_from_path(
+            &context_path,
+            &dockerfile_path,
+            image,
+            HashMap::new(),
+            None,
+            false,
+            Some("linux/amd64"),
+        )
+        .await;
+
+    let duration_ms = start_ms.elapsed().as_millis();
+
+    match build_result {
+        Ok(()) => {
+            info!(job_id, image, duration_ms, "docker build 成功");
+        }
+        Err(e) => {
+            let err = format!("docker build 失敗: {}", e);
+            error!(job_id, error = %err);
+            channel
+                .send_response(
+                    request_id,
+                    "build",
+                    json!({ "status": "failed", "error": err, "duration_ms": duration_ms }),
+                )
+                .await?;
+            return Ok(());
+        }
+    }
+
+    // docker push (shellout)
+    if !image.is_empty() {
+        info!(job_id, image, "docker push 開始");
+        let push_result = std::process::Command::new("docker")
+            .args(["push", image])
+            .status();
+
+        match push_result {
+            Ok(status) if status.success() => {
+                info!(job_id, image, "docker push 完了");
+            }
+            Ok(status) => {
+                let err = format!("docker push failed (exit code: {:?})", status.code());
+                error!(job_id, error = %err);
+                channel
+                    .send_response(
+                        request_id,
+                        "build",
+                        json!({ "status": "failed", "error": err, "duration_ms": duration_ms }),
+                    )
+                    .await?;
+                return Ok(());
+            }
+            Err(e) => {
+                let err = format!("docker push shellout 失敗: {}", e);
+                error!(job_id, error = %err);
+                channel
+                    .send_response(
+                        request_id,
+                        "build",
+                        json!({ "status": "failed", "error": err, "duration_ms": duration_ms }),
+                    )
+                    .await?;
+                return Ok(());
+            }
+        }
+    }
+
+    // 成功
+    let duration_secs = duration_ms / 1000;
+    info!(job_id, image, duration_secs, "build 完了");
+    channel
+        .send_response(
+            request_id,
+            "build",
+            json!({
+                "status": "success",
+                "image": image,
+                "duration_ms": duration_ms,
+                "duration_seconds": duration_secs,
+            }),
+        )
         .await?;
 
     Ok(())
