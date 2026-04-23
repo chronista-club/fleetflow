@@ -1904,7 +1904,7 @@ async fn api_build_show(
     };
     let tenant_id = tenant.id.expect("tenant.id");
 
-    let record_id = surrealdb::types::RecordId::from_table_key("build_job", id.as_str());
+    let record_id = fleetflow_controlplane::RecordId::new("build_job", id.as_str());
     match state.app.db.get_build_job_by_id(&record_id).await {
         Ok(Some(job)) => {
             if job.tenant != tenant_id {
@@ -1975,7 +1975,7 @@ async fn api_build_logs(
     };
     let tenant_id = tenant.id.expect("tenant.id");
 
-    let record_id = surrealdb::types::RecordId::from_table_key("build_job", id.as_str());
+    let record_id = fleetflow_controlplane::RecordId::new("build_job", id.as_str());
     match state.app.db.get_build_job_by_id(&record_id).await {
         Ok(Some(job)) => {
             if job.tenant != tenant_id {
@@ -2050,7 +2050,7 @@ async fn api_build_cancel(
     };
     let tenant_id = tenant.id.expect("tenant.id");
 
-    let record_id = surrealdb::types::RecordId::from_table_key("build_job", id.as_str());
+    let record_id = fleetflow_controlplane::RecordId::new("build_job", id.as_str());
     match state.app.db.get_build_job_by_id(&record_id).await {
         Ok(Some(job)) => {
             if job.tenant != tenant_id {

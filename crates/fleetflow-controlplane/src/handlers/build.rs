@@ -240,7 +240,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
 
                             // RecordId 構築
                             let record_id =
-                                surrealdb::types::RecordId::from_table_key("build_job", job_id_str);
+                                surrealdb::types::RecordId::new("build_job", job_id_str);
 
                             match state.db.get_build_job_by_id(&record_id).await {
                                 Ok(Some(job)) => {
@@ -327,7 +327,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                             let tenant_id = tenant.id.expect("tenant.id");
 
                             let record_id =
-                                surrealdb::types::RecordId::from_table_key("build_job", job_id_str);
+                                surrealdb::types::RecordId::new("build_job", job_id_str);
 
                             // job の存在と tenant scope を確認してから cancel
                             match state.db.get_build_job_by_id(&record_id).await {
