@@ -1,7 +1,6 @@
 //! Agent コアループ — CP 接続 + コマンド受信 + ハートビート
 
 use std::collections::HashMap;
-use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
