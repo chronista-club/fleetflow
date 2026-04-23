@@ -98,6 +98,11 @@ pub async fn start(
         // Persistence Volume Tier P-2 (2026-04-23)
         .route("/api/v1/volumes", get(api_volumes))
         .route("/api/v1/volumes/adopt", post(api_volume_adopt))
+        // Build Tier v1 MVP (2026-04-23)
+        .route("/api/v1/builds", get(api_build_list).post(api_build_submit))
+        .route("/api/v1/builds/{id}", get(api_build_show))
+        .route("/api/v1/builds/{id}/logs", get(api_build_logs))
+        .route("/api/v1/builds/{id}/cancel", post(api_build_cancel))
         .layer(middleware::from_fn_with_state(
             web_state.clone(),
             auth_middleware,
@@ -1662,6 +1667,435 @@ async fn api_volume_adopt(State(state): State<Arc<WebState>>, req: Request) -> i
             };
             (status, Json(json!({ "error": msg }))).into_response()
         }
+    }
+}
+
+// ============================================================================
+// Build API (Build Tier v1 MVP, 2026-04-23)
+//
+// tenant の build ジョブを操作する endpoint 群。
+// 詳細設計: fleetstage repo docs/design/30-build-tier.md
+// ============================================================================
+
+/// GET /api/v1/builds — テナント配下の build job 一覧
+async fn api_build_list(State(state): State<Arc<WebState>>, req: Request) -> impl IntoResponse {
+    let ctx = req.extensions().get::<AuthContext>().unwrap();
+
+    let tenant = match state.app.db.get_tenant_by_slug(&ctx.tenant_slug).await {
+        Ok(Some(t)) => t,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "error": "Tenant not found" })),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": e.to_string() })),
+            )
+                .into_response();
+        }
+    };
+
+    let tenant_id = tenant.id.expect("tenant.id should exist after fetch");
+    match state.app.db.list_build_jobs_by_tenant(&tenant_id).await {
+        Ok(jobs) => {
+            let items: Vec<Value> = jobs
+                .iter()
+                .map(|j| {
+                    json!({
+                        "id": j.id,
+                        "kind": j.kind,
+                        "state": j.state,
+                        "git_url": j.source.git_url,
+                        "git_ref": j.source.git_ref,
+                        "dockerfile": j.source.dockerfile,
+                        "image": j.target.image,
+                        "logs_url": j.logs_url,
+                        "submitted_at": j.submitted_at.map(|d| d.to_rfc3339()),
+                        "started_at": j.started_at.map(|d| d.to_rfc3339()),
+                        "finished_at": j.finished_at.map(|d| d.to_rfc3339()),
+                        "duration_seconds": j.duration_seconds,
+                    })
+                })
+                .collect();
+            (StatusCode::OK, Json(json!({ "build_jobs": items }))).into_response()
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": e.to_string() })),
+        )
+            .into_response(),
+    }
+}
+
+/// POST /api/v1/builds — build job を submit (state=queued でエンキュー)
+///
+/// リクエスト body:
+/// ```json
+/// {
+///   "git_url": "https://github.com/chronista-club/fleetflow",
+///   "git_ref": "main",
+///   "dockerfile": "infra/Dockerfile.fleetflowd",
+///   "image": "ghcr.io/chronista-club/fleetflowd:latest",
+///   "kind": "docker-image"
+/// }
+/// ```
+async fn api_build_submit(State(state): State<Arc<WebState>>, req: Request) -> impl IntoResponse {
+    use fleetflow_controlplane::model::{
+        BuildJob, BuildSource, BuildTarget, build_job_kind, build_job_state,
+    };
+
+    let ctx = req
+        .extensions()
+        .get::<AuthContext>()
+        .expect("AuthContext missing")
+        .clone();
+
+    // 認可チェック: owner/admin のみ (インフラ操作)
+    if !ctx.can_operate() {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({ "error": "Insufficient permissions" })),
+        )
+            .into_response();
+    }
+
+    let body = match axum::body::to_bytes(req.into_body(), 1024 * 16).await {
+        Ok(b) => b,
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({ "error": format!("invalid body: {}", e) })),
+            )
+                .into_response();
+        }
+    };
+    let payload: Value = match serde_json::from_slice(&body) {
+        Ok(v) => v,
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({ "error": format!("invalid JSON: {}", e) })),
+            )
+                .into_response();
+        }
+    };
+
+    let git_url = match payload["git_url"].as_str() {
+        Some(s) if !s.is_empty() => s.to_string(),
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({ "error": "`git_url` required" })),
+            )
+                .into_response();
+        }
+    };
+
+    let kind = payload["kind"]
+        .as_str()
+        .unwrap_or(build_job_kind::DOCKER_IMAGE);
+    if !build_job_kind::is_valid(kind) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "error": format!("invalid kind: {}", kind) })),
+        )
+            .into_response();
+    }
+
+    let tenant = match state.app.db.get_tenant_by_slug(&ctx.tenant_slug).await {
+        Ok(Some(t)) => t,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "error": "Tenant not found" })),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": e.to_string() })),
+            )
+                .into_response();
+        }
+    };
+    let tenant_id = tenant.id.expect("tenant.id");
+
+    let job = BuildJob {
+        id: None,
+        tenant: tenant_id,
+        project: None,
+        kind: kind.to_string(),
+        source: BuildSource {
+            git_url,
+            git_ref: payload["git_ref"].as_str().unwrap_or("main").to_string(),
+            dockerfile: payload["dockerfile"].as_str().map(|s| s.to_string()),
+        },
+        target: BuildTarget {
+            image: payload["image"].as_str().map(|s| s.to_string()),
+            registry_secret: payload["registry_secret"].as_str().map(|s| s.to_string()),
+        },
+        state: build_job_state::QUEUED.to_string(),
+        server: None,
+        logs_url: None,
+        submitted_at: None,
+        started_at: None,
+        finished_at: None,
+        duration_seconds: None,
+    };
+
+    match state.app.db.create_build_job(&job).await {
+        Ok(created) => (
+            StatusCode::CREATED,
+            Json(json!({
+                "build_job": {
+                    "id": created.id,
+                    "kind": created.kind,
+                    "state": created.state,
+                    "git_url": created.source.git_url,
+                    "git_ref": created.source.git_ref,
+                    "dockerfile": created.source.dockerfile,
+                    "image": created.target.image,
+                    "submitted_at": created.submitted_at.map(|d| d.to_rfc3339()),
+                }
+            })),
+        )
+            .into_response(),
+        Err(e) => {
+            let msg = e.to_string();
+            let status = if msg.contains("invalid build job") {
+                StatusCode::BAD_REQUEST
+            } else {
+                StatusCode::INTERNAL_SERVER_ERROR
+            };
+            (status, Json(json!({ "error": msg }))).into_response()
+        }
+    }
+}
+
+/// GET /api/v1/builds/{id} — build job 詳細取得
+async fn api_build_show(
+    State(state): State<Arc<WebState>>,
+    Path(id): Path<String>,
+    req: Request,
+) -> impl IntoResponse {
+    let ctx = req.extensions().get::<AuthContext>().unwrap();
+
+    let tenant = match state.app.db.get_tenant_by_slug(&ctx.tenant_slug).await {
+        Ok(Some(t)) => t,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "error": "Tenant not found" })),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": e.to_string() })),
+            )
+                .into_response();
+        }
+    };
+    let tenant_id = tenant.id.expect("tenant.id");
+
+    let record_id = fleetflow_controlplane::RecordId::new("build_job", id.as_str());
+    match state.app.db.get_build_job_by_id(&record_id).await {
+        Ok(Some(job)) => {
+            if job.tenant != tenant_id {
+                return (
+                    StatusCode::FORBIDDEN,
+                    Json(json!({ "error": "Access denied" })),
+                )
+                    .into_response();
+            }
+            (
+                StatusCode::OK,
+                Json(json!({
+                    "build_job": {
+                        "id": job.id,
+                        "kind": job.kind,
+                        "state": job.state,
+                        "git_url": job.source.git_url,
+                        "git_ref": job.source.git_ref,
+                        "dockerfile": job.source.dockerfile,
+                        "image": job.target.image,
+                        "logs_url": job.logs_url,
+                        "submitted_at": job.submitted_at.map(|d| d.to_rfc3339()),
+                        "started_at": job.started_at.map(|d| d.to_rfc3339()),
+                        "finished_at": job.finished_at.map(|d| d.to_rfc3339()),
+                        "duration_seconds": job.duration_seconds,
+                    }
+                })),
+            )
+                .into_response()
+        }
+        Ok(None) => (
+            StatusCode::NOT_FOUND,
+            Json(json!({ "error": "Build job not found" })),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": e.to_string() })),
+        )
+            .into_response(),
+    }
+}
+
+/// GET /api/v1/builds/{id}/logs — build ログ参照 (v1: polling、logs_url を返すのみ)
+async fn api_build_logs(
+    State(state): State<Arc<WebState>>,
+    Path(id): Path<String>,
+    req: Request,
+) -> impl IntoResponse {
+    let ctx = req.extensions().get::<AuthContext>().unwrap();
+
+    let tenant = match state.app.db.get_tenant_by_slug(&ctx.tenant_slug).await {
+        Ok(Some(t)) => t,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "error": "Tenant not found" })),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": e.to_string() })),
+            )
+                .into_response();
+        }
+    };
+    let tenant_id = tenant.id.expect("tenant.id");
+
+    let record_id = fleetflow_controlplane::RecordId::new("build_job", id.as_str());
+    match state.app.db.get_build_job_by_id(&record_id).await {
+        Ok(Some(job)) => {
+            if job.tenant != tenant_id {
+                return (
+                    StatusCode::FORBIDDEN,
+                    Json(json!({ "error": "Access denied" })),
+                )
+                    .into_response();
+            }
+            // v1: logs_url を返すのみ (SSE stream は v2)
+            (
+                StatusCode::OK,
+                Json(json!({
+                    "state": job.state,
+                    "logs_url": job.logs_url,
+                    "note": "v1 は polling。logs_url が Some の場合はそこから取得してください。",
+                })),
+            )
+                .into_response()
+        }
+        Ok(None) => (
+            StatusCode::NOT_FOUND,
+            Json(json!({ "error": "Build job not found" })),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": e.to_string() })),
+        )
+            .into_response(),
+    }
+}
+
+/// POST /api/v1/builds/{id}/cancel — build job をキャンセル
+async fn api_build_cancel(
+    State(state): State<Arc<WebState>>,
+    Path(id): Path<String>,
+    req: Request,
+) -> impl IntoResponse {
+    use fleetflow_controlplane::model::build_job_state;
+
+    let ctx = req
+        .extensions()
+        .get::<AuthContext>()
+        .expect("AuthContext missing")
+        .clone();
+
+    if !ctx.can_operate() {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({ "error": "Insufficient permissions" })),
+        )
+            .into_response();
+    }
+
+    let tenant = match state.app.db.get_tenant_by_slug(&ctx.tenant_slug).await {
+        Ok(Some(t)) => t,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "error": "Tenant not found" })),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": e.to_string() })),
+            )
+                .into_response();
+        }
+    };
+    let tenant_id = tenant.id.expect("tenant.id");
+
+    let record_id = fleetflow_controlplane::RecordId::new("build_job", id.as_str());
+    match state.app.db.get_build_job_by_id(&record_id).await {
+        Ok(Some(job)) => {
+            if job.tenant != tenant_id {
+                return (
+                    StatusCode::FORBIDDEN,
+                    Json(json!({ "error": "Access denied" })),
+                )
+                    .into_response();
+            }
+            if job.state == build_job_state::SUCCESS
+                || job.state == build_job_state::FAILED
+                || job.state == build_job_state::CANCELLED
+            {
+                return (
+                    StatusCode::CONFLICT,
+                    Json(json!({
+                        "error": format!("cannot cancel job in state: {}", job.state)
+                    })),
+                )
+                    .into_response();
+            }
+            match state
+                .app
+                .db
+                .update_build_job_state(&record_id, build_job_state::CANCELLED)
+                .await
+            {
+                Ok(()) => (StatusCode::OK, Json(json!({ "status": "cancelled" }))).into_response(),
+                Err(e) => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({ "error": e.to_string() })),
+                )
+                    .into_response(),
+            }
+        }
+        Ok(None) => (
+            StatusCode::NOT_FOUND,
+            Json(json!({ "error": "Build job not found" })),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": e.to_string() })),
+        )
+            .into_response(),
     }
 }
 

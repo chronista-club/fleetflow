@@ -281,6 +281,9 @@ enum CpCommands {
     /// Persistence Volume 管理 (Disk Tier、BYO 登録ほか)
     #[command(subcommand)]
     Volume(VolumeCommands),
+    /// Build Tier — CP 経由の docker image / cargo binary などの build ジョブ管理
+    #[command(subcommand)]
+    Build(BuildCommands),
 }
 
 /// デーモン管理のサブコマンド
@@ -514,6 +517,52 @@ pub enum VolumeCommands {
         /// Disk Tier (local-volume 固定推奨、attached-disk 等は P-4 以降)
         #[arg(long, default_value = "local-volume")]
         tier: String,
+    },
+}
+
+/// Build Tier コマンド (v1 MVP, 2026-04-23)
+///
+/// CP 経由でリモート build ジョブを管理する。
+/// 詳細: fleetstage repo docs/design/30-build-tier.md
+#[derive(Subcommand)]
+pub enum BuildCommands {
+    /// Build ジョブを submit (state=queued でエンキュー)
+    Submit {
+        /// Git リポジトリ URL
+        #[arg(long)]
+        git: String,
+        /// ブランチ / タグ / SHA (default: main)
+        #[arg(long, default_value = "main")]
+        git_ref: String,
+        /// Dockerfile のパス (リポジトリルートからの相対パス)
+        #[arg(long)]
+        dockerfile: Option<String>,
+        /// ビルドして push する image tag (例: ghcr.io/owner/name:tag)
+        #[arg(long)]
+        image: Option<String>,
+        /// Build 種別 (default: docker-image)
+        #[arg(long, default_value = "docker-image")]
+        kind: String,
+        /// 所属 project slug (optional)
+        #[arg(long)]
+        project: Option<String>,
+    },
+    /// テナント配下の build job 一覧
+    List,
+    /// build job 詳細表示
+    Show {
+        /// Job ID
+        id: String,
+    },
+    /// build ログ参照 (v1: logs_url polling)
+    Logs {
+        /// Job ID
+        id: String,
+    },
+    /// build job をキャンセル
+    Cancel {
+        /// Job ID
+        id: String,
     },
 }
 
@@ -884,5 +933,6 @@ async fn handle_cp(cmd: &CpCommands) -> anyhow::Result<()> {
             Ok(())
         }
         CpCommands::Volume(volume_cmd) => commands::cp::handle_volume(volume_cmd).await,
+        CpCommands::Build(build_cmd) => commands::cp::handle_build(build_cmd).await,
     }
 }

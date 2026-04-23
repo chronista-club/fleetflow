@@ -656,3 +656,99 @@ pub struct VolumeSnapshot {
     /// 保持期限、越えたら cleanup 対象
     pub retention_until: Option<DateTime<Utc>>,
 }
+
+// ─────────────────────────────────────────────
+// CP-011: BuildJob (Build Tier v1 MVP)
+//
+// tenant の build ジョブを記録する。Build Tier B1 (ephemeral-vps-shared)。
+// 詳細設計: fleetstage repo docs/design/30-build-tier.md
+// ─────────────────────────────────────────────
+
+/// Build ジョブの lifecycle 状態。
+pub mod build_job_state {
+    /// キューに積まれた (pending)
+    pub const QUEUED: &str = "queued";
+    /// Build VPS に割り当て済み
+    pub const ASSIGNED: &str = "assigned";
+    /// git clone 中
+    pub const CLONING: &str = "cloning";
+    /// docker build 実行中
+    pub const BUILDING: &str = "building";
+    /// registry push 中
+    pub const PUSHING: &str = "pushing";
+    /// 成功完了
+    pub const SUCCESS: &str = "success";
+    /// 失敗
+    pub const FAILED: &str = "failed";
+    /// キャンセル
+    pub const CANCELLED: &str = "cancelled";
+
+    pub const ALL: &[&str] = &[
+        QUEUED, ASSIGNED, CLONING, BUILDING, PUSHING, SUCCESS, FAILED, CANCELLED,
+    ];
+
+    pub fn is_valid(s: &str) -> bool {
+        ALL.contains(&s)
+    }
+}
+
+/// Build ジョブの種別。
+pub mod build_job_kind {
+    /// Docker イメージ build
+    pub const DOCKER_IMAGE: &str = "docker-image";
+    /// Cargo バイナリ build
+    pub const CARGO_BINARY: &str = "cargo-binary";
+    /// 静的サイト build
+    pub const STATIC_SITE: &str = "static-site";
+
+    pub const ALL: &[&str] = &[DOCKER_IMAGE, CARGO_BINARY, STATIC_SITE];
+
+    pub fn is_valid(s: &str) -> bool {
+        ALL.contains(&s)
+    }
+}
+
+/// Build のソース (git リポジトリ + dockerfile パス)
+#[derive(Debug, Clone, Default, Serialize, Deserialize, SurrealValue)]
+pub struct BuildSource {
+    pub git_url: String,
+    /// ブランチ / タグ / SHA。スキーマフィールド名 "git_ref" でそのまま格納。
+    pub git_ref: String,
+    pub dockerfile: Option<String>,
+}
+
+/// Build のターゲット (イメージタグ + registry 認証情報)
+#[derive(Debug, Clone, Default, Serialize, Deserialize, SurrealValue)]
+pub struct BuildTarget {
+    pub image: Option<String>,
+    pub registry_secret: Option<String>,
+}
+
+/// Build ジョブ — tenant の build リクエストを記録する。
+///
+/// 1 job = 1 docker build 実行 (またはそれに相当する操作)。
+/// fleet-agent の "build" コマンドで実行される。
+#[derive(Debug, Clone, Serialize, Deserialize, SurrealValue)]
+pub struct BuildJob {
+    pub id: Option<RecordId>,
+    pub tenant: RecordId,
+    /// 所属 project (optional)
+    pub project: Option<RecordId>,
+    /// Build 種別: `build_job_kind` モジュールの定数
+    pub kind: String,
+    /// ソース情報 (git repository)
+    pub source: BuildSource,
+    /// ターゲット情報 (image tag 等)
+    pub target: BuildTarget,
+    /// 現在の lifecycle 状態: `build_job_state` モジュールの定数
+    pub state: String,
+    /// 割り当てられた Build VPS の server ID
+    pub server: Option<RecordId>,
+    /// ログの参照先 URL (v1 は polling、logs_url を polling する)
+    pub logs_url: Option<String>,
+    pub submitted_at: Option<DateTime<Utc>>,
+    pub started_at: Option<DateTime<Utc>>,
+    pub finished_at: Option<DateTime<Utc>>,
+    /// 実行時間 (秒)
+    pub duration_seconds: Option<i64>,
+}

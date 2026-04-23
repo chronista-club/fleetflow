@@ -37,6 +37,9 @@ rustls = { version = "0.23", default-features = false, features = ["ring"] }
 # Docker API
 bollard.workspace = true
 
+# Build Tier
+fleetflow-build.workspace = true
+
 # CLI
 clap.workspace = true
 

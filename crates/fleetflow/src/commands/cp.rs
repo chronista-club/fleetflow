@@ -9,8 +9,8 @@ use serde_json::json;
 
 use super::cp_client;
 use crate::{
-    CostCommands, DnsCommands, ProjectCommands, RemoteCommands, ServerCommands, TenantCommands,
-    VolumeCommands,
+    BuildCommands, CostCommands, DnsCommands, ProjectCommands, RemoteCommands, ServerCommands,
+    TenantCommands, VolumeCommands,
 };
 
 pub async fn handle_tenant(cmd: &TenantCommands) -> Result<()> {
@@ -812,6 +812,220 @@ pub async fn handle_volume(cmd: &VolumeCommands) -> Result<()> {
                     } else {
                         "no".dimmed().to_string()
                     }
+                );
+            }
+
+            client.disconnect().await.ok();
+        }
+    }
+
+    Ok(())
+}
+
+/// Build Tier コマンド (v1 MVP, 2026-04-23)
+pub async fn handle_build(cmd: &BuildCommands) -> Result<()> {
+    match cmd {
+        BuildCommands::Submit {
+            git,
+            git_ref,
+            dockerfile,
+            image,
+            kind,
+            project: _,
+        } => {
+            let (client, creds) = cp_client::connect().await?;
+
+            println!("{}", "Build Job Submit".bold());
+            println!();
+
+            let tenant_slug = creds.tenant_slug.as_deref().unwrap_or("default");
+            let mut payload = json!({
+                "tenant_slug": tenant_slug,
+                "git_url": git,
+                "git_ref": git_ref,
+                "kind": kind,
+            });
+            if let Some(df) = dockerfile {
+                payload["dockerfile"] = serde_json::Value::String(df.clone());
+            }
+            if let Some(img) = image {
+                payload["image"] = serde_json::Value::String(img.clone());
+            }
+
+            let resp = cp_client::request(&client, "build", "submit", payload).await?;
+
+            if let Some(err) = resp["error"].as_str() {
+                println!("{} {}", "エラー:".red(), err);
+            } else if let Some(job) = resp.get("build_job") {
+                println!("{}", "Submitted".green().bold());
+                println!("  ID:      {}", format!("{:?}", job["id"]).cyan());
+                println!("  Kind:    {}", job["kind"].as_str().unwrap_or("-"));
+                println!(
+                    "  State:   {}",
+                    job["state"].as_str().unwrap_or("-").yellow()
+                );
+                println!(
+                    "  Git URL: {}",
+                    job["source"]["git_url"].as_str().unwrap_or("-").dimmed()
+                );
+                println!(
+                    "  Ref:     {}",
+                    job["source"]["git_ref"].as_str().unwrap_or("-")
+                );
+            }
+
+            client.disconnect().await.ok();
+        }
+        BuildCommands::List => {
+            let (client, creds) = cp_client::connect().await?;
+
+            println!("{}", "Build Job 一覧".bold());
+            println!();
+
+            let tenant_slug = creds.tenant_slug.as_deref().unwrap_or("default");
+            let resp = cp_client::request(
+                &client,
+                "build",
+                "list",
+                json!({ "tenant_slug": tenant_slug }),
+            )
+            .await?;
+
+            if let Some(err) = resp["error"].as_str() {
+                println!("{} {}", "エラー:".red(), err);
+                client.disconnect().await.ok();
+                return Ok(());
+            }
+
+            if let Some(jobs) = resp["build_jobs"].as_array() {
+                if jobs.is_empty() {
+                    println!("{}", "Build Job がありません。".dimmed());
+                } else {
+                    println!(
+                        "{}",
+                        format!(
+                            "{:<36} {:<14} {:<10} {:<40}",
+                            "ID", "KIND", "STATE", "GIT URL"
+                        )
+                        .bold()
+                    );
+                    println!("{}", "─".repeat(104).dimmed());
+                    for j in jobs {
+                        println!(
+                            "{:<36} {:<14} {:<10} {:<40}",
+                            format!("{:?}", j["id"]).cyan(),
+                            j["kind"].as_str().unwrap_or("-"),
+                            j["state"].as_str().unwrap_or("-").yellow(),
+                            j["source"]["git_url"].as_str().unwrap_or("-").dimmed(),
+                        );
+                    }
+                }
+            }
+
+            client.disconnect().await.ok();
+        }
+        BuildCommands::Show { id } => {
+            let (client, creds) = cp_client::connect().await?;
+
+            let tenant_slug = creds.tenant_slug.as_deref().unwrap_or("default");
+            let resp = cp_client::request(
+                &client,
+                "build",
+                "get",
+                json!({ "tenant_slug": tenant_slug, "job_id": id }),
+            )
+            .await?;
+
+            if let Some(err) = resp["error"].as_str() {
+                println!("{} {}", "エラー:".red(), err);
+            } else if let Some(job) = resp.get("build_job") {
+                println!("{}", "Build Job 詳細".bold());
+                println!("  ID:              {}", format!("{:?}", job["id"]).cyan());
+                println!("  Kind:            {}", job["kind"].as_str().unwrap_or("-"));
+                println!(
+                    "  State:           {}",
+                    job["state"].as_str().unwrap_or("-").yellow()
+                );
+                println!(
+                    "  Git URL:         {}",
+                    job["source"]["git_url"].as_str().unwrap_or("-").dimmed()
+                );
+                println!(
+                    "  Ref:             {}",
+                    job["source"]["git_ref"].as_str().unwrap_or("-")
+                );
+                if let Some(df) = job["source"]["dockerfile"].as_str() {
+                    println!("  Dockerfile:      {}", df);
+                }
+                if let Some(img) = job["target"]["image"].as_str() {
+                    println!("  Image:           {}", img);
+                }
+                if let Some(logs) = job["logs_url"].as_str() {
+                    println!("  Logs URL:        {}", logs.dimmed());
+                }
+                if let Some(dur) = job["duration_seconds"].as_i64() {
+                    println!("  Duration:        {}s", dur);
+                }
+            }
+
+            client.disconnect().await.ok();
+        }
+        BuildCommands::Logs { id } => {
+            let (client, creds) = cp_client::connect().await?;
+
+            let tenant_slug = creds.tenant_slug.as_deref().unwrap_or("default");
+            let resp = cp_client::request(
+                &client,
+                "build",
+                "get",
+                json!({ "tenant_slug": tenant_slug, "job_id": id }),
+            )
+            .await?;
+
+            if let Some(err) = resp["error"].as_str() {
+                println!("{} {}", "エラー:".red(), err);
+            } else if let Some(job) = resp.get("build_job") {
+                println!("{}", "Build Logs".bold());
+                println!(
+                    "  State:    {}",
+                    job["state"].as_str().unwrap_or("-").yellow()
+                );
+                if let Some(logs_url) = job["logs_url"].as_str() {
+                    println!("  Logs URL: {}", logs_url.dimmed());
+                    println!();
+                    println!(
+                        "{}",
+                        "v1: logs_url を polling して取得してください。".dimmed()
+                    );
+                } else {
+                    println!(
+                        "  {}",
+                        "ログ URL はまだ利用できません (build 開始後に設定されます)。".dimmed()
+                    );
+                }
+            }
+
+            client.disconnect().await.ok();
+        }
+        BuildCommands::Cancel { id } => {
+            let (client, creds) = cp_client::connect().await?;
+
+            let tenant_slug = creds.tenant_slug.as_deref().unwrap_or("default");
+            let resp = cp_client::request(
+                &client,
+                "build",
+                "cancel",
+                json!({ "tenant_slug": tenant_slug, "job_id": id }),
+            )
+            .await?;
+
+            if let Some(err) = resp["error"].as_str() {
+                println!("{} {}", "エラー:".red(), err);
+            } else {
+                println!(
+                    "{} Build Job {} をキャンセルしました。",
+                    "Cancelled.".green().bold(),
+                    id.cyan()
                 );
             }
 

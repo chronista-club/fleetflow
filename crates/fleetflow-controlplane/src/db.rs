@@ -1121,6 +1121,95 @@ impl Database {
         let snapshots: Vec<VolumeSnapshot> = result.take(0)?;
         Ok(snapshots)
     }
+
+    // ─────────────────────────────────────────
+    // BuildJob CRUD (Build Tier v1 MVP, 2026-04-23)
+    //
+    // 詳細設計: fleetstage repo docs/design/30-build-tier.md
+    // ─────────────────────────────────────────
+
+    /// BuildJob を新規作成 (state=queued でエンキュー)。
+    ///
+    /// `kind` と `state` は model の定数に従う (build_job_kind / build_job_state モジュール参照)。
+    pub async fn create_build_job(&self, job: &BuildJob) -> Result<BuildJob> {
+        if !build_job_kind::is_valid(&job.kind) {
+            anyhow::bail!("invalid build job kind: {}", job.kind);
+        }
+        if !build_job_state::is_valid(&job.state) {
+            anyhow::bail!("invalid build job state: {}", job.state);
+        }
+        // source / target は nested object のため flat scalar bind で展開する
+        // (surrealdb の serde_json::Value bind は壊れる — project_surrealdb_bind_pitfall)
+        let mut result = self
+            .db
+            .query(
+                "CREATE build_job CONTENT { \
+                    tenant: $tenant, project: $project, \
+                    kind: $kind, \
+                    source: { git_url: $git_url, git_ref: $git_ref, dockerfile: $dockerfile }, \
+                    target: { image: $image, registry_secret: $registry_secret }, \
+                    state: $state, server: $server, logs_url: $logs_url, \
+                    started_at: $started_at, finished_at: $finished_at, \
+                    duration_seconds: $duration_seconds \
+                }",
+            )
+            .bind(("tenant", job.tenant.clone()))
+            .bind(("project", job.project.clone()))
+            .bind(("kind", job.kind.clone()))
+            .bind(("git_url", job.source.git_url.clone()))
+            .bind(("git_ref", job.source.git_ref.clone()))
+            .bind(("dockerfile", job.source.dockerfile.clone()))
+            .bind(("image", job.target.image.clone()))
+            .bind(("registry_secret", job.target.registry_secret.clone()))
+            .bind(("state", job.state.clone()))
+            .bind(("server", job.server.clone()))
+            .bind(("logs_url", job.logs_url.clone()))
+            .bind(("started_at", job.started_at))
+            .bind(("finished_at", job.finished_at))
+            .bind(("duration_seconds", job.duration_seconds))
+            .await
+            .context("BuildJob 作成失敗")?;
+        let created: Option<BuildJob> = result.take(0)?;
+        created.context("BuildJob 作成結果が空")
+    }
+
+    /// BuildJob を ID で取得。
+    pub async fn get_build_job_by_id(&self, job_id: &RecordId) -> Result<Option<BuildJob>> {
+        let mut result = self
+            .db
+            .query("SELECT * FROM build_job WHERE id = $id LIMIT 1")
+            .bind(("id", job_id.clone()))
+            .await
+            .context("BuildJob 取得失敗")?;
+        let jobs: Vec<BuildJob> = result.take(0)?;
+        Ok(jobs.into_iter().next())
+    }
+
+    /// テナント配下の BuildJob 一覧を取得 (submitted_at DESC)。
+    pub async fn list_build_jobs_by_tenant(&self, tenant_id: &RecordId) -> Result<Vec<BuildJob>> {
+        let mut result = self
+            .db
+            .query("SELECT * FROM build_job WHERE tenant = $tenant ORDER BY submitted_at DESC")
+            .bind(("tenant", tenant_id.clone()))
+            .await
+            .context("BuildJob 一覧取得失敗")?;
+        let jobs: Vec<BuildJob> = result.take(0)?;
+        Ok(jobs)
+    }
+
+    /// BuildJob の state を更新。invalid state は拒否。
+    pub async fn update_build_job_state(&self, job_id: &RecordId, new_state: &str) -> Result<()> {
+        if !build_job_state::is_valid(new_state) {
+            anyhow::bail!("invalid build job state: {}", new_state);
+        }
+        self.db
+            .query("UPDATE $id SET state = $state")
+            .bind(("id", job_id.clone()))
+            .bind(("state", new_state.to_string()))
+            .await
+            .context("BuildJob state 更新失敗")?;
+        Ok(())
+    }
 }
 
 /// SurrealDB schema definition.
@@ -1359,6 +1448,30 @@ DEFINE FIELD IF NOT EXISTS size_bytes ON volume_snapshot TYPE option<int>;
 DEFINE FIELD IF NOT EXISTS taken_at ON volume_snapshot TYPE option<datetime> DEFAULT time::now();
 DEFINE FIELD IF NOT EXISTS retention_until ON volume_snapshot TYPE option<datetime>;
 DEFINE INDEX IF NOT EXISTS idx_volume_snapshot_volume ON volume_snapshot FIELDS volume;
+
+-- CP-011: BuildJob (Build Tier v1 MVP, 2026-04-23)
+-- 詳細設計: fleetstage repo docs/design/30-build-tier.md
+DEFINE TABLE IF NOT EXISTS build_job SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS tenant ON build_job TYPE record<tenant>;
+DEFINE FIELD IF NOT EXISTS project ON build_job TYPE option<record<project>>;
+DEFINE FIELD IF NOT EXISTS kind ON build_job TYPE string
+  ASSERT $value IN ["docker-image", "cargo-binary", "static-site"];
+DEFINE FIELD IF NOT EXISTS source ON build_job TYPE object;
+DEFINE FIELD IF NOT EXISTS source.git_url ON build_job TYPE string;
+DEFINE FIELD IF NOT EXISTS source.git_ref ON build_job TYPE string DEFAULT 'main';
+DEFINE FIELD IF NOT EXISTS source.dockerfile ON build_job TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS target ON build_job TYPE object;
+DEFINE FIELD IF NOT EXISTS target.image ON build_job TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS target.registry_secret ON build_job TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS state ON build_job TYPE string
+  ASSERT $value IN ["queued", "assigned", "cloning", "building", "pushing", "success", "failed", "cancelled"];
+DEFINE FIELD IF NOT EXISTS server ON build_job TYPE option<record<server>>;
+DEFINE FIELD IF NOT EXISTS logs_url ON build_job TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS submitted_at ON build_job TYPE datetime DEFAULT time::now();
+DEFINE FIELD IF NOT EXISTS started_at ON build_job TYPE option<datetime>;
+DEFINE FIELD IF NOT EXISTS finished_at ON build_job TYPE option<datetime>;
+DEFINE FIELD IF NOT EXISTS duration_seconds ON build_job TYPE option<int>;
+DEFINE INDEX IF NOT EXISTS idx_build_job_tenant_state ON build_job FIELDS tenant, state;
 "#;
 
 #[cfg(test)]
@@ -2415,5 +2528,194 @@ mod tests {
             .await
             .expect_err("invalid kind");
         assert!(err.to_string().contains("invalid volume snapshot kind"));
+    }
+
+    // ─────────────────────────────────────────
+    // BuildJob tests (Build Tier v1 MVP, 2026-04-23)
+    // ─────────────────────────────────────────
+
+    fn make_build_job(tenant_id: RecordId) -> BuildJob {
+        BuildJob {
+            id: None,
+            tenant: tenant_id,
+            project: None,
+            kind: build_job_kind::DOCKER_IMAGE.to_string(),
+            source: BuildSource {
+                git_url: "https://github.com/chronista-club/fleetflow".to_string(),
+                git_ref: "main".to_string(),
+                dockerfile: Some("infra/Dockerfile.fleetflowd".to_string()),
+            },
+            target: BuildTarget {
+                image: Some("ghcr.io/chronista-club/fleetflowd:test".to_string()),
+                registry_secret: None,
+            },
+            state: build_job_state::QUEUED.to_string(),
+            server: None,
+            logs_url: None,
+            submitted_at: None,
+            started_at: None,
+            finished_at: None,
+            duration_seconds: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn build_job_state_constants_match_schema_assertions() {
+        // schema の ASSERT $value IN [...] 列と build_job_state::ALL が一致することを保証する
+        // (リネーム・追加時に片方だけ更新して drift する事故を予防)
+        let expected = [
+            "queued",
+            "assigned",
+            "cloning",
+            "building",
+            "pushing",
+            "success",
+            "failed",
+            "cancelled",
+        ];
+        assert_eq!(build_job_state::ALL, expected);
+        for s in &expected {
+            assert!(build_job_state::is_valid(s));
+        }
+        assert!(!build_job_state::is_valid("unknown-state"));
+    }
+
+    #[tokio::test]
+    async fn build_job_kind_constants_match_schema_assertions() {
+        let expected = ["docker-image", "cargo-binary", "static-site"];
+        assert_eq!(build_job_kind::ALL, expected);
+        for k in &expected {
+            assert!(build_job_kind::is_valid(k));
+        }
+        assert!(!build_job_kind::is_valid("unknown-kind"));
+    }
+
+    #[tokio::test]
+    async fn create_build_job_succeeds_minimum_fields() {
+        let db = Database::connect_memory().await.unwrap();
+        let (tenant_id, _) = seed_tenant_and_server(&db).await;
+
+        let job = make_build_job(tenant_id);
+        let created = db.create_build_job(&job).await.unwrap();
+
+        assert!(created.id.is_some());
+        assert_eq!(created.kind, "docker-image");
+        assert_eq!(created.state, "queued");
+        assert_eq!(
+            created.source.git_url,
+            "https://github.com/chronista-club/fleetflow"
+        );
+        assert_eq!(created.source.git_ref, "main");
+        assert_eq!(
+            created.target.image.as_deref(),
+            Some("ghcr.io/chronista-club/fleetflowd:test")
+        );
+    }
+
+    #[tokio::test]
+    async fn list_build_jobs_returns_tenant_scoped() {
+        let db = Database::connect_memory().await.unwrap();
+        let (tenant_id, _) = seed_tenant_and_server(&db).await;
+
+        // 別テナントを作成して別 job を登録
+        let other_tenant = db
+            .create_tenant(&Tenant {
+                id: None,
+                slug: "other-tenant".into(),
+                name: "Other Tenant".into(),
+                auth0_org_id: None,
+                plan: "self-hosted".into(),
+                dns_provider: None,
+                dns_domain: None,
+                dns_zone_id: None,
+                dns_api_token_encrypted: None,
+                placement_policy: None,
+                created_at: None,
+                updated_at: None,
+            })
+            .await
+            .unwrap();
+        let other_tenant_id = other_tenant.id.unwrap();
+
+        db.create_build_job(&make_build_job(tenant_id.clone()))
+            .await
+            .unwrap();
+        db.create_build_job(&make_build_job(tenant_id.clone()))
+            .await
+            .unwrap();
+        db.create_build_job(&make_build_job(other_tenant_id))
+            .await
+            .unwrap();
+
+        let jobs = db.list_build_jobs_by_tenant(&tenant_id).await.unwrap();
+        assert_eq!(jobs.len(), 2, "テナントスコープで 2 件のみ取得できるべき");
+    }
+
+    #[tokio::test]
+    async fn update_build_job_state_transitions_through_lifecycle() {
+        let db = Database::connect_memory().await.unwrap();
+        let (tenant_id, _) = seed_tenant_and_server(&db).await;
+
+        let job = db
+            .create_build_job(&make_build_job(tenant_id))
+            .await
+            .unwrap();
+        let job_id = job.id.unwrap();
+
+        db.update_build_job_state(&job_id, build_job_state::ASSIGNED)
+            .await
+            .unwrap();
+        db.update_build_job_state(&job_id, build_job_state::CLONING)
+            .await
+            .unwrap();
+        db.update_build_job_state(&job_id, build_job_state::BUILDING)
+            .await
+            .unwrap();
+        db.update_build_job_state(&job_id, build_job_state::PUSHING)
+            .await
+            .unwrap();
+        db.update_build_job_state(&job_id, build_job_state::SUCCESS)
+            .await
+            .unwrap();
+
+        let updated = db
+            .get_build_job_by_id(&job_id)
+            .await
+            .unwrap()
+            .expect("job 存在");
+        assert_eq!(updated.state, "success");
+    }
+
+    #[tokio::test]
+    async fn create_build_job_rejects_invalid_kind() {
+        let db = Database::connect_memory().await.unwrap();
+        let (tenant_id, _) = seed_tenant_and_server(&db).await;
+
+        let mut bad = make_build_job(tenant_id);
+        bad.kind = "invalid-kind".to_string();
+
+        let err = db
+            .create_build_job(&bad)
+            .await
+            .expect_err("invalid kind は拒否されるべき");
+        assert!(err.to_string().contains("invalid build job kind"));
+    }
+
+    #[tokio::test]
+    async fn update_build_job_state_rejects_invalid_state() {
+        let db = Database::connect_memory().await.unwrap();
+        let (tenant_id, _) = seed_tenant_and_server(&db).await;
+
+        let job = db
+            .create_build_job(&make_build_job(tenant_id))
+            .await
+            .unwrap();
+        let job_id = job.id.unwrap();
+
+        let err = db
+            .update_build_job_state(&job_id, "unknown-state")
+            .await
+            .expect_err("invalid state は拒否されるべき");
+        assert!(err.to_string().contains("invalid build job state"));
     }
 }
