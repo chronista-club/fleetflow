@@ -49,4 +49,15 @@ ignore = [
     # rustls-webpki 0.101.7 (旧バージョン): ワイルドカード証明書の name constraints
     # 経路・対応: 上と同じ
     "RUSTSEC-2026-0099",
+
+    # rustls-webpki 0.101.7 (旧バージョン): CRL parsing 中の panic (DoS)
+    # 経路: rustls-webpki 0.101.7 → rustls 0.21.12 →
+    #       aws-smithy-http-client 1.1.12 → aws-sdk-ec2 / aws-config
+    # 対応: 修正版 0.103.13 は別途導入済み (主要経路は 0.103.x を使用)。
+    #       0.101.7 は aws-smithy-http-client 1.1.x が rustls 0.21 系を pin して
+    #       いるため直接 update 不可。aws-smithy-http-client 次 major (rustls 0.22+
+    #       対応) 待ち。
+    # 影響: CRL を読み込む経路は FleetStage では現状未使用 (AWS API 呼出し時の
+    #       TLS は CRL なしの certificate 検証のみ)。
+    "RUSTSEC-2026-0104",
 ]
