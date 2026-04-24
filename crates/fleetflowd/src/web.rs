@@ -103,6 +103,15 @@ pub async fn start(
         .route("/api/v1/builds/{id}", get(api_build_show))
         .route("/api/v1/builds/{id}/logs", get(api_build_logs))
         .route("/api/v1/builds/{id}/cancel", post(api_build_cancel))
+        // Stage Runtime Status + Service Restart v1 (FSC-17/18, 2026-04-22)
+        .route(
+            "/api/v1/stages/{project}/{stage}/status",
+            get(api_v1_stage_status),
+        )
+        .route(
+            "/api/v1/stages/{project}/{stage}/services/{service}/restart",
+            post(api_v1_service_restart),
+        )
         .layer(middleware::from_fn_with_state(
             web_state.clone(),
             auth_middleware,
@@ -2100,6 +2109,256 @@ async fn api_build_cancel(
 }
 
 // ============================================================================
+// Stage Runtime Status + Service Restart v1 (FSC-17/18)
+// ============================================================================
+
+/// docker `Status` 文字列（例: "Up 3 days", "Up 2 hours"）から uptime を秒に変換する。
+/// 停止中・exited などは None を返す。
+pub fn uptime_from_docker_status(status: &str) -> Option<u64> {
+    // "Up X unit" 形式のみ対象
+    let lower = status.to_lowercase();
+    if !lower.starts_with("up ") {
+        return None;
+    }
+    let rest = lower.trim_start_matches("up ").trim();
+    // "X unit" を split して数値と単位を取る
+    let mut parts = rest.splitn(2, ' ');
+    let num: u64 = parts.next()?.parse().ok()?;
+    let unit = parts.next()?.trim().trim_end_matches('s'); // days → day, hours → hour
+    let seconds = match unit {
+        "second" => num,
+        "minute" => num * 60,
+        "hour" => num * 3600,
+        "day" => num * 86400,
+        "week" => num * 604800,
+        "month" => num * 2592000, // 30-day approximation
+        "year" => num * 31536000,
+        _ => return None,
+    };
+    Some(seconds)
+}
+
+/// docker `State` 文字列をレスポンス用の state 文字列に正規化する。
+pub fn state_from_docker_state(docker_state: &str) -> &'static str {
+    match docker_state.to_lowercase().as_str() {
+        "running" => "running",
+        "restarting" => "restarting",
+        "paused" => "stopped",
+        "exited" => "stopped",
+        "dead" => "stopped",
+        "created" => "stopped",
+        "removing" => "stopped",
+        _ => "unknown",
+    }
+}
+
+/// docker container name（例: "gfp-dev-gfp-web"）から service 名を逆引きする。
+/// フォーマット: `{project}-{stage}-{service_slug}` だが service_slug 自体に `-` を含む場合がある。
+/// → project と stage prefix を取り除く。
+pub fn container_name_to_service<'a>(
+    container_name: &'a str,
+    project: &str,
+    stage: &str,
+) -> Option<&'a str> {
+    let prefix = format!("{}-{}-", project, stage);
+    container_name.strip_prefix(&prefix)
+}
+
+/// GET /api/v1/stages/{project}/{stage}/status — ステージの実 runtime status
+async fn api_v1_stage_status(
+    State(state): State<Arc<WebState>>,
+    Path((project, stage)): Path<(String, String)>,
+    req: Request,
+) -> impl IntoResponse {
+    let ctx = req.extensions().get::<AuthContext>().unwrap();
+
+    // ステージ一覧から対象を特定（tenant scope 検証を兼ねる）
+    let stages = match state.app.db.list_stage_overviews(&ctx.tenant_slug).await {
+        Ok(s) => s,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": e.to_string() })),
+            )
+                .into_response();
+        }
+    };
+
+    let target = stages
+        .iter()
+        .find(|s| s.project_slug == project && s.slug == stage);
+
+    let server_slug = match target.and_then(|s| s.server_slug.as_deref()) {
+        Some(s) => s.to_string(),
+        None => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "error": "Stage has no server assigned" })),
+            )
+                .into_response();
+        }
+    };
+
+    // CP に登録されているサービス一覧を取得（期待するサービス名の基準）
+    let registered_services = match state
+        .app
+        .db
+        .list_services_by_project_stage(&ctx.tenant_slug, &project, &stage)
+        .await
+    {
+        Ok(s) => s,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": e.to_string() })),
+            )
+                .into_response();
+        }
+    };
+
+    // Agent から docker ps 結果を取得
+    let agent_result = state
+        .app
+        .agent_registry
+        .send_command(&server_slug, "status", json!({}))
+        .await;
+
+    let containers_json = match agent_result {
+        Ok(r) => r,
+        Err(e) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({ "error": format!("agent unreachable: {}", e) })),
+            )
+                .into_response();
+        }
+    };
+
+    // docker ps の結果をパース: containers は配列
+    let containers = containers_json["containers"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+
+    // 登録サービスごとに、対応するコンテナを検索して status を組み立てる
+    let services: Vec<Value> = registered_services
+        .iter()
+        .map(|svc| {
+            // docker container の Names フィールドから service 名を逆引きして突合
+            let found = containers.iter().find(|c| {
+                c["Names"]
+                    .as_str()
+                    .map(|n| {
+                        let bare = n.trim_start_matches('/');
+                        container_name_to_service(bare, &project, &stage)
+                            .map(|s| s == svc.slug)
+                            .unwrap_or(false)
+                    })
+                    .unwrap_or(false)
+            });
+            match found {
+                Some(c) => {
+                    let docker_state = c["State"].as_str().unwrap_or("unknown");
+                    let state_str = state_from_docker_state(docker_state);
+                    let uptime = c["Status"]
+                        .as_str()
+                        .and_then(uptime_from_docker_status)
+                        .map(|s| json!(s))
+                        .unwrap_or(Value::Null);
+                    json!({
+                        "name": svc.slug,
+                        "state": state_str,
+                        "uptime_seconds": uptime,
+                        "image": c["Image"].as_str(),
+                        "container_id": c["ID"].as_str(),
+                    })
+                }
+                None => {
+                    json!({
+                        "name": svc.slug,
+                        "state": "stopped",
+                        "uptime_seconds": Value::Null,
+                        "image": Value::Null,
+                        "container_id": Value::Null,
+                    })
+                }
+            }
+        })
+        .collect();
+
+    (
+        StatusCode::OK,
+        Json(json!({
+            "project": project,
+            "stage": stage,
+            "server": server_slug,
+            "services": services,
+        })),
+    )
+        .into_response()
+}
+
+/// POST /api/v1/stages/{project}/{stage}/services/{service}/restart — サービス再起動 v1 path
+///
+/// 既存 `/api/stages/{p}/{s}/restart/{service}` の REST-idiomatic 版。
+/// 旧 path は deprecate せず残す。
+async fn api_v1_service_restart(
+    State(state): State<Arc<WebState>>,
+    Path((project, stage, service)): Path<(String, String, String)>,
+    req: Request,
+) -> impl IntoResponse {
+    let ctx = req.extensions().get::<AuthContext>().unwrap();
+
+    // 認可チェック: owner/admin のみ（インフラ操作）
+    if !ctx.can_operate() {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({ "error": "Insufficient permissions" })),
+        )
+            .into_response();
+    }
+
+    // ステージのサーバーを特定
+    let stages = match state.app.db.list_stage_overviews(&ctx.tenant_slug).await {
+        Ok(s) => s,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": e.to_string() })),
+            )
+                .into_response();
+        }
+    };
+
+    let target = stages
+        .iter()
+        .find(|s| s.project_slug == project && s.slug == stage);
+
+    let server_slug = match target.and_then(|s| s.server_slug.as_deref()) {
+        Some(s) => s.to_string(),
+        None => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "error": "Stage has no server assigned" })),
+            )
+                .into_response();
+        }
+    };
+
+    let payload = json!({ "service": format!("{}-{}-{}", project, stage, service) });
+
+    match state
+        .app
+        .agent_registry
+        .send_command(&server_slug, "restart", payload)
+        .await
+    {
+        Ok(result) => (StatusCode::OK, Json(result)).into_response(),
+        Err(e) => (StatusCode::SERVICE_UNAVAILABLE, Json(json!({ "error": e }))).into_response(),
+    }
+}
+
+// ============================================================================
 // Dashboard HTML（埋め込み）
 // ============================================================================
 
@@ -2108,4 +2367,93 @@ async fn dashboard_html() -> impl IntoResponse {
         [(header::CONTENT_TYPE, "text/html; charset=utf-8")],
         Html(include_str!("dashboard.html")),
     )
+}
+
+// ============================================================================
+// Unit tests (FSC-17 純粋ヘルパー)
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // --- uptime_from_docker_status ---
+
+    #[test]
+    fn uptime_from_docker_status_days() {
+        assert_eq!(uptime_from_docker_status("Up 3 days"), Some(259200));
+    }
+
+    #[test]
+    fn uptime_from_docker_status_hours() {
+        assert_eq!(uptime_from_docker_status("Up 2 hours"), Some(7200));
+    }
+
+    #[test]
+    fn uptime_from_docker_status_minutes() {
+        assert_eq!(uptime_from_docker_status("Up 5 minutes"), Some(300));
+    }
+
+    #[test]
+    fn uptime_from_docker_status_seconds() {
+        assert_eq!(uptime_from_docker_status("Up 45 seconds"), Some(45));
+    }
+
+    #[test]
+    fn uptime_from_docker_status_exited_returns_none() {
+        assert_eq!(uptime_from_docker_status("Exited (0) 1 day ago"), None);
+    }
+
+    #[test]
+    fn uptime_from_docker_status_stopped_returns_none() {
+        assert_eq!(uptime_from_docker_status(""), None);
+    }
+
+    // --- state_from_docker_state ---
+
+    #[test]
+    fn state_from_docker_state_running() {
+        assert_eq!(state_from_docker_state("running"), "running");
+    }
+
+    #[test]
+    fn state_from_docker_state_exited() {
+        assert_eq!(state_from_docker_state("exited"), "stopped");
+    }
+
+    #[test]
+    fn state_from_docker_state_restarting() {
+        assert_eq!(state_from_docker_state("restarting"), "restarting");
+    }
+
+    #[test]
+    fn state_from_docker_state_unknown() {
+        assert_eq!(state_from_docker_state("dead"), "stopped");
+    }
+
+    // --- container_name_to_service ---
+
+    #[test]
+    fn container_name_to_service_basic() {
+        assert_eq!(
+            container_name_to_service("gfp-dev-gfp-web", "gfp", "dev"),
+            Some("gfp-web")
+        );
+    }
+
+    #[test]
+    fn container_name_to_service_no_match() {
+        assert_eq!(
+            container_name_to_service("other-prod-svc", "gfp", "dev"),
+            None
+        );
+    }
+
+    #[test]
+    fn container_name_to_service_hyphen_in_service_name() {
+        assert_eq!(
+            container_name_to_service("gfp-dev-gfp-estimate-worker", "gfp", "dev"),
+            Some("gfp-estimate-worker")
+        );
+    }
 }
