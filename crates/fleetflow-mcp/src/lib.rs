@@ -115,6 +115,17 @@ pub struct StagePathParam {
     pub stage: String,
 }
 
+/// fleet_restart パラメータ（FSC-18）
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
+pub struct FleetRestartParam {
+    /// プロジェクト slug
+    pub project: String,
+    /// ステージ名
+    pub stage: String,
+    /// 再起動するサービス名
+    pub service: String,
+}
+
 /// コンテナログ取得パラメータ
 #[derive(Debug, Clone, Deserialize, JsonSchema)]
 pub struct ContainerLogParam {
@@ -955,6 +966,35 @@ impl FleetFlowServer {
         Ok(result)
     }
 
+    // ============================================================
+    // FSC-17/18/19: Stage Runtime Status + Service Restart v1
+    // ============================================================
+
+    /// ステージの実 runtime status を取得 (FSC-17)
+    #[tool(
+        description = "ステージに含まれる各サービスの実 runtime status（running/stopped/restarting）と uptime_seconds を取得します。Agent → docker ps の結果を整形して返します。"
+    )]
+    async fn fleet_status(&self, params: Parameters<StagePathParam>) -> Result<String, String> {
+        let p = &params.0;
+        let path = format!("/api/v1/stages/{}/{}/status", p.project, p.stage);
+        let resp = cp::http_get(&path).await.map_err(|e| e.to_string())?;
+        Ok(serde_json::to_string_pretty(&resp).unwrap_or_else(|_| "OK".into()))
+    }
+
+    /// ステージのサービスを再起動 (FSC-18)
+    #[tool(
+        description = "指定ステージの指定サービスを Agent 経由で再起動します（docker restart）。owner/admin 権限が必要です。"
+    )]
+    async fn fleet_restart(&self, params: Parameters<FleetRestartParam>) -> Result<String, String> {
+        let p = &params.0;
+        let path = format!(
+            "/api/v1/stages/{}/{}/services/{}/restart",
+            p.project, p.stage, p.service,
+        );
+        let resp = cp::http_post(&path).await.map_err(|e| e.to_string())?;
+        Ok(serde_json::to_string_pretty(&resp).unwrap_or_else(|_| "OK".into()))
+    }
+
     /// CP 経由でプロジェクトの詳細を取得
     #[tool(
         description = "指定プロジェクトの詳細情報を取得します。プロジェクト名、説明、作成日時を表示します。"
@@ -1335,6 +1375,9 @@ mod tests {
         "fleetflow_cp_alerts",
         "fleetflow_cp_agents",
         "fleetflow_cp_tenant_users",
+        // FSC-17/18/19 stage runtime status + restart
+        "fleet_status",
+        "fleet_restart",
     ];
 
     #[test]
