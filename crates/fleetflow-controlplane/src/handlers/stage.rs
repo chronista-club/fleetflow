@@ -6,7 +6,7 @@ use tracing::{error, info};
 use unison::network::channel::UnisonChannel;
 use unison::network::server::ProtocolServer;
 
-use crate::model::Stage;
+use crate::model::{AdoptServiceSpec, AdoptStageRequest, Stage};
 use crate::server::AppState;
 
 pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
@@ -104,6 +104,165 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                         .send_response(
                                             msg.id,
                                             "list_across_projects",
+                                            json!({ "error": e.to_string() }),
+                                        )
+                                        .await?;
+                                }
+                            }
+                        }
+                        "adopt" => {
+                            let tenant_slug = payload["tenant_slug"].as_str().unwrap_or_default();
+                            let server_slug = payload["server_slug"].as_str().unwrap_or_default();
+                            let project_slug = payload["project_slug"].as_str().unwrap_or_default();
+                            let project_name = payload["project_name"].as_str();
+                            let stage_slug = payload["stage_slug"].as_str().unwrap_or_default();
+                            let description = payload["description"].as_str();
+
+                            // 必須フィールド validation
+                            for (name, value) in [
+                                ("tenant_slug", tenant_slug),
+                                ("server_slug", server_slug),
+                                ("project_slug", project_slug),
+                                ("stage_slug", stage_slug),
+                            ] {
+                                if value.is_empty() {
+                                    channel
+                                        .send_response(
+                                            msg.id,
+                                            "adopt",
+                                            json!({ "error": format!("`{}` required", name) }),
+                                        )
+                                        .await?;
+                                    continue;
+                                }
+                            }
+
+                            // services 配列をパース
+                            let services: Vec<AdoptServiceSpec> = match payload["services"]
+                                .as_array()
+                            {
+                                Some(arr) if !arr.is_empty() => arr
+                                    .iter()
+                                    .filter_map(|s| {
+                                        Some(AdoptServiceSpec {
+                                            slug: s["slug"].as_str()?.to_string(),
+                                            image: s["image"].as_str()?.to_string(),
+                                        })
+                                    })
+                                    .collect(),
+                                _ => {
+                                    channel
+                                        .send_response(
+                                            msg.id,
+                                            "adopt",
+                                            json!({ "error": "`services` must be a non-empty array of { slug, image }" }),
+                                        )
+                                        .await?;
+                                    continue;
+                                }
+                            };
+
+                            // tenant 解決
+                            let tenant = match state.db.get_tenant_by_slug(tenant_slug).await {
+                                Ok(Some(t)) => t,
+                                Ok(None) => {
+                                    channel
+                                        .send_response(
+                                            msg.id,
+                                            "adopt",
+                                            json!({ "error": "tenant not found" }),
+                                        )
+                                        .await?;
+                                    continue;
+                                }
+                                Err(e) => {
+                                    error!(error = %e, "tenant lookup 失敗 (stage.adopt)");
+                                    channel
+                                        .send_response(
+                                            msg.id,
+                                            "adopt",
+                                            json!({ "error": e.to_string() }),
+                                        )
+                                        .await?;
+                                    continue;
+                                }
+                            };
+                            let tenant_id = tenant.id.expect("tenant.id");
+
+                            // server 解決 (tenant 配下確認)
+                            let srv = match state.db.get_server_by_slug(server_slug).await {
+                                Ok(Some(s)) => s,
+                                Ok(None) => {
+                                    channel
+                                        .send_response(
+                                            msg.id,
+                                            "adopt",
+                                            json!({
+                                                "error": format!("server `{}` not found", server_slug)
+                                            }),
+                                        )
+                                        .await?;
+                                    continue;
+                                }
+                                Err(e) => {
+                                    error!(error = %e, "server lookup 失敗 (stage.adopt)");
+                                    channel
+                                        .send_response(
+                                            msg.id,
+                                            "adopt",
+                                            json!({ "error": e.to_string() }),
+                                        )
+                                        .await?;
+                                    continue;
+                                }
+                            };
+                            if srv.tenant != tenant_id {
+                                channel
+                                    .send_response(
+                                        msg.id,
+                                        "adopt",
+                                        json!({ "error": "server does not belong to this tenant" }),
+                                    )
+                                    .await?;
+                                continue;
+                            }
+                            let server_id = srv.id.expect("server.id");
+
+                            match state
+                                .db
+                                .adopt_stage(&AdoptStageRequest {
+                                    tenant_id: &tenant_id,
+                                    server_id: &server_id,
+                                    project_slug,
+                                    project_name,
+                                    stage_slug,
+                                    description,
+                                    services: &services,
+                                })
+                                .await
+                            {
+                                Ok(outcome) => {
+                                    info!(
+                                        project = %project_slug,
+                                        stage = %stage_slug,
+                                        server = %server_slug,
+                                        service_count = outcome.services.len(),
+                                        "stage adopted"
+                                    );
+                                    channel
+                                        .send_response(
+                                            msg.id,
+                                            "adopt",
+                                            json!({ "outcome": outcome }),
+                                        )
+                                        .await?;
+                                }
+                                Err(e) => {
+                                    error!(error = %e, "stage.adopt 失敗");
+                                    channel
+                                        .send_response(
+                                            msg.id,
+                                            "adopt",
                                             json!({ "error": e.to_string() }),
                                         )
                                         .await?;

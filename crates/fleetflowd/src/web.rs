@@ -112,6 +112,8 @@ pub async fn start(
             "/api/v1/stages/{project}/{stage}/services/{service}/restart",
             post(api_v1_service_restart),
         )
+        // Stage Tier adopt phase (FSC-16, 2026-04-24)
+        .route("/api/v1/stages/adopt", post(api_stage_adopt))
         .layer(middleware::from_fn_with_state(
             web_state.clone(),
             auth_middleware,
@@ -1670,6 +1672,241 @@ async fn api_volume_adopt(State(state): State<Arc<WebState>>, req: Request) -> i
         Err(e) => {
             let msg = e.to_string();
             let status = if msg.contains("invalid volume tier") || msg.contains("invalid") {
+                StatusCode::BAD_REQUEST
+            } else {
+                StatusCode::INTERNAL_SERVER_ERROR
+            };
+            (status, Json(json!({ "error": msg }))).into_response()
+        }
+    }
+}
+
+// ============================================================================
+// Stage Tier adopt (FSC-16, 2026-04-24)
+//
+// 既存稼働中の stage を docker 非接触のまま fleetstage registry に登録する
+// BYO 経路。Persistence Volume Tier の /api/v1/volumes/adopt と対称。
+// 詳細設計: fleetstage repo Issue FSC-16
+// ============================================================================
+
+/// POST /api/v1/stages/adopt — 既存 stage を非破壊で CP records に登録
+///
+/// リクエスト body:
+/// ```json
+/// {
+///   "project_slug": "gfp",
+///   "project_name": "GFP Live Fleet",
+///   "stage_slug": "dev",
+///   "description": "GFP dev stage on fleet-worker-01",
+///   "server_slug": "fleet-worker-01",
+///   "services": [
+///     { "slug": "gfp-estimate", "image": "ghcr.io/anycreative/gfp-estimate:latest" },
+///     { "slug": "gfp-web",      "image": "ghcr.io/anycreative/gfp-web:latest" }
+///   ]
+/// }
+/// ```
+///
+/// worker 上の docker 状態には一切触れない。project は slug が既にあれば再利用、
+/// stage は同 project に同 slug があれば 409 で拒否 (二重 adopt 防止)。
+async fn api_stage_adopt(State(state): State<Arc<WebState>>, req: Request) -> impl IntoResponse {
+    let ctx = req
+        .extensions()
+        .get::<AuthContext>()
+        .expect("AuthContext missing")
+        .clone();
+
+    // 認可: owner/admin のみ (インフラ登録)
+    if !ctx.can_operate() {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({ "error": "Insufficient permissions" })),
+        )
+            .into_response();
+    }
+
+    let body = match axum::body::to_bytes(req.into_body(), 1024 * 64).await {
+        Ok(b) => b,
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({ "error": format!("invalid body: {}", e) })),
+            )
+                .into_response();
+        }
+    };
+    let payload: Value = match serde_json::from_slice(&body) {
+        Ok(v) => v,
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({ "error": format!("invalid JSON: {}", e) })),
+            )
+                .into_response();
+        }
+    };
+
+    // 必須フィールド
+    let project_slug = match payload["project_slug"].as_str() {
+        Some(s) if !s.is_empty() => s.to_string(),
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({ "error": "`project_slug` required" })),
+            )
+                .into_response();
+        }
+    };
+    let stage_slug = match payload["stage_slug"].as_str() {
+        Some(s) if !s.is_empty() => s.to_string(),
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({ "error": "`stage_slug` required" })),
+            )
+                .into_response();
+        }
+    };
+    let server_slug = match payload["server_slug"].as_str() {
+        Some(s) if !s.is_empty() => s.to_string(),
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({ "error": "`server_slug` required" })),
+            )
+                .into_response();
+        }
+    };
+    let project_name = payload["project_name"].as_str().map(String::from);
+    let description = payload["description"].as_str().map(String::from);
+
+    // services: 非空配列かつ各要素が slug/image を持つこと
+    let services = match payload["services"].as_array() {
+        Some(arr) if !arr.is_empty() => {
+            let mut out = Vec::with_capacity(arr.len());
+            for (i, s) in arr.iter().enumerate() {
+                let slug = match s["slug"].as_str() {
+                    Some(v) if !v.is_empty() => v.to_string(),
+                    _ => {
+                        return (
+                            StatusCode::BAD_REQUEST,
+                            Json(json!({
+                                "error": format!("services[{}].slug required", i)
+                            })),
+                        )
+                            .into_response();
+                    }
+                };
+                let image = match s["image"].as_str() {
+                    Some(v) if !v.is_empty() => v.to_string(),
+                    _ => {
+                        return (
+                            StatusCode::BAD_REQUEST,
+                            Json(json!({
+                                "error": format!("services[{}].image required", i)
+                            })),
+                        )
+                            .into_response();
+                    }
+                };
+                out.push(fleetflow_controlplane::model::AdoptServiceSpec { slug, image });
+            }
+            out
+        }
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({ "error": "`services` must be a non-empty array" })),
+            )
+                .into_response();
+        }
+    };
+
+    // tenant 解決
+    let tenant = match state.app.db.get_tenant_by_slug(&ctx.tenant_slug).await {
+        Ok(Some(t)) => t,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "error": "Tenant not found" })),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": e.to_string() })),
+            )
+                .into_response();
+        }
+    };
+    let tenant_id = tenant.id.expect("tenant.id should exist after fetch");
+
+    // server 解決 (tenant 配下確認)
+    let server = match state.app.db.get_server_by_slug(&server_slug).await {
+        Ok(Some(s)) => s,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "error": format!("Server `{}` not found", server_slug) })),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": e.to_string() })),
+            )
+                .into_response();
+        }
+    };
+    if server.tenant != tenant_id {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({ "error": "Server does not belong to this tenant" })),
+        )
+            .into_response();
+    }
+    let server_id = server.id.expect("server.id should exist after fetch");
+
+    match state
+        .app
+        .db
+        .adopt_stage(&fleetflow_controlplane::model::AdoptStageRequest {
+            tenant_id: &tenant_id,
+            server_id: &server_id,
+            project_slug: &project_slug,
+            project_name: project_name.as_deref(),
+            stage_slug: &stage_slug,
+            description: description.as_deref(),
+            services: &services,
+        })
+        .await
+    {
+        Ok(outcome) => (
+            StatusCode::CREATED,
+            Json(json!({
+                "project": {
+                    "slug": outcome.project.slug,
+                    "name": outcome.project.name,
+                },
+                "stage": {
+                    "slug": outcome.stage.slug,
+                    "description": outcome.stage.description,
+                    "server_slug": server_slug,
+                },
+                "services": outcome.services.iter().map(|s| json!({
+                    "slug": s.slug,
+                    "image": s.image,
+                    "desired_status": s.desired_status,
+                })).collect::<Vec<_>>(),
+            })),
+        )
+            .into_response(),
+        Err(e) => {
+            let msg = e.to_string();
+            let status = if msg.contains("already exists") {
+                StatusCode::CONFLICT
+            } else if msg.contains("must not be empty") {
                 StatusCode::BAD_REQUEST
             } else {
                 StatusCode::INTERNAL_SERVER_ERROR

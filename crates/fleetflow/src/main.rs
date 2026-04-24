@@ -284,6 +284,9 @@ enum CpCommands {
     /// Build Tier — CP 経由の docker image / cargo binary などの build ジョブ管理
     #[command(subcommand)]
     Build(BuildCommands),
+    /// Stage Tier — 既存稼働中 stage の adopt ほか (FSC-16)
+    #[command(subcommand)]
+    Stage(StageCommands),
 }
 
 /// デーモン管理のサブコマンド
@@ -564,6 +567,61 @@ pub enum BuildCommands {
         /// Job ID
         id: String,
     },
+}
+
+/// Stage Tier 管理のサブコマンド (FSC-16, 2026-04-24)
+///
+/// 既存 stage の adopt (BYO, 非破壊) を提供する。
+/// provision phase (ゼロ立ち上げ) は FSC-31 で別途実装予定。
+#[derive(Subcommand)]
+pub enum StageCommands {
+    /// 既存稼働中の stage を CP registry に adopt (非破壊、docker 非接触)
+    ///
+    /// worker 上で既に docker compose 等で動いている stage を、
+    /// docker 状態を一切変えないまま fleetstage 管理下に取り込む。
+    Adopt {
+        /// project slug (tenant 内でユニーク、なければ新規作成)
+        #[arg(long)]
+        project: String,
+        /// project 表示名 (新規作成時のみ使用、既存なら無視)
+        #[arg(long)]
+        project_name: Option<String>,
+        /// stage slug (project 内でユニーク、既にあればエラー)
+        #[arg(long)]
+        stage: String,
+        /// stage description (任意)
+        #[arg(long)]
+        description: Option<String>,
+        /// adopt 対象 server slug (現行 stage が動いている VPS)
+        #[arg(long)]
+        server: String,
+        /// services を "slug=image" 形式で繰り返し指定
+        ///
+        /// 例: `--service gfp-estimate=ghcr.io/anycreative/gfp-estimate:latest`
+        ///     `--service gfp-web=ghcr.io/anycreative/gfp-web:latest`
+        #[arg(long = "service", value_parser = parse_service_spec)]
+        services: Vec<ServiceSpecArg>,
+    },
+}
+
+/// CLI --service フラグを "slug=image" 形式で受ける構造体
+#[derive(Debug, Clone)]
+pub struct ServiceSpecArg {
+    pub slug: String,
+    pub image: String,
+}
+
+fn parse_service_spec(s: &str) -> Result<ServiceSpecArg, String> {
+    let (slug, image) = s
+        .split_once('=')
+        .ok_or_else(|| format!("expected `slug=image`, got `{}`", s))?;
+    if slug.is_empty() || image.is_empty() {
+        return Err(format!("both slug and image must be non-empty: `{}`", s));
+    }
+    Ok(ServiceSpecArg {
+        slug: slug.to_string(),
+        image: image.to_string(),
+    })
 }
 
 // ─────────────────────────────────────────────
@@ -934,5 +992,6 @@ async fn handle_cp(cmd: &CpCommands) -> anyhow::Result<()> {
         }
         CpCommands::Volume(volume_cmd) => commands::cp::handle_volume(volume_cmd).await,
         CpCommands::Build(build_cmd) => commands::cp::handle_build(build_cmd).await,
+        CpCommands::Stage(stage_cmd) => commands::cp::handle_stage(stage_cmd).await,
     }
 }
