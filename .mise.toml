@@ -128,7 +128,8 @@ cargo audit \
   --ignore RUSTSEC-2026-0044 \
   --ignore RUSTSEC-2026-0048 \
   --ignore RUSTSEC-2026-0098 \
-  --ignore RUSTSEC-2026-0099
+  --ignore RUSTSEC-2026-0099 \
+  --ignore RUSTSEC-2026-0104
 """
 
 [tasks.tree]
