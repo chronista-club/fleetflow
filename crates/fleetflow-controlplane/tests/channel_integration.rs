@@ -69,13 +69,13 @@ async fn test_tenant_get_and_list() -> anyhow::Result<()> {
     let channel = client.open_channel("tenant").await?;
 
     // List tenants (should be empty initially)
-    let resp = channel.request("list", json!({})).await?;
+    let resp: serde_json::Value = channel.request("list", &json!({})).await?;
     let tenants = resp["tenants"].as_array().unwrap();
     assert!(tenants.is_empty(), "初期状態ではテナントは空");
 
     // Get non-existent tenant
-    let resp = channel
-        .request("get", json!({ "slug": "nonexistent" }))
+    let resp: serde_json::Value = channel
+        .request("get", &json!({ "slug": "nonexistent" }))
         .await?;
     assert!(
         resp.get("error").is_some() || resp.get("tenant").is_none(),
@@ -96,10 +96,10 @@ async fn test_project_create_and_list() -> anyhow::Result<()> {
     let channel = client.open_channel("project").await?;
 
     // Create a project
-    let resp = channel
+    let resp: serde_json::Value = channel
         .request(
             "create",
-            json!({
+            &json!({
                 "tenant_slug": "test-org",
                 "name": "my-project",
                 "description": "Test project"
@@ -113,8 +113,8 @@ async fn test_project_create_and_list() -> anyhow::Result<()> {
     }
 
     // List projects
-    let resp = channel
-        .request("list", json!({ "tenant_slug": "test-org" }))
+    let resp: serde_json::Value = channel
+        .request("list", &json!({ "tenant_slug": "test-org" }))
         .await?;
     assert!(resp.get("projects").is_some(), "projects キーが存在する");
 
@@ -131,7 +131,7 @@ async fn test_health_overview() -> anyhow::Result<()> {
 
     let channel = client.open_channel("health").await?;
 
-    let resp = channel.request("overview", json!({})).await?;
+    let resp: serde_json::Value = channel.request("overview", &json!({})).await?;
 
     // Health overview returns project_count and server_count
     assert!(
@@ -153,15 +153,15 @@ async fn test_server_list_and_register() -> anyhow::Result<()> {
     let channel = client.open_channel("server").await?;
 
     // List servers (empty)
-    let resp = channel.request("list", json!({})).await?;
+    let resp: serde_json::Value = channel.request("list", &json!({})).await?;
     let servers = resp["servers"].as_array().unwrap();
     assert!(servers.is_empty(), "初期状態ではサーバーは空");
 
     // Register a server
-    let resp = channel
+    let resp: serde_json::Value = channel
         .request(
             "register",
-            json!({
+            &json!({
                 "tenant_slug": "test-org",
                 "slug": "vps-01",
                 "hostname": "test-server.local",
@@ -188,7 +188,7 @@ async fn test_unknown_method_returns_error() -> anyhow::Result<()> {
 
     let channel = client.open_channel("tenant").await?;
 
-    let resp = channel.request("nonexistent_method", json!({})).await?;
+    let resp: serde_json::Value = channel.request("nonexistent_method", &json!({})).await?;
     assert!(resp.get("error").is_some(), "不明なメソッドはエラーを返す");
 
     channel.close().await?;

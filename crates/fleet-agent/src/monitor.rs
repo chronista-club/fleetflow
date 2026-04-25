@@ -318,10 +318,10 @@ async fn send_resolve(
 ) -> anyhow::Result<()> {
     let channel = client.open_channel("server").await?;
 
-    channel
+    let _: serde_json::Value = channel
         .request(
             "alert_resolve",
-            json!({
+            &json!({
                 "server_slug": server_slug,
                 "container_name": container_name,
             }),
@@ -340,10 +340,10 @@ async fn send_alert(
 ) -> anyhow::Result<()> {
     let channel = client.open_channel("server").await?;
 
-    channel
+    let _: serde_json::Value = channel
         .request(
             "alert",
-            json!({
+            &json!({
                 "server_slug": server_slug,
                 "container_name": alert.container_name,
                 "alert_type": alert.alert_type.as_str(),

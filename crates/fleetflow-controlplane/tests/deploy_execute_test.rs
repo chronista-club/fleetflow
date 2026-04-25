@@ -111,10 +111,10 @@ async fn test_deploy_execute_channel() -> anyhow::Result<()> {
         no_prune: true,
     };
 
-    let resp = channel
+    let resp: serde_json::Value = channel
         .request(
             "execute",
-            json!({
+            &json!({
                 "tenant_slug": "default",
                 "project_slug": "deploy-test",
                 "request": serde_json::to_value(&request)?,
@@ -149,10 +149,10 @@ async fn test_deploy_execute_with_tenant_and_project() -> anyhow::Result<()> {
 
     // テナント作成
     let tenant_ch = client.open_channel("tenant").await?;
-    let resp = tenant_ch
+    let resp: serde_json::Value = tenant_ch
         .request(
             "create",
-            json!({ "name": "Test Org", "slug": "test-deploy-org" }),
+            &json!({ "name": "Test Org", "slug": "test-deploy-org" }),
         )
         .await?;
     tenant_ch.close().await?;
@@ -165,10 +165,10 @@ async fn test_deploy_execute_with_tenant_and_project() -> anyhow::Result<()> {
 
     // プロジェクト作成
     let project_ch = client.open_channel("project").await?;
-    let resp = project_ch
+    let resp: serde_json::Value = project_ch
         .request(
             "create",
-            json!({
+            &json!({
                 "tenant_slug": "test-deploy-org",
                 "slug": "deploy-test",
                 "name": "deploy-test",
@@ -194,10 +194,10 @@ async fn test_deploy_execute_with_tenant_and_project() -> anyhow::Result<()> {
         no_prune: true,
     };
 
-    let resp = deploy_ch
+    let resp: serde_json::Value = deploy_ch
         .request(
             "execute",
-            json!({
+            &json!({
                 "tenant_slug": "test-deploy-org",
                 "project_slug": "deploy-test",
                 "request": serde_json::to_value(&request)?,

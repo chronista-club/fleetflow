@@ -34,7 +34,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                         .send_response(
                             msg.id,
                             &msg.method,
-                            json!({ "error": "first message must be 'register'" }),
+                            &json!({ "error": "first message must be 'register'" }),
                         )
                         .await?;
                     return Ok(());
@@ -59,7 +59,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                 state.db.update_server_heartbeat(&server_slug).await.ok();
 
                 channel
-                    .send_response(msg.id, "register", json!({ "status": "ok" }))
+                    .send_response(msg.id, "register", &json!({ "status": "ok" }))
                     .await?;
 
                 info!(server = %server_slug, version = %version, "Agent 接続完了");
@@ -87,12 +87,12 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                             if let Some(pv) = p["agent_version"].as_str() {
                                                 state.db.update_server_versions(slug, Some(pv), None).await.ok();
                                             }
-                                            channel.send_response(m.id, "heartbeat", json!({"status": "ok"})).await?;
+                                            channel.send_response(m.id, "heartbeat", &json!({"status": "ok"})).await?;
                                         }
                                         "alert" => {
                                             // Agent からのアラート → DB に保存
                                             handle_agent_alert(&state, &p).await;
-                                            channel.send_response(m.id, "alert", json!({"status": "ok"})).await?;
+                                            channel.send_response(m.id, "alert", &json!({"status": "ok"})).await?;
                                         }
                                         "deploy_result" | "restart_result" | "status_result" => {
                                             // Agent からの応答 → pending_responses に返す
@@ -134,7 +134,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                         "payload": payload,
                                     });
 
-                                    if let Err(e) = channel.send_event(&method, cmd_payload).await {
+                                    if let Err(e) = channel.send_event(&method, &cmd_payload).await {
                                         error!(error = %e, method = %method, "Agent へのコマンド送信失敗");
                                         // 応答待ちがあればエラーを返す
                                         if let Some(tx) = pending_responses.remove(&req_id) {

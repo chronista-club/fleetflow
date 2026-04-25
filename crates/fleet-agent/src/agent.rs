@@ -95,10 +95,10 @@ async fn command_loop(
         .context("agent チャネルオープン失敗")?;
 
     // Agent 登録
-    let register_resp = channel
+    let register_resp: serde_json::Value = channel
         .request(
             "register",
-            json!({
+            &json!({
                 "server_slug": server_slug,
                 "version": env!("CARGO_PKG_VERSION"),
             }),
@@ -128,7 +128,7 @@ async fn command_loop(
                     Ok(()) => json!({ "status": "ok" }),
                     Err(e) => json!({ "status": "failed", "error": e.to_string() }),
                 };
-                channel.send_response(msg.id, "restart", response).await?;
+                channel.send_response(msg.id, "restart", &response).await?;
             }
             "status" => {
                 let result = deploy::container_status().await;
@@ -136,14 +136,14 @@ async fn command_loop(
                     Ok(v) => json!({ "status": "ok", "data": v }),
                     Err(e) => json!({ "status": "failed", "error": e.to_string() }),
                 };
-                channel.send_response(msg.id, "status", response).await?;
+                channel.send_response(msg.id, "status", &response).await?;
             }
             "build" => {
                 handle_build(&channel, msg.id, &payload).await?;
             }
             "ping" => {
                 channel
-                    .send_response(msg.id, "ping", json!({ "pong": true }))
+                    .send_response(msg.id, "ping", &json!({ "pong": true }))
                     .await?;
             }
             method => {
@@ -152,7 +152,7 @@ async fn command_loop(
                     .send_response(
                         msg.id,
                         method,
-                        json!({ "error": format!("unknown command: {}", method) }),
+                        &json!({ "error": format!("unknown command: {}", method) }),
                     )
                     .await?;
             }
@@ -196,7 +196,7 @@ async fn handle_deploy(
         let _ = channel_for_log
             .send_event(
                 "deploy_log",
-                json!({
+                &json!({
                     "request_id": request_id,
                     "line": line,
                 }),
@@ -220,7 +220,7 @@ async fn handle_deploy(
     // deploy のビジネスエラーはレスポンスに含め、セッション切断しない
     // チャネル送信エラーのみ伝播（ネットワーク断）
     channel
-        .send_response(request_id, "deploy", response)
+        .send_response(request_id, "deploy", &response)
         .await?;
 
     Ok(())
@@ -251,7 +251,7 @@ async fn handle_build(
             .send_response(
                 request_id,
                 "build",
-                json!({ "status": "failed", "error": "git_url required" }),
+                &json!({ "status": "failed", "error": "git_url required" }),
             )
             .await?;
         return Ok(());
@@ -264,7 +264,7 @@ async fn handle_build(
             .send_response(
                 request_id,
                 "build",
-                json!({ "status": "failed", "error": format!("work dir 作成失敗: {}", e) }),
+                &json!({ "status": "failed", "error": format!("work dir 作成失敗: {}", e) }),
             )
             .await?;
         return Ok(());
@@ -288,7 +288,7 @@ async fn handle_build(
                 .send_response(
                     request_id,
                     "build",
-                    json!({ "status": "failed", "error": err }),
+                    &json!({ "status": "failed", "error": err }),
                 )
                 .await?;
             return Ok(());
@@ -300,7 +300,7 @@ async fn handle_build(
                 .send_response(
                     request_id,
                     "build",
-                    json!({ "status": "failed", "error": err }),
+                    &json!({ "status": "failed", "error": err }),
                 )
                 .await?;
             return Ok(());
@@ -318,7 +318,7 @@ async fn handle_build(
                 .send_response(
                     request_id,
                     "build",
-                    json!({ "status": "failed", "error": err }),
+                    &json!({ "status": "failed", "error": err }),
                 )
                 .await?;
             return Ok(());
@@ -355,7 +355,7 @@ async fn handle_build(
                 .send_response(
                     request_id,
                     "build",
-                    json!({ "status": "failed", "error": err, "duration_ms": duration_ms }),
+                    &json!({ "status": "failed", "error": err, "duration_ms": duration_ms }),
                 )
                 .await?;
             return Ok(());
@@ -380,7 +380,7 @@ async fn handle_build(
                     .send_response(
                         request_id,
                         "build",
-                        json!({ "status": "failed", "error": err, "duration_ms": duration_ms }),
+                        &json!({ "status": "failed", "error": err, "duration_ms": duration_ms }),
                     )
                     .await?;
                 return Ok(());
@@ -392,7 +392,7 @@ async fn handle_build(
                     .send_response(
                         request_id,
                         "build",
-                        json!({ "status": "failed", "error": err, "duration_ms": duration_ms }),
+                        &json!({ "status": "failed", "error": err, "duration_ms": duration_ms }),
                     )
                     .await?;
                 return Ok(());
@@ -407,7 +407,7 @@ async fn handle_build(
         .send_response(
             request_id,
             "build",
-            json!({
+            &json!({
                 "status": "success",
                 "image": image,
                 "duration_ms": duration_ms,

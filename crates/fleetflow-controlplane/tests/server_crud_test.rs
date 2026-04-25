@@ -64,8 +64,8 @@ async fn connect_client(port: u16) -> anyhow::Result<ProtocolClient> {
 
 async fn create_tenant(client: &ProtocolClient, slug: &str) -> anyhow::Result<()> {
     let ch = client.open_channel("tenant").await?;
-    let resp = ch
-        .request("create", json!({ "name": slug, "slug": slug }))
+    let resp: serde_json::Value = ch
+        .request("create", &json!({ "name": slug, "slug": slug }))
         .await?;
     ch.close().await?;
     assert!(resp.get("error").is_none(), "テナント作成失敗: {:?}", resp);
@@ -91,7 +91,7 @@ async fn test_server_get_not_found() -> anyhow::Result<()> {
     let client = connect_client(port).await?;
 
     let ch = client.open_channel("server").await?;
-    let resp = ch.request("get", json!({ "slug": "nonexistent" })).await?;
+    let resp: serde_json::Value = ch.request("get", &json!({ "slug": "nonexistent" })).await?;
 
     assert_eq!(resp["error"].as_str().unwrap(), "server not found");
 
@@ -110,9 +110,9 @@ async fn test_server_get_after_register() -> anyhow::Result<()> {
 
     let ch = client.open_channel("server").await?;
 
-    ch.request(
+    let _: serde_json::Value = ch.request(
         "register",
-        json!({
+        &json!({
             "tenant_slug": "get-test-org",
             "slug": "web-01",
             "provider": "manual",
@@ -123,7 +123,7 @@ async fn test_server_get_after_register() -> anyhow::Result<()> {
     )
     .await?;
 
-    let resp = ch.request("get", json!({ "slug": "web-01" })).await?;
+    let resp: serde_json::Value = ch.request("get", &json!({ "slug": "web-01" })).await?;
     assert!(resp.get("error").is_none(), "get 成功: {:?}", resp);
     assert_eq!(resp["server"]["slug"].as_str().unwrap(), "web-01");
     assert_eq!(resp["server"]["provider"].as_str().unwrap(), "manual");
@@ -144,10 +144,10 @@ async fn test_server_create_no_provider() -> anyhow::Result<()> {
     let client = connect_client(port).await?;
 
     let ch = client.open_channel("server").await?;
-    let resp = ch
+    let resp: serde_json::Value = ch
         .request(
             "create",
-            json!({
+            &json!({
                 "tenant_slug": "some-org",
                 "request": {
                     "name": "test-server",
@@ -178,10 +178,10 @@ async fn test_server_create_tenant_not_found() -> anyhow::Result<()> {
     let client = connect_client(port).await?;
 
     let ch = client.open_channel("server").await?;
-    let resp = ch
+    let resp: serde_json::Value = ch
         .request(
             "create",
-            json!({
+            &json!({
                 "tenant_slug": "nonexistent-org",
                 "request": {
                     "name": "test-server",
@@ -211,10 +211,10 @@ async fn test_server_create_success() -> anyhow::Result<()> {
     create_tenant(&client, "create-test-org").await?;
 
     let ch = client.open_channel("server").await?;
-    let resp = ch
+    let resp: serde_json::Value = ch
         .request(
             "create",
-            json!({
+            &json!({
                 "tenant_slug": "create-test-org",
                 "request": {
                     "name": "fleet-worker-01",
@@ -258,9 +258,9 @@ async fn test_server_delete_db_only() -> anyhow::Result<()> {
 
     let ch = client.open_channel("server").await?;
 
-    ch.request(
+    let _: serde_json::Value = ch.request(
         "register",
-        json!({
+        &json!({
             "tenant_slug": "delete-test-org",
             "slug": "to-delete",
             "provider": "manual",
@@ -269,11 +269,11 @@ async fn test_server_delete_db_only() -> anyhow::Result<()> {
     )
     .await?;
 
-    let resp = ch.request("delete", json!({ "slug": "to-delete" })).await?;
+    let resp: serde_json::Value = ch.request("delete", &json!({ "slug": "to-delete" })).await?;
     assert!(resp.get("error").is_none(), "delete 成功: {:?}", resp);
     assert_eq!(resp["deleted"].as_str().unwrap(), "to-delete");
 
-    let resp = ch.request("get", json!({ "slug": "to-delete" })).await?;
+    let resp: serde_json::Value = ch.request("get", &json!({ "slug": "to-delete" })).await?;
     assert_eq!(resp["error"].as_str().unwrap(), "server not found");
 
     ch.close().await?;
@@ -292,9 +292,9 @@ async fn test_server_delete_with_cloud() -> anyhow::Result<()> {
 
     let ch = client.open_channel("server").await?;
 
-    ch.request(
+    let _: serde_json::Value = ch.request(
         "register",
-        json!({
+        &json!({
             "tenant_slug": "delete-cloud-org",
             "slug": "cloud-server",
             "provider": "mock-provider",
@@ -303,10 +303,10 @@ async fn test_server_delete_with_cloud() -> anyhow::Result<()> {
     )
     .await?;
 
-    let resp = ch
+    let resp: serde_json::Value = ch
         .request(
             "delete",
-            json!({
+            &json!({
                 "slug": "cloud-server",
                 "cloud_id": "99999",
                 "with_disks": true
@@ -336,8 +336,8 @@ async fn test_server_power_on_no_provider() -> anyhow::Result<()> {
     let client = connect_client(port).await?;
 
     let ch = client.open_channel("server").await?;
-    let resp = ch
-        .request("power-on", json!({ "cloud_id": "12345" }))
+    let resp: serde_json::Value = ch
+        .request("power-on", &json!({ "cloud_id": "12345" }))
         .await?;
 
     assert_eq!(
@@ -358,8 +358,8 @@ async fn test_server_power_on_success() -> anyhow::Result<()> {
     let client = connect_client(port).await?;
 
     let ch = client.open_channel("server").await?;
-    let resp = ch
-        .request("power-on", json!({ "cloud_id": "12345" }))
+    let resp: serde_json::Value = ch
+        .request("power-on", &json!({ "cloud_id": "12345" }))
         .await?;
 
     assert!(resp.get("error").is_none(), "power-on 成功: {:?}", resp);
@@ -383,8 +383,8 @@ async fn test_server_power_off_success() -> anyhow::Result<()> {
     let client = connect_client(port).await?;
 
     let ch = client.open_channel("server").await?;
-    let resp = ch
-        .request("power-off", json!({ "cloud_id": "67890" }))
+    let resp: serde_json::Value = ch
+        .request("power-off", &json!({ "cloud_id": "67890" }))
         .await?;
 
     assert!(resp.get("error").is_none(), "power-off 成功: {:?}", resp);

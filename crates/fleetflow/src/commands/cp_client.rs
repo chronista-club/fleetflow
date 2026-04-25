@@ -66,8 +66,8 @@ pub async fn request(
         .await
         .with_context(|| format!("チャネル '{}' オープン失敗", channel_name))?;
 
-    let resp = channel
-        .request(method, payload)
+    let resp: Value = channel
+        .request(method, &payload)
         .await
         .with_context(|| format!("{}.{} リクエスト失敗", channel_name, method))?;
 
