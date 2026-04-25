@@ -266,14 +266,31 @@ impl Database {
     // ─────────────────────────────────────────
 
     pub async fn create_project(&self, project: &Project) -> Result<Project> {
+        // FSC-33: SurrealDB v3 SDK (3.0.2) wss:// engine の bind バグ回避
+        //
+        // 個別 .bind() で Option<String>=None を渡すと wss:// engine が
+        // "Connection uninitialised" を返す (mem:// は再現せず、Cloud 接続のみ)。
+        // 単一 struct を $input に bind する形で個別 None bind 経路を避ける。
+        use surrealdb::types::{RecordId, SurrealValue};
+        #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, SurrealValue)]
+        struct CreateProjectInput {
+            tenant: RecordId,
+            slug: String,
+            name: String,
+            description: Option<String>,
+            repository_url: Option<String>,
+        }
+        let input = CreateProjectInput {
+            tenant: project.tenant.clone(),
+            slug: project.slug.clone(),
+            name: project.name.clone(),
+            description: project.description.clone(),
+            repository_url: project.repository_url.clone(),
+        };
         let mut result = self
             .db
-            .query("CREATE project CONTENT { tenant: $tenant, slug: $slug, name: $name, description: $description, repository_url: $repository_url }")
-            .bind(("tenant", project.tenant.clone()))
-            .bind(("slug", project.slug.clone()))
-            .bind(("name", project.name.clone()))
-            .bind(("description", project.description.clone()))
-            .bind(("repository_url", project.repository_url.clone()))
+            .query("CREATE project CONTENT $input")
+            .bind(("input", input))
             .await
             .context("プロジェクト作成失敗")?;
         let created: Option<Project> = result.take(0)?;
