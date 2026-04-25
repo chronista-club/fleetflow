@@ -73,7 +73,7 @@ anyhow = "1"
 thiserror = "2"
 
 # Docker
-bollard = "0.19"
+bollard = "0.20"
 
 # Configuration
 config = "0.13"
