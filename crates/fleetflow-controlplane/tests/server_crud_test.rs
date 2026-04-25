@@ -110,18 +110,19 @@ async fn test_server_get_after_register() -> anyhow::Result<()> {
 
     let ch = client.open_channel("server").await?;
 
-    let _: serde_json::Value = ch.request(
-        "register",
-        &json!({
-            "tenant_slug": "get-test-org",
-            "slug": "web-01",
-            "provider": "manual",
-            "ssh_host": "192.168.1.100",
-            "ssh_user": "root",
-            "deploy_path": "/opt/app"
-        }),
-    )
-    .await?;
+    let _: serde_json::Value = ch
+        .request(
+            "register",
+            &json!({
+                "tenant_slug": "get-test-org",
+                "slug": "web-01",
+                "provider": "manual",
+                "ssh_host": "192.168.1.100",
+                "ssh_user": "root",
+                "deploy_path": "/opt/app"
+            }),
+        )
+        .await?;
 
     let resp: serde_json::Value = ch.request("get", &json!({ "slug": "web-01" })).await?;
     assert!(resp.get("error").is_none(), "get 成功: {:?}", resp);
@@ -258,18 +259,21 @@ async fn test_server_delete_db_only() -> anyhow::Result<()> {
 
     let ch = client.open_channel("server").await?;
 
-    let _: serde_json::Value = ch.request(
-        "register",
-        &json!({
-            "tenant_slug": "delete-test-org",
-            "slug": "to-delete",
-            "provider": "manual",
-            "ssh_host": "10.0.0.1",
-        }),
-    )
-    .await?;
+    let _: serde_json::Value = ch
+        .request(
+            "register",
+            &json!({
+                "tenant_slug": "delete-test-org",
+                "slug": "to-delete",
+                "provider": "manual",
+                "ssh_host": "10.0.0.1",
+            }),
+        )
+        .await?;
 
-    let resp: serde_json::Value = ch.request("delete", &json!({ "slug": "to-delete" })).await?;
+    let resp: serde_json::Value = ch
+        .request("delete", &json!({ "slug": "to-delete" }))
+        .await?;
     assert!(resp.get("error").is_none(), "delete 成功: {:?}", resp);
     assert_eq!(resp["deleted"].as_str().unwrap(), "to-delete");
 
@@ -292,16 +296,17 @@ async fn test_server_delete_with_cloud() -> anyhow::Result<()> {
 
     let ch = client.open_channel("server").await?;
 
-    let _: serde_json::Value = ch.request(
-        "register",
-        &json!({
-            "tenant_slug": "delete-cloud-org",
-            "slug": "cloud-server",
-            "provider": "mock-provider",
-            "ssh_host": "10.0.0.2",
-        }),
-    )
-    .await?;
+    let _: serde_json::Value = ch
+        .request(
+            "register",
+            &json!({
+                "tenant_slug": "delete-cloud-org",
+                "slug": "cloud-server",
+                "provider": "mock-provider",
+                "ssh_host": "10.0.0.2",
+            }),
+        )
+        .await?;
 
     let resp: serde_json::Value = ch
         .request(
