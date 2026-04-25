@@ -99,14 +99,21 @@ pub async fn handle_tenant(cmd: &TenantCommands) -> Result<()> {
 }
 
 pub async fn handle_project(cmd: &ProjectCommands) -> Result<()> {
-    let (client, _creds) = cp_client::connect().await?;
+    let (client, creds) = cp_client::connect().await?;
+    let tenant_slug = creds.tenant_slug.as_deref().unwrap_or("default");
 
     match cmd {
         ProjectCommands::List => {
             println!("{}", "プロジェクト一覧".bold());
             println!();
 
-            let resp = cp_client::request(&client, "project", "list", json!({})).await?;
+            let resp = cp_client::request(
+                &client,
+                "project",
+                "list",
+                json!({ "tenant_slug": tenant_slug }),
+            )
+            .await?;
 
             if let Some(projects) = resp["projects"].as_array() {
                 if projects.is_empty() {
@@ -136,7 +143,7 @@ pub async fn handle_project(cmd: &ProjectCommands) -> Result<()> {
                 "project",
                 "create",
                 json!({
-                    "tenant_slug": "default",
+                    "tenant_slug": tenant_slug,
                     "name": name,
                     "slug": slug,
                 }),

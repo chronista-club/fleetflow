@@ -51,6 +51,26 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                 }
                             };
 
+                            // FSC-33: 重複作成を SDK の "Connection uninitialised" 翻訳バグに
+                            // 飲まれる前に明示的に検出して 409-equivalent を返す
+                            if let Ok(Some(_)) =
+                                state.db.get_project_by_slug(tenant_slug, slug).await
+                            {
+                                channel
+                                    .send_response(
+                                        msg.id,
+                                        "create",
+                                        &json!({
+                                            "error": format!(
+                                                "project '{}' は tenant '{}' に既に存在します",
+                                                slug, tenant_slug
+                                            )
+                                        }),
+                                    )
+                                    .await?;
+                                continue;
+                            }
+
                             let project = Project {
                                 id: None,
                                 tenant: tenant.id.unwrap(),
