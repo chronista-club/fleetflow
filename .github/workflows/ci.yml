@@ -27,6 +27,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: protoc のインストール (unison v0.4+ buffa crate 用)
+        uses: arduino/setup-protoc@v3
+        with:
+          version: "27.x"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: mise のインストール
         uses: jdx/mise-action@v2
         with:
@@ -58,6 +64,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: protoc のインストール (unison v0.4+ buffa crate 用)
+        uses: arduino/setup-protoc@v3
+        with:
+          version: "27.x"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: mise のインストール
         uses: jdx/mise-action@v2
 
@@ -83,6 +95,12 @@ jobs:
     needs: fast-tests
     steps:
       - uses: actions/checkout@v4
+
+      - name: protoc のインストール (unison v0.4+ buffa crate 用)
+        uses: arduino/setup-protoc@v3
+        with:
+          version: "27.x"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: mise のインストール
         uses: jdx/mise-action@v2
@@ -111,6 +129,12 @@ jobs:
     needs: fast-tests
     steps:
       - uses: actions/checkout@v4
+
+      - name: protoc のインストール (unison v0.4+ buffa crate 用)
+        uses: arduino/setup-protoc@v3
+        with:
+          version: "27.x"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: dtolnay/rust-toolchain@stable
         with:
