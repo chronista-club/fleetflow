@@ -10,7 +10,7 @@ use serde_json::json;
 use super::cp_client;
 use crate::{
     BuildCommands, CostCommands, DnsCommands, ProjectCommands, RemoteCommands, ServerCommands,
-    TenantCommands, VolumeCommands,
+    StageCommands, TenantCommands, VolumeCommands,
 };
 
 pub async fn handle_tenant(cmd: &TenantCommands) -> Result<()> {
@@ -1027,6 +1027,83 @@ pub async fn handle_build(cmd: &BuildCommands) -> Result<()> {
                     "Cancelled.".green().bold(),
                     id.cyan()
                 );
+            }
+
+            client.disconnect().await.ok();
+        }
+    }
+
+    Ok(())
+}
+
+/// Stage Tier コマンド (FSC-16, 2026-04-24)
+///
+/// 既存稼働中の stage を非破壊で CP registry に adopt する。
+/// provision phase は FSC-31 で別途実装予定。
+pub async fn handle_stage(cmd: &StageCommands) -> Result<()> {
+    match cmd {
+        StageCommands::Adopt {
+            project,
+            project_name,
+            stage,
+            description,
+            server,
+            services,
+        } => {
+            if services.is_empty() {
+                anyhow::bail!("少なくとも 1 つの --service slug=image を指定してください");
+            }
+
+            let (client, creds) = cp_client::connect().await?;
+
+            println!("{}", "Stage adopt (BYO)".bold());
+            println!("  docker 状態には一切触れません。CP registry に record を作成します。");
+            println!();
+
+            let tenant_slug = creds.tenant_slug.as_deref().unwrap_or("default");
+
+            let services_payload: Vec<_> = services
+                .iter()
+                .map(|s| json!({ "slug": s.slug, "image": s.image }))
+                .collect();
+
+            let mut payload = json!({
+                "tenant_slug": tenant_slug,
+                "server_slug": server,
+                "project_slug": project,
+                "stage_slug": stage,
+                "services": services_payload,
+            });
+            if let Some(name) = project_name {
+                payload["project_name"] = json!(name);
+            }
+            if let Some(desc) = description {
+                payload["description"] = json!(desc);
+            }
+
+            let resp = cp_client::request(&client, "stage", "adopt", payload).await?;
+
+            if let Some(err) = resp["error"].as_str() {
+                println!("{} {}", "エラー:".red(), err);
+            } else if let Some(outcome) = resp.get("outcome") {
+                println!("{}", "Adopted 🎉".green().bold());
+                if let Some(p) = outcome.get("project") {
+                    println!("  Project: {}", p["slug"].as_str().unwrap_or("-").cyan());
+                }
+                if let Some(st) = outcome.get("stage") {
+                    println!("  Stage:   {}", st["slug"].as_str().unwrap_or("-").cyan());
+                }
+                println!("  Server:  {}", server.cyan());
+                if let Some(svcs) = outcome["services"].as_array() {
+                    println!("  Services ({}):", svcs.len());
+                    for s in svcs {
+                        println!(
+                            "    - {}  ({})",
+                            s["slug"].as_str().unwrap_or("-").cyan(),
+                            s["image"].as_str().unwrap_or("-").dimmed()
+                        );
+                    }
+                }
             }
 
             client.disconnect().await.ok();

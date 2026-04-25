@@ -414,6 +414,142 @@ impl Database {
         Ok(stages)
     }
 
+    /// tenant_id + project_slug で project を解決 (adopt_stage 用)
+    async fn find_project_by_tenant_and_slug(
+        &self,
+        tenant_id: &RecordId,
+        project_slug: &str,
+    ) -> Result<Option<Project>> {
+        let mut result = self
+            .db
+            .query("SELECT * FROM project WHERE tenant = $tenant AND slug = $slug LIMIT 1")
+            .bind(("tenant", tenant_id.clone()))
+            .bind(("slug", project_slug.to_string()))
+            .await
+            .context("project (tenant+slug) 取得失敗")?;
+        let items: Vec<Project> = result.take(0)?;
+        Ok(items.into_iter().next())
+    }
+
+    /// project_id + stage_slug で stage を解決 (adopt_stage 用)
+    async fn find_stage_by_project_and_slug(
+        &self,
+        project_id: &RecordId,
+        stage_slug: &str,
+    ) -> Result<Option<Stage>> {
+        let mut result = self
+            .db
+            .query("SELECT * FROM stage WHERE project = $project AND slug = $slug LIMIT 1")
+            .bind(("project", project_id.clone()))
+            .bind(("slug", stage_slug.to_string()))
+            .await
+            .context("stage (project+slug) 取得失敗")?;
+        let items: Vec<Stage> = result.take(0)?;
+        Ok(items.into_iter().next())
+    }
+
+    /// 既存の稼働中 stage を非破壊で fleetstage registry に adopt する (FSC-16)。
+    ///
+    /// docker や worker には一切触れず、CP DB に以下の record を作成する:
+    /// * `project` — 同 tenant 内に同 slug が無ければ作成、あれば再利用
+    /// * `stage`   — 同 project 内に同 slug が既にあればエラー (二重 adopt 防止)
+    /// * `service` — 各 service spec ごとに新規作成 (desired_status = "running")
+    ///
+    /// Persistence Volume Tier の `adopt_volume` と同じ BYO 哲学。
+    pub async fn adopt_stage(&self, req: &AdoptStageRequest<'_>) -> Result<AdoptStageOutcome> {
+        if req.project_slug.is_empty() {
+            anyhow::bail!("project_slug must not be empty");
+        }
+        if req.stage_slug.is_empty() {
+            anyhow::bail!("stage_slug must not be empty");
+        }
+
+        // project upsert (tenant 内で slug がユニーク)
+        let project = match self
+            .find_project_by_tenant_and_slug(req.tenant_id, req.project_slug)
+            .await?
+        {
+            Some(p) => p,
+            None => {
+                self.create_project(&Project {
+                    id: None,
+                    tenant: req.tenant_id.clone(),
+                    slug: req.project_slug.to_string(),
+                    name: req.project_name.unwrap_or(req.project_slug).to_string(),
+                    description: None,
+                    repository_url: None,
+                    created_at: None,
+                    updated_at: None,
+                })
+                .await?
+            }
+        };
+        let project_id = project
+            .id
+            .clone()
+            .context("project.id should exist after create/fetch")?;
+
+        // stage: 同 project 内で slug が既にあれば二重 adopt を防ぐ
+        if self
+            .find_stage_by_project_and_slug(&project_id, req.stage_slug)
+            .await?
+            .is_some()
+        {
+            anyhow::bail!(
+                "stage `{}` already exists under project `{}` (use existing record)",
+                req.stage_slug,
+                req.project_slug
+            );
+        }
+
+        // stage create
+        let stage = self
+            .create_stage(&Stage {
+                id: None,
+                project: project_id.clone(),
+                slug: req.stage_slug.to_string(),
+                description: req.description.map(String::from),
+                server: Some(req.server_id.clone()),
+                created_at: None,
+                updated_at: None,
+            })
+            .await?;
+        let stage_id = stage
+            .id
+            .clone()
+            .context("stage.id should exist after create")?;
+
+        // services: adopt 時点では image のみ記録し config は None、desired_status = running
+        let mut created_services = Vec::with_capacity(req.services.len());
+        for spec in req.services {
+            if spec.slug.is_empty() {
+                anyhow::bail!("service slug must not be empty");
+            }
+            if spec.image.is_empty() {
+                anyhow::bail!("service image must not be empty (slug=`{}`)", spec.slug);
+            }
+            let svc = self
+                .create_service(&Service {
+                    id: None,
+                    stage: stage_id.clone(),
+                    slug: spec.slug.clone(),
+                    image: spec.image.clone(),
+                    config: None,
+                    desired_status: "running".to_string(),
+                    created_at: None,
+                    updated_at: None,
+                })
+                .await?;
+            created_services.push(svc);
+        }
+
+        Ok(AdoptStageOutcome {
+            project,
+            stage,
+            services: created_services,
+        })
+    }
+
     // ─────────────────────────────────────────
     // Service CRUD
     // ─────────────────────────────────────────
@@ -2717,5 +2853,187 @@ mod tests {
             .await
             .expect_err("invalid state は拒否されるべき");
         assert!(err.to_string().contains("invalid build job state"));
+    }
+
+    // ─────────────────────────────────────────
+    // Stage adopt tests (FSC-16, 2026-04-24)
+    // ─────────────────────────────────────────
+
+    fn gfp_services() -> Vec<AdoptServiceSpec> {
+        vec![
+            AdoptServiceSpec {
+                slug: "gfp-estimate".into(),
+                image: "ghcr.io/anycreative/gfp-estimate:latest".into(),
+            },
+            AdoptServiceSpec {
+                slug: "gfp-web".into(),
+                image: "ghcr.io/anycreative/gfp-web:latest".into(),
+            },
+        ]
+    }
+
+    fn adopt_req<'a>(
+        tenant_id: &'a RecordId,
+        server_id: &'a RecordId,
+        project_slug: &'a str,
+        project_name: Option<&'a str>,
+        stage_slug: &'a str,
+        description: Option<&'a str>,
+        services: &'a [AdoptServiceSpec],
+    ) -> AdoptStageRequest<'a> {
+        AdoptStageRequest {
+            tenant_id,
+            server_id,
+            project_slug,
+            project_name,
+            stage_slug,
+            description,
+            services,
+        }
+    }
+
+    #[tokio::test]
+    async fn adopt_stage_creates_project_stage_and_services() {
+        let db = Database::connect_memory().await.unwrap();
+        let (tenant_id, server_id) = seed_tenant_and_server(&db).await;
+        let services = gfp_services();
+
+        let outcome = db
+            .adopt_stage(&adopt_req(
+                &tenant_id,
+                &server_id,
+                "gfp",
+                Some("GFP Live Fleet"),
+                "dev",
+                Some("GFP dev on fleet-worker-01"),
+                &services,
+            ))
+            .await
+            .unwrap();
+
+        assert_eq!(outcome.project.slug, "gfp");
+        assert_eq!(outcome.project.name, "GFP Live Fleet");
+        assert_eq!(outcome.stage.slug, "dev");
+        assert_eq!(
+            outcome.stage.description.as_deref(),
+            Some("GFP dev on fleet-worker-01")
+        );
+        assert_eq!(outcome.stage.server.as_ref(), Some(&server_id));
+        assert_eq!(outcome.services.len(), 2);
+        let slugs: Vec<_> = outcome.services.iter().map(|s| s.slug.as_str()).collect();
+        assert_eq!(slugs, vec!["gfp-estimate", "gfp-web"]);
+        for s in &outcome.services {
+            assert_eq!(s.desired_status, "running");
+        }
+    }
+
+    #[tokio::test]
+    async fn adopt_stage_reuses_existing_project() {
+        let db = Database::connect_memory().await.unwrap();
+        let (tenant_id, server_id) = seed_tenant_and_server(&db).await;
+        let services = gfp_services();
+
+        // 1 回目: project=gfp, stage=dev を adopt (project が新規作成される)
+        let first = db
+            .adopt_stage(&adopt_req(
+                &tenant_id,
+                &server_id,
+                "gfp",
+                Some("GFP"),
+                "dev",
+                None,
+                &services,
+            ))
+            .await
+            .unwrap();
+        let project_id_first = first.project.id.clone().unwrap();
+
+        // 2 回目: 同じ project の別 stage を adopt — project は再利用されるべき
+        let second = db
+            .adopt_stage(&adopt_req(
+                &tenant_id, &server_id, "gfp", None, "staging", None, &services,
+            ))
+            .await
+            .unwrap();
+
+        assert_eq!(second.project.id.as_ref(), Some(&project_id_first));
+        assert_eq!(second.stage.slug, "staging");
+    }
+
+    #[tokio::test]
+    async fn adopt_stage_rejects_duplicate_stage_under_same_project() {
+        let db = Database::connect_memory().await.unwrap();
+        let (tenant_id, server_id) = seed_tenant_and_server(&db).await;
+        let services = gfp_services();
+
+        db.adopt_stage(&adopt_req(
+            &tenant_id,
+            &server_id,
+            "gfp",
+            Some("GFP"),
+            "dev",
+            None,
+            &services,
+        ))
+        .await
+        .unwrap();
+
+        let err = db
+            .adopt_stage(&adopt_req(
+                &tenant_id, &server_id, "gfp", None, "dev", None, &services,
+            ))
+            .await
+            .expect_err("同一 project 配下の同 slug は拒否されるべき");
+        assert!(
+            err.to_string().contains("already exists"),
+            "error message should mention already exists, got: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn adopt_stage_rejects_empty_slugs() {
+        let db = Database::connect_memory().await.unwrap();
+        let (tenant_id, server_id) = seed_tenant_and_server(&db).await;
+        let services = gfp_services();
+
+        let err = db
+            .adopt_stage(&adopt_req(
+                &tenant_id, &server_id, "", None, "dev", None, &services,
+            ))
+            .await
+            .expect_err("空 project_slug は拒否されるべき");
+        assert!(err.to_string().contains("project_slug must not be empty"));
+
+        let err = db
+            .adopt_stage(&adopt_req(
+                &tenant_id, &server_id, "gfp", None, "", None, &services,
+            ))
+            .await
+            .expect_err("空 stage_slug は拒否されるべき");
+        assert!(err.to_string().contains("stage_slug must not be empty"));
+    }
+
+    #[tokio::test]
+    async fn adopt_stage_rejects_service_with_empty_image() {
+        let db = Database::connect_memory().await.unwrap();
+        let (tenant_id, server_id) = seed_tenant_and_server(&db).await;
+
+        let broken = vec![AdoptServiceSpec {
+            slug: "gfp-web".into(),
+            image: String::new(),
+        }];
+        let err = db
+            .adopt_stage(&adopt_req(
+                &tenant_id,
+                &server_id,
+                "gfp",
+                Some("GFP"),
+                "dev",
+                None,
+                &broken,
+            ))
+            .await
+            .expect_err("空 image は拒否されるべき");
+        assert!(err.to_string().contains("service image must not be empty"));
     }
 }

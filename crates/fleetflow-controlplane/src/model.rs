@@ -277,6 +277,45 @@ pub struct StageOverview {
 }
 
 // ─────────────────────────────────────────────
+// Stage Tier adopt DTO (FSC-16, 2026-04-24)
+//
+// 既存稼働中の stage を非破壊で fleetstage registry に登録するための
+// request/outcome 型。Persistence Volume Tier の BYO adopt と同系。
+// ─────────────────────────────────────────────
+
+/// adopt_stage に渡す service 1 件の最小 spec。
+/// 現時点では slug / image のみを記録し、config は None で始める。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdoptServiceSpec {
+    pub slug: String,
+    pub image: String,
+}
+
+/// `Database::adopt_stage` への入力。borrowed form のまとまり。
+///
+/// `clippy::too_many_arguments` を避けつつ、project/stage の必須フィールドと
+/// optional (project_name, description) を 1 つの struct に集約する。
+#[derive(Debug)]
+pub struct AdoptStageRequest<'a> {
+    pub tenant_id: &'a RecordId,
+    pub server_id: &'a RecordId,
+    pub project_slug: &'a str,
+    pub project_name: Option<&'a str>,
+    pub stage_slug: &'a str,
+    pub description: Option<&'a str>,
+    pub services: &'a [AdoptServiceSpec],
+}
+
+/// adopt_stage の結果: どの project / stage / services が使われたか。
+/// project は既存なら再利用、stage と services は常に新規作成。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdoptStageOutcome {
+    pub project: Project,
+    pub stage: Stage,
+    pub services: Vec<Service>,
+}
+
+// ─────────────────────────────────────────────
 // CP-004: Service
 // ─────────────────────────────────────────────
 
