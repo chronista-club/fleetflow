@@ -189,14 +189,21 @@ pub async fn handle_project(cmd: &ProjectCommands) -> Result<()> {
 }
 
 pub async fn handle_server(cmd: &ServerCommands) -> Result<()> {
-    let (client, _creds) = cp_client::connect().await?;
+    let (client, creds) = cp_client::connect().await?;
+    let tenant_slug = creds.tenant_slug.as_deref().unwrap_or("default");
 
     match cmd {
         ServerCommands::List => {
             println!("{}", "サーバー一覧".bold());
             println!();
 
-            let resp = cp_client::request(&client, "server", "list", json!({})).await?;
+            let resp = cp_client::request(
+                &client,
+                "server",
+                "list",
+                json!({ "tenant_slug": tenant_slug }),
+            )
+            .await?;
 
             if let Some(servers) = resp["servers"].as_array() {
                 if servers.is_empty() {
@@ -238,7 +245,7 @@ pub async fn handle_server(cmd: &ServerCommands) -> Result<()> {
             println!("{}", "サーバー登録".bold());
 
             let mut payload = json!({
-                "tenant_slug": "default",
+                "tenant_slug": tenant_slug,
                 "slug": slug,
                 "hostname": slug,
                 "provider": provider,
@@ -262,7 +269,13 @@ pub async fn handle_server(cmd: &ServerCommands) -> Result<()> {
             println!();
 
             // server チャネルには get メソッドがないので list から検索
-            let resp = cp_client::request(&client, "server", "list", json!({})).await?;
+            let resp = cp_client::request(
+                &client,
+                "server",
+                "list",
+                json!({ "tenant_slug": tenant_slug }),
+            )
+            .await?;
 
             if let Some(servers) = resp["servers"].as_array() {
                 if let Some(server) = servers
@@ -353,7 +366,8 @@ pub async fn handle_server(cmd: &ServerCommands) -> Result<()> {
 }
 
 pub async fn handle_cost(cmd: &CostCommands) -> Result<()> {
-    let (client, _creds) = cp_client::connect().await?;
+    let (client, creds) = cp_client::connect().await?;
+    let tenant_slug = creds.tenant_slug.as_deref().unwrap_or("default");
 
     match cmd {
         CostCommands::List { month } => {
@@ -364,7 +378,7 @@ pub async fn handle_cost(cmd: &CostCommands) -> Result<()> {
                 &client,
                 "cost",
                 "list",
-                json!({ "tenant_slug": "default", "month": month }),
+                json!({ "tenant_slug": tenant_slug, "month": month }),
             )
             .await?;
 
@@ -402,7 +416,7 @@ pub async fn handle_cost(cmd: &CostCommands) -> Result<()> {
                 &client,
                 "cost",
                 "summary",
-                json!({ "tenant_slug": "default", "month": month }),
+                json!({ "tenant_slug": tenant_slug, "month": month }),
             )
             .await?;
 
@@ -446,7 +460,7 @@ pub async fn handle_cost(cmd: &CostCommands) -> Result<()> {
             println!("{}", "コストエントリ登録".bold());
 
             let mut payload = json!({
-                "tenant_slug": "default",
+                "tenant_slug": tenant_slug,
                 "provider": provider,
                 "amount_jpy": amount,
                 "month": month,
@@ -478,16 +492,21 @@ pub async fn handle_cost(cmd: &CostCommands) -> Result<()> {
 }
 
 pub async fn handle_dns(cmd: &DnsCommands) -> Result<()> {
-    let (client, _creds) = cp_client::connect().await?;
+    let (client, creds) = cp_client::connect().await?;
+    let tenant_slug = creds.tenant_slug.as_deref().unwrap_or("default");
 
     match cmd {
         DnsCommands::List => {
             println!("{}", "DNS レコード一覧".bold());
             println!();
 
-            let resp =
-                cp_client::request(&client, "dns", "list", json!({ "tenant_slug": "default" }))
-                    .await?;
+            let resp = cp_client::request(
+                &client,
+                "dns",
+                "list",
+                json!({ "tenant_slug": tenant_slug }),
+            )
+            .await?;
 
             if let Some(records) = resp["dns_records"].as_array() {
                 if records.is_empty() {
@@ -529,7 +548,7 @@ pub async fn handle_dns(cmd: &DnsCommands) -> Result<()> {
             println!("{}", "DNS レコード作成".bold());
 
             let mut payload = json!({
-                "tenant_slug": "default",
+                "tenant_slug": tenant_slug,
                 "name": name,
                 "record_type": record_type,
                 "content": content,
@@ -566,9 +585,13 @@ pub async fn handle_dns(cmd: &DnsCommands) -> Result<()> {
         DnsCommands::Sync => {
             println!("{}", "Cloudflare DNS 同期".bold());
 
-            let resp =
-                cp_client::request(&client, "dns", "sync", json!({ "tenant_slug": "default" }))
-                    .await?;
+            let resp = cp_client::request(
+                &client,
+                "dns",
+                "sync",
+                json!({ "tenant_slug": tenant_slug }),
+            )
+            .await?;
 
             if let Some(err) = resp["error"].as_str() {
                 println!("{} {}", "エラー:".red(), err);
@@ -598,7 +621,8 @@ pub async fn handle_dns(cmd: &DnsCommands) -> Result<()> {
 }
 
 pub async fn handle_remote(cmd: &RemoteCommands) -> Result<()> {
-    let (client, _creds) = cp_client::connect().await?;
+    let (client, creds) = cp_client::connect().await?;
+    let tenant_slug = creds.tenant_slug.as_deref().unwrap_or("default");
 
     match cmd {
         RemoteCommands::Deploy {
@@ -622,7 +646,7 @@ pub async fn handle_remote(cmd: &RemoteCommands) -> Result<()> {
                 "deploy",
                 "run",
                 json!({
-                    "tenant_slug": "default",
+                    "tenant_slug": tenant_slug,
                     "project_slug": project,
                     "stage": stage,
                     "server_slug": server,
@@ -662,7 +686,7 @@ pub async fn handle_remote(cmd: &RemoteCommands) -> Result<()> {
                 "deploy",
                 "history",
                 json!({
-                    "tenant_slug": "default",
+                    "tenant_slug": tenant_slug,
                     "limit": limit,
                 }),
             )
