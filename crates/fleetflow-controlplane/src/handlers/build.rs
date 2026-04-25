@@ -38,7 +38,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                         .send_response(
                                             msg.id,
                                             "submit",
-                                            json!({ "error": "tenant not found" }),
+                                            &json!({ "error": "tenant not found" }),
                                         )
                                         .await?;
                                     continue;
@@ -49,7 +49,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                         .send_response(
                                             msg.id,
                                             "submit",
-                                            json!({ "error": e.to_string() }),
+                                            &json!({ "error": e.to_string() }),
                                         )
                                         .await?;
                                     continue;
@@ -71,7 +71,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                     .send_response(
                                         msg.id,
                                         "submit",
-                                        json!({ "error": "`git_url` required" }),
+                                        &json!({ "error": "`git_url` required" }),
                                     )
                                     .await?;
                                 continue;
@@ -82,7 +82,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                     .send_response(
                                         msg.id,
                                         "submit",
-                                        json!({ "error": format!("invalid kind: {}", kind) }),
+                                        &json!({ "error": format!("invalid kind: {}", kind) }),
                                     )
                                     .await?;
                                 continue;
@@ -127,7 +127,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                         .send_response(
                                             msg.id,
                                             "submit",
-                                            json!({ "build_job": created }),
+                                            &json!({ "build_job": created }),
                                         )
                                         .await?;
                                 }
@@ -137,7 +137,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                         .send_response(
                                             msg.id,
                                             "submit",
-                                            json!({ "error": e.to_string() }),
+                                            &json!({ "error": e.to_string() }),
                                         )
                                         .await?;
                                 }
@@ -154,7 +154,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                         .send_response(
                                             msg.id,
                                             "list",
-                                            json!({ "error": "tenant not found" }),
+                                            &json!({ "error": "tenant not found" }),
                                         )
                                         .await?;
                                     continue;
@@ -165,7 +165,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                         .send_response(
                                             msg.id,
                                             "list",
-                                            json!({ "error": e.to_string() }),
+                                            &json!({ "error": e.to_string() }),
                                         )
                                         .await?;
                                     continue;
@@ -179,7 +179,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                         .send_response(
                                             msg.id,
                                             "list",
-                                            json!({ "build_jobs": jobs }),
+                                            &json!({ "build_jobs": jobs }),
                                         )
                                         .await?;
                                 }
@@ -189,7 +189,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                         .send_response(
                                             msg.id,
                                             "list",
-                                            json!({ "error": e.to_string() }),
+                                            &json!({ "error": e.to_string() }),
                                         )
                                         .await?;
                                 }
@@ -205,7 +205,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                     .send_response(
                                         msg.id,
                                         "get",
-                                        json!({ "error": "`job_id` required" }),
+                                        &json!({ "error": "`job_id` required" }),
                                     )
                                     .await?;
                                 continue;
@@ -219,7 +219,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                         .send_response(
                                             msg.id,
                                             "get",
-                                            json!({ "error": "tenant not found" }),
+                                            &json!({ "error": "tenant not found" }),
                                         )
                                         .await?;
                                     continue;
@@ -230,7 +230,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                         .send_response(
                                             msg.id,
                                             "get",
-                                            json!({ "error": e.to_string() }),
+                                            &json!({ "error": e.to_string() }),
                                         )
                                         .await?;
                                     continue;
@@ -250,7 +250,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                             .send_response(
                                                 msg.id,
                                                 "get",
-                                                json!({ "error": "job does not belong to this tenant" }),
+                                                &json!({ "error": "job does not belong to this tenant" }),
                                             )
                                             .await?;
                                         continue;
@@ -259,7 +259,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                         .send_response(
                                             msg.id,
                                             "get",
-                                            json!({ "build_job": job }),
+                                            &json!({ "build_job": job }),
                                         )
                                         .await?;
                                 }
@@ -268,7 +268,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                         .send_response(
                                             msg.id,
                                             "get",
-                                            json!({ "error": "build job not found" }),
+                                            &json!({ "error": "build job not found" }),
                                         )
                                         .await?;
                                 }
@@ -278,7 +278,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                         .send_response(
                                             msg.id,
                                             "get",
-                                            json!({ "error": e.to_string() }),
+                                            &json!({ "error": e.to_string() }),
                                         )
                                         .await?;
                                 }
@@ -294,7 +294,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                     .send_response(
                                         msg.id,
                                         "cancel",
-                                        json!({ "error": "`job_id` required" }),
+                                        &json!({ "error": "`job_id` required" }),
                                     )
                                     .await?;
                                 continue;
@@ -307,7 +307,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                         .send_response(
                                             msg.id,
                                             "cancel",
-                                            json!({ "error": "tenant not found" }),
+                                            &json!({ "error": "tenant not found" }),
                                         )
                                         .await?;
                                     continue;
@@ -318,7 +318,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                         .send_response(
                                             msg.id,
                                             "cancel",
-                                            json!({ "error": e.to_string() }),
+                                            &json!({ "error": e.to_string() }),
                                         )
                                         .await?;
                                     continue;
@@ -337,7 +337,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                             .send_response(
                                                 msg.id,
                                                 "cancel",
-                                                json!({ "error": "job does not belong to this tenant" }),
+                                                &json!({ "error": "job does not belong to this tenant" }),
                                             )
                                             .await?;
                                         continue;
@@ -351,7 +351,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                             .send_response(
                                                 msg.id,
                                                 "cancel",
-                                                json!({ "error": format!("cannot cancel job in state: {}", job.state) }),
+                                                &json!({ "error": format!("cannot cancel job in state: {}", job.state) }),
                                             )
                                             .await?;
                                         continue;
@@ -367,7 +367,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                                 .send_response(
                                                     msg.id,
                                                     "cancel",
-                                                    json!({ "status": "cancelled" }),
+                                                    &json!({ "status": "cancelled" }),
                                                 )
                                                 .await?;
                                         }
@@ -377,7 +377,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                                 .send_response(
                                                     msg.id,
                                                     "cancel",
-                                                    json!({ "error": e.to_string() }),
+                                                    &json!({ "error": e.to_string() }),
                                                 )
                                                 .await?;
                                         }
@@ -388,7 +388,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                         .send_response(
                                             msg.id,
                                             "cancel",
-                                            json!({ "error": "build job not found" }),
+                                            &json!({ "error": "build job not found" }),
                                         )
                                         .await?;
                                 }
@@ -398,7 +398,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                         .send_response(
                                             msg.id,
                                             "cancel",
-                                            json!({ "error": e.to_string() }),
+                                            &json!({ "error": e.to_string() }),
                                         )
                                         .await?;
                                 }
@@ -409,7 +409,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                 .send_response(
                                     msg.id,
                                     other,
-                                    json!({ "error": format!("unknown method: {}", other) }),
+                                    &json!({ "error": format!("unknown method: {}", other) }),
                                 )
                                 .await?;
                         }

@@ -24,7 +24,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                             match state.db.get_tenant_by_slug(slug).await {
                                 Ok(Some(tenant)) => {
                                     channel
-                                        .send_response(msg.id, "get", json!({ "tenant": tenant }))
+                                        .send_response(msg.id, "get", &json!({ "tenant": tenant }))
                                         .await?;
                                 }
                                 Ok(None) => {
@@ -32,7 +32,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                         .send_response(
                                             msg.id,
                                             "get",
-                                            json!({ "error": "tenant not found" }),
+                                            &json!({ "error": "tenant not found" }),
                                         )
                                         .await?;
                                 }
@@ -42,7 +42,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                         .send_response(
                                             msg.id,
                                             "get",
-                                            json!({ "error": e.to_string() }),
+                                            &json!({ "error": e.to_string() }),
                                         )
                                         .await?;
                                 }
@@ -77,7 +77,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                         .send_response(
                                             msg.id,
                                             "create",
-                                            json!({ "tenant": created }),
+                                            &json!({ "tenant": created }),
                                         )
                                         .await?;
                                 }
@@ -87,7 +87,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                         .send_response(
                                             msg.id,
                                             "create",
-                                            json!({ "error": e.to_string() }),
+                                            &json!({ "error": e.to_string() }),
                                         )
                                         .await?;
                                 }
@@ -96,7 +96,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                         "list" => match state.db.list_tenants().await {
                             Ok(tenants) => {
                                 channel
-                                    .send_response(msg.id, "list", json!({ "tenants": tenants }))
+                                    .send_response(msg.id, "list", &json!({ "tenants": tenants }))
                                     .await?;
                             }
                             Err(e) => {
@@ -105,7 +105,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                     .send_response(
                                         msg.id,
                                         "list",
-                                        json!({ "error": e.to_string() }),
+                                        &json!({ "error": e.to_string() }),
                                     )
                                     .await?;
                             }
@@ -116,7 +116,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                 .send_response(
                                     msg.id,
                                     method,
-                                    json!({ "error": format!("unknown method: {}", method) }),
+                                    &json!({ "error": format!("unknown method: {}", method) }),
                                 )
                                 .await?;
                         }

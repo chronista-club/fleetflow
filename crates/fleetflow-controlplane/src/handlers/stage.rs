@@ -41,7 +41,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                         .send_response(
                                             msg.id,
                                             "create",
-                                            json!({ "stage": created }),
+                                            &json!({ "stage": created }),
                                         )
                                         .await?;
                                 }
@@ -51,7 +51,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                         .send_response(
                                             msg.id,
                                             "create",
-                                            json!({ "error": e.to_string() }),
+                                            &json!({ "error": e.to_string() }),
                                         )
                                         .await?;
                                 }
@@ -65,7 +65,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                             match state.db.list_stages_by_project(&project_id).await {
                                 Ok(stages) => {
                                     channel
-                                        .send_response(msg.id, "list", json!({ "stages": stages }))
+                                        .send_response(msg.id, "list", &json!({ "stages": stages }))
                                         .await?;
                                 }
                                 Err(e) => {
@@ -74,7 +74,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                         .send_response(
                                             msg.id,
                                             "list",
-                                            json!({ "error": e.to_string() }),
+                                            &json!({ "error": e.to_string() }),
                                         )
                                         .await?;
                                 }
@@ -94,7 +94,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                         .send_response(
                                             msg.id,
                                             "list_across_projects",
-                                            json!({ "stages": stages }),
+                                            &json!({ "stages": stages }),
                                         )
                                         .await?;
                                 }
@@ -104,7 +104,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                         .send_response(
                                             msg.id,
                                             "list_across_projects",
-                                            json!({ "error": e.to_string() }),
+                                            &json!({ "error": e.to_string() }),
                                         )
                                         .await?;
                                 }
@@ -130,7 +130,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                         .send_response(
                                             msg.id,
                                             "adopt",
-                                            json!({ "error": format!("`{}` required", name) }),
+                                            &json!({ "error": format!("`{}` required", name) }),
                                         )
                                         .await?;
                                     continue;
@@ -155,7 +155,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                         .send_response(
                                             msg.id,
                                             "adopt",
-                                            json!({ "error": "`services` must be a non-empty array of { slug, image }" }),
+                                            &json!({ "error": "`services` must be a non-empty array of { slug, image }" }),
                                         )
                                         .await?;
                                     continue;
@@ -170,7 +170,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                         .send_response(
                                             msg.id,
                                             "adopt",
-                                            json!({ "error": "tenant not found" }),
+                                            &json!({ "error": "tenant not found" }),
                                         )
                                         .await?;
                                     continue;
@@ -181,7 +181,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                         .send_response(
                                             msg.id,
                                             "adopt",
-                                            json!({ "error": e.to_string() }),
+                                            &json!({ "error": e.to_string() }),
                                         )
                                         .await?;
                                     continue;
@@ -197,7 +197,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                         .send_response(
                                             msg.id,
                                             "adopt",
-                                            json!({
+                                            &json!({
                                                 "error": format!("server `{}` not found", server_slug)
                                             }),
                                         )
@@ -210,7 +210,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                         .send_response(
                                             msg.id,
                                             "adopt",
-                                            json!({ "error": e.to_string() }),
+                                            &json!({ "error": e.to_string() }),
                                         )
                                         .await?;
                                     continue;
@@ -221,7 +221,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                     .send_response(
                                         msg.id,
                                         "adopt",
-                                        json!({ "error": "server does not belong to this tenant" }),
+                                        &json!({ "error": "server does not belong to this tenant" }),
                                     )
                                     .await?;
                                 continue;
@@ -253,7 +253,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                         .send_response(
                                             msg.id,
                                             "adopt",
-                                            json!({ "outcome": outcome }),
+                                            &json!({ "outcome": outcome }),
                                         )
                                         .await?;
                                 }
@@ -263,7 +263,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                         .send_response(
                                             msg.id,
                                             "adopt",
-                                            json!({ "error": e.to_string() }),
+                                            &json!({ "error": e.to_string() }),
                                         )
                                         .await?;
                                 }
@@ -275,7 +275,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                 .send_response(
                                     msg.id,
                                     method,
-                                    json!({ "error": format!("unknown method: {}", method) }),
+                                    &json!({ "error": format!("unknown method: {}", method) }),
                                 )
                                 .await?;
                         }

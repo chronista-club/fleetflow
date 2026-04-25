@@ -35,7 +35,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                         .send_response(
                                             msg.id,
                                             "create",
-                                            json!({ "error": "tenant not found" }),
+                                            &json!({ "error": "tenant not found" }),
                                         )
                                         .await?;
                                     continue;
@@ -46,7 +46,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                         .send_response(
                                             msg.id,
                                             "create",
-                                            json!({ "error": e.to_string() }),
+                                            &json!({ "error": e.to_string() }),
                                         )
                                         .await?;
                                     continue;
@@ -59,7 +59,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                         .send_response(
                                             msg.id,
                                             "create",
-                                            json!({ "error": "tenant has no id" }),
+                                            &json!({ "error": "tenant has no id" }),
                                         )
                                         .await?;
                                     continue;
@@ -120,7 +120,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                         .send_response(
                                             msg.id,
                                             "create",
-                                            json!({ "dns_record": created }),
+                                            &json!({ "dns_record": created }),
                                         )
                                         .await?;
                                 }
@@ -130,7 +130,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                         .send_response(
                                             msg.id,
                                             "create",
-                                            json!({ "error": e.to_string() }),
+                                            &json!({ "error": e.to_string() }),
                                         )
                                         .await?;
                                 }
@@ -145,7 +145,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                         .send_response(
                                             msg.id,
                                             "list",
-                                            json!({ "dns_records": records }),
+                                            &json!({ "dns_records": records }),
                                         )
                                         .await?;
                                 }
@@ -155,7 +155,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                         .send_response(
                                             msg.id,
                                             "list",
-                                            json!({ "error": e.to_string() }),
+                                            &json!({ "error": e.to_string() }),
                                         )
                                         .await?;
                                 }
@@ -185,7 +185,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                         .send_response(
                                             msg.id,
                                             "delete",
-                                            json!({ "deleted": deleted }),
+                                            &json!({ "deleted": deleted }),
                                         )
                                         .await?;
                                 }
@@ -195,7 +195,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                         .send_response(
                                             msg.id,
                                             "delete",
-                                            json!({ "error": e.to_string() }),
+                                            &json!({ "error": e.to_string() }),
                                         )
                                         .await?;
                                 }
@@ -212,7 +212,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                             .send_response(
                                                 msg.id,
                                                 "sync",
-                                                json!({ "error": format!("Cloudflare 設定エラー: {e}") }),
+                                                &json!({ "error": format!("Cloudflare 設定エラー: {e}") }),
                                             )
                                             .await?;
                                         continue;
@@ -232,7 +232,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                         .send_response(
                                             msg.id,
                                             "sync",
-                                            json!({ "error": e.to_string() }),
+                                            &json!({ "error": e.to_string() }),
                                         )
                                         .await?;
                                     continue;
@@ -252,7 +252,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                         .send_response(
                                             msg.id,
                                             "sync",
-                                            json!({ "error": e.to_string() }),
+                                            &json!({ "error": e.to_string() }),
                                         )
                                         .await?;
                                     continue;
@@ -269,7 +269,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                         .send_response(
                                             msg.id,
                                             "sync",
-                                            json!({ "error": "tenant not found" }),
+                                            &json!({ "error": "tenant not found" }),
                                         )
                                         .await?;
                                     continue;
@@ -325,7 +325,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                 .send_response(
                                     msg.id,
                                     "sync",
-                                    json!({
+                                    &json!({
                                         "imported": imported,
                                         "cf_total": cf_records.len(),
                                         "db_total": db_records.len() + imported as usize,
@@ -340,7 +340,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                 .send_response(
                                     msg.id,
                                     method,
-                                    json!({ "error": format!("unknown method: {}", method) }),
+                                    &json!({ "error": format!("unknown method: {}", method) }),
                                 )
                                 .await?;
                         }

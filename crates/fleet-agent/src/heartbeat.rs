@@ -23,10 +23,10 @@ pub async fn run_loop(client: &Arc<ProtocolClient>, server_slug: &str, interval_
 async fn send_heartbeat(client: &ProtocolClient, server_slug: &str) -> anyhow::Result<()> {
     let channel = client.open_channel("health").await?;
 
-    channel
+    let _: serde_json::Value = channel
         .request(
             "heartbeat",
-            json!({
+            &json!({
                 "server_slug": server_slug,
                 "agent_version": env!("CARGO_PKG_VERSION"),
             }),

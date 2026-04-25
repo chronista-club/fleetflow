@@ -16,7 +16,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                 loop {
                     let msg = channel.recv().await?;
                     let payload: serde_json::Value =
-                        serde_json::from_str(&msg.payload).unwrap_or_default();
+                        serde_json::from_slice(&msg.payload).unwrap_or_default();
 
                     match msg.method.as_str() {
                         "start" => {
@@ -28,7 +28,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                     .send_response(
                                         msg.id,
                                         "start",
-                                        json!({ "error": "container_name is required" }),
+                                        &json!({ "error": "container_name is required" }),
                                     )
                                     .await?;
                                 continue;
@@ -39,7 +39,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                 Ok(()) => json!({ "status": "started", "container_name": container_name }),
                                 Err(e) => json!({ "error": e.to_string() }),
                             };
-                            channel.send_response(msg.id, "start", resp).await?;
+                            channel.send_response(msg.id, "start", &resp).await?;
                         }
                         "stop" => {
                             let container_name =
@@ -50,7 +50,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                     .send_response(
                                         msg.id,
                                         "stop",
-                                        json!({ "error": "container_name is required" }),
+                                        &json!({ "error": "container_name is required" }),
                                     )
                                     .await?;
                                 continue;
@@ -61,7 +61,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                 Ok(()) => json!({ "status": "stopped", "container_name": container_name }),
                                 Err(e) => json!({ "error": e.to_string() }),
                             };
-                            channel.send_response(msg.id, "stop", resp).await?;
+                            channel.send_response(msg.id, "stop", &resp).await?;
                         }
                         "restart" => {
                             let container_name =
@@ -72,7 +72,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                     .send_response(
                                         msg.id,
                                         "restart",
-                                        json!({ "error": "container_name is required" }),
+                                        &json!({ "error": "container_name is required" }),
                                     )
                                     .await?;
                                 continue;
@@ -83,7 +83,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                 Ok(()) => json!({ "status": "restarted", "container_name": container_name }),
                                 Err(e) => json!({ "error": e.to_string() }),
                             };
-                            channel.send_response(msg.id, "restart", resp).await?;
+                            channel.send_response(msg.id, "restart", &resp).await?;
                         }
                         "logs" => {
                             // TODO: Event push でログストリーミング
@@ -97,7 +97,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                 Ok(logs) => json!({ "logs": logs, "container_name": container_name }),
                                 Err(e) => json!({ "error": e.to_string() }),
                             };
-                            channel.send_response(msg.id, "logs", resp).await?;
+                            channel.send_response(msg.id, "logs", &resp).await?;
                         }
                         "exec" => {
                             // TODO: Phase 2 — Raw bytes で stdin/stdout 双方向通信
@@ -105,7 +105,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                 .send_response(
                                     msg.id,
                                     "exec",
-                                    json!({ "error": "exec は Phase 2 で実装予定" }),
+                                    &json!({ "error": "exec は Phase 2 で実装予定" }),
                                 )
                                 .await?;
                         }
@@ -115,7 +115,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                 .send_response(
                                     msg.id,
                                     method,
-                                    json!({ "error": format!("unknown method: {}", method) }),
+                                    &json!({ "error": format!("unknown method: {}", method) }),
                                 )
                                 .await?;
                         }

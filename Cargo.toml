@@ -63,7 +63,7 @@ aes-gcm = "0.10"
 # KDL parser
 kdl = "6"
 unison-kdl = { git = "https://github.com/chronista-club/unison-kdl", rev = "a5a37ce" }
-unison = { git = "https://github.com/chronista-club/unison", rev = "f3542df" }
+unison = { git = "https://github.com/chronista-club/unison", rev = "6a37611" }
 
 # Template engine
 tera = "1"
