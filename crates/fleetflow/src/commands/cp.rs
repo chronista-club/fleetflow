@@ -380,9 +380,7 @@ pub async fn handle_server(cmd: &ServerCommands) -> Result<()> {
                 }
             };
             let sakura_id = server["sakura"]["server_id"].as_i64().ok_or_else(|| {
-                anyhow::anyhow!(
-                    "sakura.server_id が記録されていません (record の populate が必要)"
-                )
+                anyhow::anyhow!("sakura.server_id が記録されていません (record の populate が必要)")
             })?;
             let zone = server["sakura"]["zone"].as_str().unwrap_or("tk1a");
             let host = server["dns"]["public_ipv4"]
