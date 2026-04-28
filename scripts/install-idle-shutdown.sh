@@ -43,14 +43,14 @@ cat > /usr/local/bin/idle-shutdown.sh <<'SCRIPT_INNER'
 #   systemctl disable --now idle-shutdown.timer
 #
 # 環境変数 (override 可能):
-#   IDLE_THRESHOLD_MIN   shutdown までの idle 時間 (default: 15)
-#   MIN_UPTIME_MIN       boot 直後の即 shutdown 回避 (default: 15)
+#   IDLE_THRESHOLD_MIN   shutdown までの idle 時間 (default: 10)
+#   MIN_UPTIME_MIN       boot 直後の即 shutdown 回避 (default: 10)
 #   GRACE_MIN            shutdown 発行から実 poweroff までの猶予 (default: 2 min、journal で確認 + cancel 余地)
 
 set -euo pipefail
 
-IDLE_THRESHOLD_MIN="${IDLE_THRESHOLD_MIN:-15}"
-MIN_UPTIME_MIN="${MIN_UPTIME_MIN:-15}"
+IDLE_THRESHOLD_MIN="${IDLE_THRESHOLD_MIN:-10}"
+MIN_UPTIME_MIN="${MIN_UPTIME_MIN:-10}"
 GRACE_MIN="${GRACE_MIN:-2}"
 DISABLE_FLAG="/run/idle-shutdown.disable"
 
