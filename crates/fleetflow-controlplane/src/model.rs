@@ -400,6 +400,56 @@ pub mod scheduling_state {
     pub const DRAIN: &str = "drain";
 }
 
+/// Server desired state の文字列定数 (single-table lifecycle model)
+/// user の意図を表す。物理 `status` (observed) とは別。
+pub mod desired_state {
+    /// 通常稼働
+    pub const RUNNING: &str = "running";
+    /// 計画 maintenance / replace 前準備
+    pub const CORDONED: &str = "cordoned";
+    /// 廃止予定 / 廃止済み（record は残す、`status="decommissioned"` で確定）
+    pub const DECOMMISSIONED: &str = "decommissioned";
+}
+
+/// Sakura Cloud infrastructure metadata
+/// VM spawn 時に provisioning controller が書き込む
+#[derive(Debug, Clone, Default, Serialize, Deserialize, SurrealValue)]
+pub struct SakuraInfo {
+    pub server_id: Option<i64>,
+    pub disk_id: Option<i64>,
+    pub archive_id: Option<i64>,
+    pub zone: Option<String>,
+}
+
+/// Tailscale tailnet metadata
+/// `tailscale up --authkey` 完了時に書き込む
+#[derive(Debug, Clone, Default, Serialize, Deserialize, SurrealValue)]
+pub struct TailscaleInfo {
+    pub hostname: Option<String>,
+    pub tailnet_ip: Option<String>,
+    pub node_id: Option<String>,
+    pub joined_at: Option<DateTime<Utc>>,
+}
+
+/// DNS / public network metadata
+#[derive(Debug, Clone, Default, Serialize, Deserialize, SurrealValue)]
+pub struct DnsInfo {
+    pub fqdn: Option<String>,
+    pub cloudflare_record_id: Option<String>,
+    pub public_ipv4: Option<String>,
+    pub public_ipv6: Option<String>,
+}
+
+/// Lifecycle audit metadata (set once, immutable)
+/// replace は新 record + 旧 record の `replaced_from` link で表現
+#[derive(Debug, Clone, Default, Serialize, Deserialize, SurrealValue)]
+pub struct ServerLifecycle {
+    pub spawned_at: Option<DateTime<Utc>>,
+    pub last_replaced_at: Option<DateTime<Utc>>,
+    pub decommissioned_at: Option<DateTime<Utc>>,
+    pub replaced_from: Option<RecordId>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, SurrealValue)]
 pub struct Server {
     pub id: Option<RecordId>,
@@ -428,6 +478,21 @@ pub struct Server {
     /// 所属 Worker Pool (FSC-26 Phase B-2)
     /// None = 未割当（通常は migration で `worker_pool:default` が入る）
     pub pool_id: Option<RecordId>,
+    /// User-declared desired state ("running" | "cordoned" | "decommissioned")
+    /// `desired_state` モジュールの定数を使用
+    pub desired_state: Option<String>,
+    /// Human-readable purpose / role description
+    pub purpose: Option<String>,
+    /// Owner (e.g., user email or team)
+    pub owner: Option<String>,
+    /// Sakura cloud infrastructure metadata
+    pub sakura: Option<SakuraInfo>,
+    /// Tailscale tailnet metadata
+    pub tailscale: Option<TailscaleInfo>,
+    /// DNS / public network metadata
+    pub dns: Option<DnsInfo>,
+    /// Lifecycle audit (immutable once set)
+    pub lifecycle: Option<ServerLifecycle>,
     pub created_at: Option<DateTime<Utc>>,
     pub updated_at: Option<DateTime<Utc>>,
 }

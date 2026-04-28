@@ -99,6 +99,14 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                 scheduling: None,
                                 // FSC-26 Phase B-2: migration で worker_pool:default に紐付け
                                 pool_id: None,
+                                // single-table lifecycle model
+                                desired_state: Some("running".into()),
+                                purpose: None,
+                                owner: None,
+                                sakura: None,
+                                tailscale: None,
+                                dns: None,
+                                lifecycle: None,
                                 created_at: None,
                                 updated_at: None,
                             };
@@ -400,6 +408,14 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                 scheduling: None,
                                 // FSC-26 Phase B-2: migration で worker_pool:default に紐付け
                                 pool_id: None,
+                                // single-table lifecycle model
+                                desired_state: Some("running".into()),
+                                purpose: None,
+                                owner: None,
+                                sakura: None,
+                                tailscale: None,
+                                dns: None,
+                                lifecycle: None,
                                 created_at: None,
                                 updated_at: None,
                             };
