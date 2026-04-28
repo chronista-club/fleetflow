@@ -374,6 +374,20 @@ enum ServerCommands {
         /// サーバーのホスト名（Tailscale ノード名）
         hostname: String,
     },
+    /// サーバーを電源 ON (idle-shutdown 後の wake-up 用)
+    /// CP DB の server.sakura.server_id を読み、usacloud server boot を呼ぶ
+    Boot {
+        /// サーバーのスラッグ
+        slug: String,
+        /// SSH 接続まで wait する (default: true)
+        #[arg(long, default_value_t = true)]
+        wait: bool,
+    },
+    /// サーバーを電源 OFF (graceful shutdown via SSH)
+    Shutdown {
+        /// サーバーのスラッグ
+        slug: String,
+    },
 }
 
 /// コスト管理のサブコマンド

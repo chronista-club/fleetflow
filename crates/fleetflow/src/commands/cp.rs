@@ -359,6 +359,135 @@ pub async fn handle_server(cmd: &ServerCommands) -> Result<()> {
                 }
             }
         }
+        ServerCommands::Boot { slug, wait } => {
+            println!("{} {}", "Boot サーバー:".bold(), slug.cyan());
+            println!();
+
+            // CP DB から sakura.server_id を取得
+            let resp = cp_client::request(
+                &client,
+                "server",
+                "get",
+                json!({ "tenant_slug": tenant_slug, "slug": slug }),
+            )
+            .await?;
+
+            let server = match resp.get("server") {
+                Some(s) => s,
+                None => {
+                    println!("{} {}", "サーバーが見つかりません:".red(), slug);
+                    return Ok(());
+                }
+            };
+            let sakura_id = server["sakura"]["server_id"].as_i64().ok_or_else(|| {
+                anyhow::anyhow!(
+                    "sakura.server_id が記録されていません (record の populate が必要)"
+                )
+            })?;
+            let zone = server["sakura"]["zone"].as_str().unwrap_or("tk1a");
+            let host = server["dns"]["public_ipv4"]
+                .as_str()
+                .or_else(|| server["ssh_host"].as_str());
+
+            println!(
+                "  Sakura ID: {} (zone: {})",
+                sakura_id.to_string().cyan(),
+                zone
+            );
+
+            // usacloud server boot を呼ぶ (shell out)
+            let status = std::process::Command::new("usacloud")
+                .args([
+                    "server",
+                    "boot",
+                    "-y",
+                    "--zone",
+                    zone,
+                    &sakura_id.to_string(),
+                ])
+                .status()
+                .map_err(|e| anyhow::anyhow!("usacloud 実行失敗: {}", e))?;
+            if !status.success() {
+                println!("{} usacloud server boot 失敗", "✗".red());
+                return Ok(());
+            }
+            println!("{} 電源 ON 命令送信済", "✓".green());
+
+            if *wait {
+                if let Some(host) = host {
+                    println!("  SSH 待機中: {}", host.dimmed());
+                    let start = std::time::Instant::now();
+                    let timeout = std::time::Duration::from_secs(180);
+                    while start.elapsed() < timeout {
+                        let r = std::process::Command::new("nc")
+                            .args(["-zv", "-w", "3", host, "22"])
+                            .output();
+                        if let Ok(out) = r {
+                            if out.status.success() {
+                                println!(
+                                    "{} SSH 通った ({}秒)",
+                                    "✓".green(),
+                                    start.elapsed().as_secs()
+                                );
+                                return Ok(());
+                            }
+                        }
+                        std::thread::sleep(std::time::Duration::from_secs(5));
+                    }
+                    println!("{} SSH 待機 timeout (180s)", "⚠".yellow());
+                }
+            }
+        }
+        ServerCommands::Shutdown { slug } => {
+            println!("{} {}", "Shutdown サーバー:".bold(), slug.cyan());
+            println!();
+
+            let resp = cp_client::request(
+                &client,
+                "server",
+                "get",
+                json!({ "tenant_slug": tenant_slug, "slug": slug }),
+            )
+            .await?;
+            let server = match resp.get("server") {
+                Some(s) => s,
+                None => {
+                    println!("{} {}", "サーバーが見つかりません:".red(), slug);
+                    return Ok(());
+                }
+            };
+            let host = server["dns"]["public_ipv4"]
+                .as_str()
+                .or_else(|| server["ssh_host"].as_str())
+                .ok_or_else(|| anyhow::anyhow!("ssh_host が未設定"))?;
+            let ssh_user = server["ssh_user"].as_str().unwrap_or("root");
+            // root 以外は sudo 必須 (passwordless 必須、要 visudo 設定)
+            let sudo_prefix = if ssh_user == "root" { "" } else { "sudo " };
+            let remote_cmd = format!(
+                "{}shutdown -h +1 'Manual shutdown via fleet cp server shutdown'",
+                sudo_prefix
+            );
+
+            // graceful shutdown via SSH
+            let status = std::process::Command::new("ssh")
+                .args([
+                    "-o",
+                    "BatchMode=yes",
+                    &format!("{ssh_user}@{host}"),
+                    &remote_cmd,
+                ])
+                .status()
+                .map_err(|e| anyhow::anyhow!("ssh 実行失敗: {}", e))?;
+            if status.success() {
+                println!("{} shutdown -h +1 発行 (1m 後に poweroff)", "✓".green());
+            } else {
+                println!(
+                    "{} shutdown 発行失敗 (sudo 設定確認: {} に passwordless shutdown 必要)",
+                    "✗".red(),
+                    ssh_user.dimmed()
+                );
+            }
+        }
     }
 
     client.disconnect().await.ok();
