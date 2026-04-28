@@ -49,7 +49,7 @@ fi
 # ─────────────────────────────────────────
 # 3. Active な build process がないか
 # ─────────────────────────────────────────
-if pgrep -af 'cargo|rustc' > /dev/null 2>&1; then
+if pgrep -f 'cargo|rustc' > /dev/null 2>&1; then
   log "skip: active cargo/rustc process running"
   exit 0
 fi

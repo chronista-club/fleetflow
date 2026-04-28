@@ -415,13 +415,15 @@ pub async fn handle_server(cmd: &ServerCommands) -> Result<()> {
                 println!("  SSH 待機中: {}", host.dimmed());
                 let start = std::time::Instant::now();
                 let timeout = std::time::Duration::from_secs(180);
+                let target = format!("{host}:22");
                 while start.elapsed() < timeout {
-                    let r = std::process::Command::new("nc")
-                        .args(["-zv", "-w", "3", host, "22"])
-                        .output();
-                    if let Ok(out) = r
-                        && out.status.success()
-                    {
+                    // Pure-Rust TCP probe (no external nc dependency)
+                    let connect_result = tokio::time::timeout(
+                        std::time::Duration::from_secs(3),
+                        tokio::net::TcpStream::connect(&target),
+                    )
+                    .await;
+                    if let Ok(Ok(_)) = connect_result {
                         println!(
                             "{} SSH 通った ({}秒)",
                             "✓".green(),
@@ -429,7 +431,7 @@ pub async fn handle_server(cmd: &ServerCommands) -> Result<()> {
                         );
                         return Ok(());
                     }
-                    std::thread::sleep(std::time::Duration::from_secs(5));
+                    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
                 }
                 println!("{} SSH 待機 timeout (180s)", "⚠".yellow());
             }

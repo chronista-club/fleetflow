@@ -10,6 +10,12 @@
 
 set -euo pipefail
 
+# Root が必須 (systemd unit / /usr/local/bin への書き込み)
+if [ "${EUID:-$(id -u)}" -ne 0 ]; then
+  echo "error: must run as root (sudo or root login)" >&2
+  exit 1
+fi
+
 echo "=== idle-shutdown install ==="
 echo "  host: $(hostname)"
 echo "  date: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -67,7 +73,7 @@ fi
 # ─────────────────────────────────────────
 # 3. Active な build process がないか
 # ─────────────────────────────────────────
-if pgrep -af 'cargo|rustc' > /dev/null 2>&1; then
+if pgrep -f 'cargo|rustc' > /dev/null 2>&1; then
   log "skip: active cargo/rustc process running"
   exit 0
 fi
