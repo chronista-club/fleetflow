@@ -1,0 +1,14 @@
+[Unit]
+Description=Idle auto-shutdown check
+Documentation=https://github.com/chronista-club/fleetflow/blob/main/docs/design/30-build-tier.md
+# Docker / fleet-agent が落ちている時は idle 検知しても意味がないので、
+# 動作中の場合のみ check する (失敗時は次回 timer fire まで待つ)
+After=docker.service fleet-agent.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/idle-shutdown.sh
+StandardOutput=journal
+StandardError=journal
+# shutdown 発行に必要な権限
+User=root
