@@ -16,13 +16,13 @@
 # 環境変数 (override 可能):
 #   IDLE_THRESHOLD_MIN   shutdown までの idle 時間 (default: 15)
 #   MIN_UPTIME_MIN       boot 直後の即 shutdown 回避 (default: 15)
-#   GRACE_SECONDS        shutdown まで wait 時間 (default: 60、journal で確認余地)
+#   GRACE_MIN            shutdown 発行から実 poweroff までの猶予 (default: 2 min、journal で確認 + cancel 余地)
 
 set -euo pipefail
 
 IDLE_THRESHOLD_MIN="${IDLE_THRESHOLD_MIN:-15}"
 MIN_UPTIME_MIN="${MIN_UPTIME_MIN:-15}"
-GRACE_SECONDS="${GRACE_SECONDS:-60}"
+GRACE_MIN="${GRACE_MIN:-2}"
 DISABLE_FLAG="/run/idle-shutdown.disable"
 
 log() {
@@ -36,6 +36,18 @@ if [ -f "${DISABLE_FLAG}" ]; then
   log "skip: ${DISABLE_FLAG} exists (manually disabled)"
   exit 0
 fi
+
+# ─────────────────────────────────────────
+# 1b. 必須サービスの is-active check
+# ─────────────────────────────────────────
+# unit file の `After=` は ordering のみで gate にならない。
+# 必須サービスが落ちている場合は idle 判定を skip (誤 shutdown 回避)。
+for svc in docker fleet-agent; do
+  if ! systemctl is-active --quiet "${svc}"; then
+    log "skip: ${svc} is not active (idle check requires healthy stack)"
+    exit 0
+  fi
+done
 
 # ─────────────────────────────────────────
 # 2. Boot 直後の即 shutdown を回避
@@ -64,16 +76,23 @@ if [ "${SSH_USERS}" -gt 0 ]; then
 fi
 
 # ─────────────────────────────────────────
-# 5. 直近 15 min 以内の SSH login がなかったか (last 経由)
+# 5. 直近 IDLE_THRESHOLD_MIN min 以内の SSH login がなかったか
 # ─────────────────────────────────────────
-# last -F は frozen format (固定幅 column)、最新 1 件
-# "still logged in" あるいは現在 connection なら exit (既に上で who 確認済だが二重防御)
-LAST_LINE=$(last -F -n 5 | grep -v '^$\|^wtmp\|^reboot' | head -1 || true)
+# `last --time-format=iso` (util-linux 2.37+, Debian 12 標準) で
+# ISO 8601 時刻を fixed column 0 に取得、column 位置依存の awk parse を回避。
+# epoch 0 fallback による偽陽性 idle 判定 を防ぐため、parse 失敗時は skip 扱い (安全側)。
+LAST_LINE=$(last --time-format=iso -n 5 2>/dev/null | grep -v '^$\|^wtmp\|^reboot' | head -1 || true)
 if [ -n "${LAST_LINE}" ]; then
-  # epoch from last login or last logout
-  LAST_TS=$(echo "${LAST_LINE}" | awk '{print $5, $6, $7, $8}')
+  # ISO 8601 timestamp は USER TTY HOST <ISO_TIME> ... の 4 列目
+  # 例: "mito pts/0  100.65.119.86 2026-04-28T22:48:11+09:00 ..."
+  LAST_TS=$(echo "${LAST_LINE}" | awk '{print $4}')
   if [ -n "${LAST_TS}" ]; then
-    LAST_EPOCH=$(date -d "${LAST_TS}" +%s 2>/dev/null || echo "0")
+    LAST_EPOCH=$(date -d "${LAST_TS}" +%s 2>/dev/null || echo "")
+    if [ -z "${LAST_EPOCH}" ] || [ "${LAST_EPOCH}" -le 0 ]; then
+      # parse 失敗時は安全側 (idle と判定せず skip)、再 fire 待ち
+      log "skip: cannot parse last login time '${LAST_TS}' — re-check next fire"
+      exit 0
+    fi
     NOW_EPOCH=$(date +%s)
     AGE_MIN=$(( (NOW_EPOCH - LAST_EPOCH) / 60 ))
     if [ "${AGE_MIN}" -lt "${IDLE_THRESHOLD_MIN}" ]; then
@@ -86,8 +105,8 @@ fi
 # ─────────────────────────────────────────
 # 6. 全条件満たした → shutdown
 # ─────────────────────────────────────────
-log "idle detected (uptime=${UPTIME_MIN}m, no cargo, no ssh) — shutting down in ${GRACE_SECONDS}s"
+log "idle detected (uptime=${UPTIME_MIN}m, no cargo, no ssh) — shutting down in ${GRACE_MIN}m"
 log "  to cancel: shutdown -c"
 
-# +1 (1 分後) shutdown をスケジュール、journal に記録残す
-shutdown -h "+$((GRACE_SECONDS / 60 + 1))" "Idle auto-shutdown ($(date -u +%FT%TZ))" 2>&1 | tee -a /var/log/idle-shutdown.log
+# +N 分後の shutdown をスケジュール (cancel 可能)。journal に記録残す
+shutdown -h "+${GRACE_MIN}" "Idle auto-shutdown ($(date -u +%FT%TZ))"
