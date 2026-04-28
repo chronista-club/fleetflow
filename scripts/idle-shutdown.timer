@@ -1,0 +1,15 @@
+[Unit]
+Description=Idle auto-shutdown timer (every 5 minutes)
+Documentation=https://github.com/chronista-club/fleetflow/blob/main/docs/design/30-build-tier.md
+
+[Timer]
+# 起動後 5 分待ってから初回実行 (boot 中の処理を避ける)
+OnBootSec=5min
+# その後 5 分毎に実行
+OnUnitActiveSec=5min
+Unit=idle-shutdown.service
+AccuracySec=30s
+Persistent=true
+
+[Install]
+WantedBy=timers.target
