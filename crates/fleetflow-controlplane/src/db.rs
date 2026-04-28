@@ -1475,6 +1475,42 @@ DEFINE FIELD IF NOT EXISTS scheduling ON server TYPE option<string> DEFAULT 'sch
 -- FSC-26 Phase B-2: server → worker_pool 参照
 DEFINE FIELD IF NOT EXISTS pool_id ON server TYPE option<record<worker_pool>>;
 
+-- Server lifecycle / infra metadata (single-table model, additive)
+-- 全 field 可変、agent / controller / user CLI が役割ごとに書き込む
+-- 'running' | 'cordoned' | 'decommissioned' — desired_state は user の意図、status は observed (heartbeat 起源)
+DEFINE FIELD IF NOT EXISTS desired_state ON server TYPE option<string> DEFAULT 'running';
+DEFINE FIELD IF NOT EXISTS purpose ON server TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS owner ON server TYPE option<string>;
+
+-- Sakura cloud infrastructure metadata (provisioning controller が書き込み)
+DEFINE FIELD IF NOT EXISTS sakura ON server TYPE option<object>;
+DEFINE FIELD IF NOT EXISTS sakura.server_id ON server TYPE option<int>;
+DEFINE FIELD IF NOT EXISTS sakura.disk_id ON server TYPE option<int>;
+DEFINE FIELD IF NOT EXISTS sakura.archive_id ON server TYPE option<int>;
+DEFINE FIELD IF NOT EXISTS sakura.zone ON server TYPE option<string>;
+
+-- Tailscale tailnet metadata (provisioning controller が書き込み)
+DEFINE FIELD IF NOT EXISTS tailscale ON server TYPE option<object>;
+DEFINE FIELD IF NOT EXISTS tailscale.hostname ON server TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS tailscale.tailnet_ip ON server TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS tailscale.node_id ON server TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS tailscale.joined_at ON server TYPE option<datetime>;
+
+-- DNS / public network metadata (Cloudflare 等の外部 DNS)
+DEFINE FIELD IF NOT EXISTS dns ON server TYPE option<object>;
+DEFINE FIELD IF NOT EXISTS dns.fqdn ON server TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS dns.cloudflare_record_id ON server TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS dns.public_ipv4 ON server TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS dns.public_ipv6 ON server TYPE option<string>;
+
+-- Lifecycle audit (immutable once set)
+-- replaced_from は graceful re-spawn 時に旧 record を指す (chain で履歴追える)
+DEFINE FIELD IF NOT EXISTS lifecycle ON server TYPE option<object>;
+DEFINE FIELD IF NOT EXISTS lifecycle.spawned_at ON server TYPE option<datetime>;
+DEFINE FIELD IF NOT EXISTS lifecycle.last_replaced_at ON server TYPE option<datetime>;
+DEFINE FIELD IF NOT EXISTS lifecycle.decommissioned_at ON server TYPE option<datetime>;
+DEFINE FIELD IF NOT EXISTS lifecycle.replaced_from ON server TYPE option<record<server>>;
+
 DEFINE FIELD IF NOT EXISTS created_at ON server TYPE option<datetime> DEFAULT time::now();
 DEFINE FIELD IF NOT EXISTS updated_at ON server TYPE option<datetime> DEFAULT time::now();
 DEFINE INDEX IF NOT EXISTS idx_server_tenant_slug ON server FIELDS tenant, slug UNIQUE;
@@ -1751,6 +1787,13 @@ mod tests {
             allocated: None,
             scheduling: None,
             pool_id: None,
+            desired_state: None,
+            purpose: None,
+            owner: None,
+            sakura: None,
+            tailscale: None,
+            dns: None,
+            lifecycle: None,
             created_at: None,
             updated_at: None,
         };
@@ -1824,6 +1867,13 @@ mod tests {
             }),
             scheduling: Some(scheduling_state::SCHEDULABLE.into()),
             pool_id: None,
+            desired_state: None,
+            purpose: None,
+            owner: None,
+            sakura: None,
+            tailscale: None,
+            dns: None,
+            lifecycle: None,
             created_at: None,
             updated_at: None,
         };
@@ -2014,6 +2064,13 @@ mod tests {
                 allocated: None,
                 scheduling: None,
                 pool_id: None,
+                desired_state: None,
+                purpose: None,
+                owner: None,
+                sakura: None,
+                tailscale: None,
+                dns: None,
+                lifecycle: None,
                 created_at: None,
                 updated_at: None,
             })
@@ -2104,6 +2161,13 @@ mod tests {
             allocated: None,
             scheduling: None,
             pool_id: None,
+            desired_state: None,
+            purpose: None,
+            owner: None,
+            sakura: None,
+            tailscale: None,
+            dns: None,
+            lifecycle: None,
             created_at: None,
             updated_at: None,
         })
@@ -2261,6 +2325,13 @@ mod tests {
             allocated: None,
             scheduling: None,
             pool_id: default_pool.id.clone(),
+            desired_state: None,
+            purpose: None,
+            owner: None,
+            sakura: None,
+            tailscale: None,
+            dns: None,
+            lifecycle: None,
             created_at: None,
             updated_at: None,
         };
@@ -2419,6 +2490,13 @@ mod tests {
                 allocated: None,
                 scheduling: None,
                 pool_id: None,
+                desired_state: None,
+                purpose: None,
+                owner: None,
+                sakura: None,
+                tailscale: None,
+                dns: None,
+                lifecycle: None,
                 created_at: None,
                 updated_at: None,
             })
