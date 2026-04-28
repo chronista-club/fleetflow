@@ -19,7 +19,7 @@
 
 set -euo pipefail
 
-PROVISION_VERSION="v3"
+PROVISION_VERSION="v4"
 
 echo "=== FleetFlow Worker Base Image Provisioning (${PROVISION_VERSION}) ==="
 echo "  Date: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -41,6 +41,9 @@ apt-get install -y -qq \
   unzip \
   htop \
   build-essential \
+  protobuf-compiler \
+  rsync \
+  file \
   > /dev/null 2>&1
 echo "  done."
 
