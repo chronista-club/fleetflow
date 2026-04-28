@@ -411,29 +411,27 @@ pub async fn handle_server(cmd: &ServerCommands) -> Result<()> {
             }
             println!("{} 電源 ON 命令送信済", "✓".green());
 
-            if *wait {
-                if let Some(host) = host {
-                    println!("  SSH 待機中: {}", host.dimmed());
-                    let start = std::time::Instant::now();
-                    let timeout = std::time::Duration::from_secs(180);
-                    while start.elapsed() < timeout {
-                        let r = std::process::Command::new("nc")
-                            .args(["-zv", "-w", "3", host, "22"])
-                            .output();
-                        if let Ok(out) = r {
-                            if out.status.success() {
-                                println!(
-                                    "{} SSH 通った ({}秒)",
-                                    "✓".green(),
-                                    start.elapsed().as_secs()
-                                );
-                                return Ok(());
-                            }
-                        }
-                        std::thread::sleep(std::time::Duration::from_secs(5));
+            if *wait && let Some(host) = host {
+                println!("  SSH 待機中: {}", host.dimmed());
+                let start = std::time::Instant::now();
+                let timeout = std::time::Duration::from_secs(180);
+                while start.elapsed() < timeout {
+                    let r = std::process::Command::new("nc")
+                        .args(["-zv", "-w", "3", host, "22"])
+                        .output();
+                    if let Ok(out) = r
+                        && out.status.success()
+                    {
+                        println!(
+                            "{} SSH 通った ({}秒)",
+                            "✓".green(),
+                            start.elapsed().as_secs()
+                        );
+                        return Ok(());
                     }
-                    println!("{} SSH 待機 timeout (180s)", "⚠".yellow());
+                    std::thread::sleep(std::time::Duration::from_secs(5));
                 }
+                println!("{} SSH 待機 timeout (180s)", "⚠".yellow());
             }
         }
         ServerCommands::Shutdown { slug } => {
