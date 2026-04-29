@@ -12,7 +12,8 @@ pub enum ServerProviderKind {
     /// さくらクラウド（usacloud CLI 経由）
     Sakura(fleetflow_cloud_sakura::SakuraCloudProvider),
 
-    /// AWS（EC2 API 経由）
+    /// AWS（EC2 API 経由）— feature `aws-cloud` で有効化 (default off)
+    #[cfg(feature = "aws-cloud")]
     Aws(fleetflow_cloud_aws::AwsServerProvider),
 
     /// テスト用モック
@@ -24,6 +25,7 @@ impl ServerProviderKind {
     pub fn provider_name(&self) -> &str {
         match self {
             Self::Sakura(p) => fleetflow_cloud::server_provider::ServerProvider::provider_name(p),
+            #[cfg(feature = "aws-cloud")]
             Self::Aws(p) => fleetflow_cloud::server_provider::ServerProvider::provider_name(p),
             #[cfg(feature = "test-utils")]
             Self::Mock(m) => &m.name,
@@ -35,6 +37,7 @@ impl ServerProviderKind {
             Self::Sakura(p) => {
                 fleetflow_cloud::server_provider::ServerProvider::list_servers(p).await
             }
+            #[cfg(feature = "aws-cloud")]
             Self::Aws(p) => fleetflow_cloud::server_provider::ServerProvider::list_servers(p).await,
             #[cfg(feature = "test-utils")]
             Self::Mock(_) => Ok(vec![]),
@@ -46,6 +49,7 @@ impl ServerProviderKind {
             Self::Sakura(p) => {
                 fleetflow_cloud::server_provider::ServerProvider::get_server(p, server_id).await
             }
+            #[cfg(feature = "aws-cloud")]
             Self::Aws(p) => {
                 fleetflow_cloud::server_provider::ServerProvider::get_server(p, server_id).await
             }
@@ -62,6 +66,7 @@ impl ServerProviderKind {
             Self::Sakura(p) => {
                 fleetflow_cloud::server_provider::ServerProvider::create_server(p, request).await
             }
+            #[cfg(feature = "aws-cloud")]
             Self::Aws(p) => {
                 fleetflow_cloud::server_provider::ServerProvider::create_server(p, request).await
             }
@@ -82,6 +87,7 @@ impl ServerProviderKind {
                 )
                 .await
             }
+            #[cfg(feature = "aws-cloud")]
             Self::Aws(p) => {
                 fleetflow_cloud::server_provider::ServerProvider::delete_server(
                     p, server_id, with_disks,
@@ -98,6 +104,7 @@ impl ServerProviderKind {
             Self::Sakura(p) => {
                 fleetflow_cloud::server_provider::ServerProvider::power_on(p, server_id).await
             }
+            #[cfg(feature = "aws-cloud")]
             Self::Aws(p) => {
                 fleetflow_cloud::server_provider::ServerProvider::power_on(p, server_id).await
             }
@@ -111,6 +118,7 @@ impl ServerProviderKind {
             Self::Sakura(p) => {
                 fleetflow_cloud::server_provider::ServerProvider::power_off(p, server_id).await
             }
+            #[cfg(feature = "aws-cloud")]
             Self::Aws(p) => {
                 fleetflow_cloud::server_provider::ServerProvider::power_off(p, server_id).await
             }
