@@ -14,7 +14,8 @@ fleetflow-container.workspace = true
 fleetflow-cloud.workspace = true
 fleetflow-cloud-sakura.workspace = true
 fleetflow-cloud-cloudflare.workspace = true
-fleetflow-cloud-aws.workspace = true
+# AWS provider は feature `aws-cloud` で有効化 (default off)
+fleetflow-cloud-aws = { workspace = true, optional = true }
 
 # Communication
 unison.workspace = true
@@ -53,6 +54,9 @@ uuid = { version = "1", features = ["v4", "serde"] }
 
 [features]
 test-utils = []
+# AWS EC2 Provider を有効化。aws-sdk-ec2 chain (~6-7GB rustc per instance) を
+# 引き込むので default off。利用時のみ `--features aws-cloud` で enable。
+aws-cloud = ["dep:fleetflow-cloud-aws"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }

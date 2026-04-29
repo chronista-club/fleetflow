@@ -36,6 +36,11 @@ fleetflow-build = { version = "0.14.2", path = "crates/fleetflow-build" }
 fleetflow-cloud = { version = "0.14.2", path = "crates/fleetflow-cloud" }
 fleetflow-cloud-sakura = { version = "0.14.2", path = "crates/fleetflow-cloud-sakura" }
 fleetflow-cloud-cloudflare = { version = "0.14.2", path = "crates/fleetflow-cloud-cloudflare" }
+# fleetflow-cloud-aws は default features off。controlplane の `aws-cloud`
+# feature 有効化時のみ link される (aws-sdk-ec2 chain は rustc 1 instance
+# あたり 6-7GB 食うため、小さい build worker での OOM を避ける)。
+# `cargo build -p fleetflowd -p fleet-agent` だと完全に skip される。
+# 利用時: `cargo build -p fleetflowd --features fleetflow-controlplane/aws-cloud`
 fleetflow-cloud-aws = { version = "0.14.2", path = "crates/fleetflow-cloud-aws" }
 fleetflow-mcp = { version = "0.14.2", path = "crates/fleetflow-mcp" }
 fleetflow-registry = { version = "0.14.2", path = "crates/fleetflow-registry" }
