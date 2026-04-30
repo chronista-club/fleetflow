@@ -123,7 +123,9 @@ pub async fn start(
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
     let handle = tokio::spawn(async move {
-        axum::serve(listener, app).await.ok();
+        if let Err(e) = axum::serve(listener, app).await {
+            tracing::error!(error = %e, "web server terminated unexpectedly");
+        }
     });
 
     Ok(handle)
