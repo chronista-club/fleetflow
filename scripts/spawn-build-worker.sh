@@ -34,6 +34,10 @@
 #   8. サマリ表示 (公開IP / Tailscale IP / 月コスト目安 / 削除コマンド)
 #
 # 失敗時の手動 cleanup:
+#   注: `--with-disks` は disk も同時削除するため復旧不可。 ephemeral build worker
+#   なら問題ないが、 disk 中身の確認が必要なら `--with-disks` を外して server だけ
+#   削除し、 disk は `usacloud disk list --zone <zone>` で確認してから別途処分。
+#
 #   usacloud server delete -y --with-disks --zone <zone> <SERVER_ID>
 #   op item delete <password-item-id> --vault FleetFlowVault
 #   ~/.ssh/config から Host <hostname> ブロック削除
@@ -509,7 +513,9 @@ cat <<SUMMARY
   ssh:            ssh ${NAME}      # 公開 IP 経由
 $([ -n "${TS_IP}" ] && echo "                  ssh ${NAME}-ts   # Tailscale 経由")
 
-  cleanup:        usacloud server delete -y --with-disks --zone ${ZONE} ${SERVER_ID}
+  cleanup:        # 注: --with-disks は disk も同時削除 (復旧不可)。 中身確認が必要
+                  #     なら --with-disks を外して、 disk list で確認後別途削除
+                  usacloud server delete -y --with-disks --zone ${ZONE} ${SERVER_ID}
                   op item delete ${PW_ITEM_ID} --vault ${OP_VAULT}
 $([ ${USE_FLEET_AGENT} -eq 1 ] && echo "                  fleet cp server delete --slug ${FLEET_SLUG}   # CP-side")
 SUMMARY
