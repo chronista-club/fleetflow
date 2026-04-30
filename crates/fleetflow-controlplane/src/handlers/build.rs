@@ -109,7 +109,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                 state: build_job_state::QUEUED.to_string(),
                                 server: None,
                                 logs_url: None,
-                                submitted_at: None,
+                                submitted_at: chrono::Utc::now(),
                                 started_at: None,
                                 finished_at: None,
                                 duration_seconds: None,

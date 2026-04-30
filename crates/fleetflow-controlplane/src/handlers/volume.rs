@@ -86,7 +86,8 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                 .as_str()
                                 .unwrap_or(volume_tier::LOCAL_VOLUME);
 
-                            // 簡易 validation
+                            // 簡易 validation (B#1 fix: 同 pattern の continue scope バグ修正)
+                            let mut empty_field: Option<&str> = None;
                             for (name, value) in [
                                 ("tenant_slug", tenant_slug),
                                 ("server_slug", server_slug),
@@ -94,15 +95,19 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                 ("mount", mount),
                             ] {
                                 if value.is_empty() {
-                                    channel
-                                        .send_response(
-                                            msg.id,
-                                            "adopt",
-                                            &json!({ "error": format!("`{}` required", name) }),
-                                        )
-                                        .await?;
-                                    continue;
+                                    empty_field = Some(name);
+                                    break;
                                 }
+                            }
+                            if let Some(name) = empty_field {
+                                channel
+                                    .send_response(
+                                        msg.id,
+                                        "adopt",
+                                        &json!({ "error": format!("`{}` required", name) }),
+                                    )
+                                    .await?;
+                                continue;
                             }
 
                             let tenant = match state.db.get_tenant_by_slug(tenant_slug).await {

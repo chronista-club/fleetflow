@@ -118,7 +118,11 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                             let stage_slug = payload["stage_slug"].as_str().unwrap_or_default();
                             let description = payload["description"].as_str();
 
-                            // 必須フィールド validation
+                            // 必須フィールド validation (B#1 fix: 旧実装は for-loop 内で
+                            // `continue` していたため scope が for-loop に閉じてしまい、 empty
+                            // value のまま下の adopt_stage に進む不具合があった。 一発 break +
+                            // 外側 message loop continue で早期返却する)
+                            let mut empty_field: Option<&str> = None;
                             for (name, value) in [
                                 ("tenant_slug", tenant_slug),
                                 ("server_slug", server_slug),
@@ -126,15 +130,19 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                 ("stage_slug", stage_slug),
                             ] {
                                 if value.is_empty() {
-                                    channel
-                                        .send_response(
-                                            msg.id,
-                                            "adopt",
-                                            &json!({ "error": format!("`{}` required", name) }),
-                                        )
-                                        .await?;
-                                    continue;
+                                    empty_field = Some(name);
+                                    break;
                                 }
+                            }
+                            if let Some(name) = empty_field {
+                                channel
+                                    .send_response(
+                                        msg.id,
+                                        "adopt",
+                                        &json!({ "error": format!("`{}` required", name) }),
+                                    )
+                                    .await?;
+                                continue;
                             }
 
                             // services 配列をパース

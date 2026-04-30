@@ -673,13 +673,16 @@ impl FleetFlowServer {
         description = "全プロジェクトのステージ横断状態を取得します。各プロジェクト × ステージのサービス稼働数を表示します。"
     )]
     async fn fleetflow_cp_overview(&self) -> Result<String, String> {
-        let (client, _creds) = cp::connect().await.map_err(|e| e.to_string())?;
+        let (client, creds) = cp::connect().await.map_err(|e| e.to_string())?;
 
+        // B#6 fix: tenant_slug を渡さないと handler 側の `WHERE project.tenant.slug = $tenant_slug`
+        // が空 string で match し、 tenant isolation が効かない (テナント越境リスク)
+        let tenant_slug = creds.tenant_slug.as_deref().unwrap_or("default");
         let resp = cp::request(
             &client,
             "stage",
             "list_across_projects",
-            serde_json::json!({}),
+            serde_json::json!({ "tenant_slug": tenant_slug }),
         )
         .await
         .map_err(|e| e.to_string())?;
