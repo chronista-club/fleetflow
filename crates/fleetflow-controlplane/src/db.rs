@@ -178,7 +178,9 @@ impl Database {
     pub async fn resolve_tenant_by_sub(&self, auth0_sub: &str) -> Result<Option<TenantUser>> {
         let mut result = self
             .db
-            .query("SELECT * FROM tenant_user WHERE auth0_sub = $sub AND deleted_at IS NONE LIMIT 1")
+            .query(
+                "SELECT * FROM tenant_user WHERE auth0_sub = $sub AND deleted_at IS NONE LIMIT 1",
+            )
             .bind(("sub", auth0_sub.to_string()))
             .await
             .context("テナントユーザー解決失敗")?;
