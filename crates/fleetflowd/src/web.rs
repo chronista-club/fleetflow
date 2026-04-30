@@ -656,6 +656,7 @@ async fn api_dns_sync(State(state): State<Arc<WebState>>, req: Request) -> impl 
                 proxied: cf_rec.proxied,
                 created_at: None,
                 updated_at: None,
+                deleted_at: None,
             };
             if state.app.db.create_dns_record(&record).await.is_ok() {
                 imported += 1;
@@ -1250,6 +1251,7 @@ async fn api_tenant_users_create(
         tenant: tenant_id,
         role: role_str.to_string(),
         created_at: None,
+        deleted_at: None,
     };
 
     match state.app.db.create_tenant_user(&user).await {

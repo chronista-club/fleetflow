@@ -82,6 +82,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                     .map(String::from),
                                 created_at: None,
                                 updated_at: None,
+                                deleted_at: None,
                             };
 
                             match state.db.create_project(&project).await {

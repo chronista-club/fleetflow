@@ -112,6 +112,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                 proxied,
                                 created_at: None,
                                 updated_at: None,
+                                deleted_at: None,
                             };
 
                             match state.db.create_dns_record(&record).await {
@@ -296,6 +297,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                         proxied: cf_rec.proxied,
                                         created_at: None,
                                         updated_at: None,
+                                        deleted_at: None,
                                     };
                                     if state.db.create_dns_record(&record).await.is_ok() {
                                         imported += 1;

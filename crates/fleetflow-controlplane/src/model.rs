@@ -149,6 +149,8 @@ pub struct TenantUser {
     /// 役割: owner / admin / member（DB 上は String）
     pub role: String,
     pub created_at: Option<DateTime<Utc>>,
+    /// Soft-delete tombstone (None = active)
+    pub deleted_at: Option<DateTime<Utc>>,
 }
 
 impl TenantUser {
@@ -219,6 +221,8 @@ pub struct Project {
     pub repository_url: Option<String>,
     pub created_at: Option<DateTime<Utc>>,
     pub updated_at: Option<DateTime<Utc>>,
+    /// Soft-delete tombstone (None = active)
+    pub deleted_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, SurrealValue, Default)]
@@ -495,6 +499,8 @@ pub struct Server {
     pub lifecycle: Option<ServerLifecycle>,
     pub created_at: Option<DateTime<Utc>>,
     pub updated_at: Option<DateTime<Utc>>,
+    /// Soft-delete tombstone (None = active)
+    pub deleted_at: Option<DateTime<Utc>>,
 }
 
 // ─────────────────────────────────────────────
@@ -584,6 +590,8 @@ pub struct DnsRecord {
     pub proxied: bool,
     pub created_at: Option<DateTime<Utc>>,
     pub updated_at: Option<DateTime<Utc>>,
+    /// Soft-delete tombstone (None = active)
+    pub deleted_at: Option<DateTime<Utc>>,
 }
 
 // ─────────────────────────────────────────────
