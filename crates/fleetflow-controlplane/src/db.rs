@@ -1316,6 +1316,7 @@ impl Database {
                     source: { git_url: $git_url, git_ref: $git_ref, dockerfile: $dockerfile }, \
                     target: { image: $image, registry_secret: $registry_secret }, \
                     state: $state, server: $server, logs_url: $logs_url, \
+                    submitted_at: $submitted_at, \
                     started_at: $started_at, finished_at: $finished_at, \
                     duration_seconds: $duration_seconds \
                 }",
@@ -1331,6 +1332,9 @@ impl Database {
             .bind(("state", job.state.clone()))
             .bind(("server", job.server.clone()))
             .bind(("logs_url", job.logs_url.clone()))
+            // sprint-1 follow-up: schema には DEFAULT time::now() があるが Rust 側
+            // (DateTime<Utc>) と DB 側で値が一致しないリスク回避のため明示 bind。
+            .bind(("submitted_at", job.submitted_at))
             .bind(("started_at", job.started_at))
             .bind(("finished_at", job.finished_at))
             .bind(("duration_seconds", job.duration_seconds))
