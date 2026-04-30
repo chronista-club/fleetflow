@@ -1689,7 +1689,7 @@ async fn api_volume_adopt(State(state): State<Arc<WebState>>, req: Request) -> i
 // 詳細設計: fleetstage repo Issue FSC-16
 // ============================================================================
 
-/// POST /api/v1/stages/adopt — 既存 stage を非破壊で CP records に登録
+/// POST /api/v1/stages/_adopt — 既存 stage を非破壊で CP records に登録
 ///
 /// リクエスト body:
 /// ```json
