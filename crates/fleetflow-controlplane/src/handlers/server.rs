@@ -109,6 +109,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                 lifecycle: None,
                                 created_at: None,
                                 updated_at: None,
+                                deleted_at: None,
                             };
 
                             match state.db.register_server(&server_model).await {
@@ -418,6 +419,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                 lifecycle: None,
                                 created_at: None,
                                 updated_at: None,
+                                deleted_at: None,
                             };
 
                             match state.db.register_server(&server_model).await {

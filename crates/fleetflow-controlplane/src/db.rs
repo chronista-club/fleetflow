@@ -178,7 +178,9 @@ impl Database {
     pub async fn resolve_tenant_by_sub(&self, auth0_sub: &str) -> Result<Option<TenantUser>> {
         let mut result = self
             .db
-            .query("SELECT * FROM tenant_user WHERE auth0_sub = $sub LIMIT 1")
+            .query(
+                "SELECT * FROM tenant_user WHERE auth0_sub = $sub AND deleted_at IS NONE LIMIT 1",
+            )
             .bind(("sub", auth0_sub.to_string()))
             .await
             .context("テナントユーザー解決失敗")?;
@@ -194,7 +196,7 @@ impl Database {
     ) -> Result<Option<TenantUser>> {
         let mut result = self
             .db
-            .query("SELECT * FROM tenant_user WHERE auth0_sub = $sub AND tenant.slug = $tenant_slug LIMIT 1")
+            .query("SELECT * FROM tenant_user WHERE auth0_sub = $sub AND tenant.slug = $tenant_slug AND deleted_at IS NONE LIMIT 1")
             .bind(("sub", auth0_sub.to_string()))
             .bind(("tenant_slug", tenant_slug.to_string()))
             .await
@@ -221,7 +223,7 @@ impl Database {
     pub async fn list_tenant_users(&self, tenant_slug: &str) -> Result<Vec<TenantUser>> {
         let mut result = self
             .db
-            .query("SELECT * FROM tenant_user WHERE tenant.slug = $tenant_slug ORDER BY role, auth0_sub")
+            .query("SELECT * FROM tenant_user WHERE tenant.slug = $tenant_slug AND deleted_at IS NONE ORDER BY role, auth0_sub")
             .bind(("tenant_slug", tenant_slug.to_string()))
             .await
             .context("テナントユーザー一覧取得失敗")?;
@@ -250,9 +252,10 @@ impl Database {
 
     /// テナントユーザーを削除（テナント境界チェック付き）
     pub async fn delete_tenant_user(&self, auth0_sub: &str, tenant_slug: &str) -> Result<bool> {
+        // D#4 soft-delete: hard DELETE → UPDATE deleted_at で復旧可能 + feedback_no_data_deletion.md 整合
         let mut result = self
             .db
-            .query("DELETE FROM tenant_user WHERE auth0_sub = $sub AND tenant.slug = $tenant_slug RETURN BEFORE")
+            .query("UPDATE tenant_user SET deleted_at = time::now() WHERE auth0_sub = $sub AND tenant.slug = $tenant_slug AND deleted_at IS NONE RETURN BEFORE")
             .bind(("sub", auth0_sub.to_string()))
             .bind(("tenant_slug", tenant_slug.to_string()))
             .await
@@ -305,7 +308,7 @@ impl Database {
         let mut result = self
             .db
             .query(
-                "SELECT * FROM project WHERE slug = $project_slug AND tenant.slug = $tenant_slug LIMIT 1",
+                "SELECT * FROM project WHERE slug = $project_slug AND tenant.slug = $tenant_slug AND deleted_at IS NONE LIMIT 1",
             )
             .bind(("tenant_slug", tenant_slug.to_string()))
             .bind(("project_slug", project_slug.to_string()))
@@ -318,7 +321,7 @@ impl Database {
     pub async fn list_projects_by_tenant(&self, tenant_slug: &str) -> Result<Vec<Project>> {
         let mut result = self
             .db
-            .query("SELECT * FROM project WHERE tenant.slug = $tenant_slug ORDER BY slug")
+            .query("SELECT * FROM project WHERE tenant.slug = $tenant_slug AND deleted_at IS NONE ORDER BY slug")
             .bind(("tenant_slug", tenant_slug.to_string()))
             .await
             .context("プロジェクト一覧取得失敗")?;
@@ -327,8 +330,9 @@ impl Database {
     }
 
     pub async fn delete_project(&self, tenant_slug: &str, project_slug: &str) -> Result<bool> {
+        // D#4 soft-delete: hard DELETE → UPDATE deleted_at で復旧可能 + feedback_no_data_deletion.md 整合
         self.db
-            .query("DELETE FROM project WHERE slug = $project_slug AND tenant.slug = $tenant_slug")
+            .query("UPDATE project SET deleted_at = time::now() WHERE slug = $project_slug AND tenant.slug = $tenant_slug AND deleted_at IS NONE")
             .bind(("tenant_slug", tenant_slug.to_string()))
             .bind(("project_slug", project_slug.to_string()))
             .await
@@ -439,7 +443,7 @@ impl Database {
     ) -> Result<Option<Project>> {
         let mut result = self
             .db
-            .query("SELECT * FROM project WHERE tenant = $tenant AND slug = $slug LIMIT 1")
+            .query("SELECT * FROM project WHERE tenant = $tenant AND slug = $slug AND deleted_at IS NONE LIMIT 1")
             .bind(("tenant", tenant_id.clone()))
             .bind(("slug", project_slug.to_string()))
             .await
@@ -497,6 +501,7 @@ impl Database {
                     repository_url: None,
                     created_at: None,
                     updated_at: None,
+                    deleted_at: None,
                 })
                 .await?
             }
@@ -735,7 +740,7 @@ impl Database {
     pub async fn list_servers_by_tenant(&self, tenant_slug: &str) -> Result<Vec<Server>> {
         let mut result = self
             .db
-            .query("SELECT * FROM server WHERE tenant.slug = $tenant_slug ORDER BY slug")
+            .query("SELECT * FROM server WHERE tenant.slug = $tenant_slug AND deleted_at IS NONE ORDER BY slug")
             .bind(("tenant_slug", tenant_slug.to_string()))
             .await
             .context("サーバー一覧取得失敗")?;
@@ -793,7 +798,7 @@ impl Database {
     pub async fn list_all_servers(&self) -> Result<Vec<Server>> {
         let mut result = self
             .db
-            .query("SELECT * FROM server ORDER BY slug")
+            .query("SELECT * FROM server WHERE deleted_at IS NONE ORDER BY slug")
             .await
             .context("全サーバー一覧取得失敗")?;
         let servers: Vec<Server> = result.take(0)?;
@@ -804,7 +809,7 @@ impl Database {
     pub async fn get_server_by_slug(&self, slug: &str) -> Result<Option<Server>> {
         let mut result = self
             .db
-            .query("SELECT * FROM server WHERE slug = $slug LIMIT 1")
+            .query("SELECT * FROM server WHERE slug = $slug AND deleted_at IS NONE LIMIT 1")
             .bind(("slug", slug.to_string()))
             .await
             .context("サーバー取得失敗")?;
@@ -814,8 +819,9 @@ impl Database {
 
     /// サーバーを DB から削除
     pub async fn delete_server(&self, slug: &str) -> Result<()> {
+        // D#4 soft-delete: hard DELETE → UPDATE deleted_at で復旧可能 + feedback_no_data_deletion.md 整合
         self.db
-            .query("DELETE FROM server WHERE slug = $slug")
+            .query("UPDATE server SET deleted_at = time::now() WHERE slug = $slug AND deleted_at IS NONE")
             .bind(("slug", slug.to_string()))
             .await
             .context("サーバー削除失敗")?;
@@ -946,7 +952,7 @@ impl Database {
     pub async fn list_dns_records_by_tenant(&self, tenant_slug: &str) -> Result<Vec<DnsRecord>> {
         let mut result = self
             .db
-            .query("SELECT * FROM dns_record WHERE tenant.slug = $tenant_slug ORDER BY name")
+            .query("SELECT * FROM dns_record WHERE tenant.slug = $tenant_slug AND deleted_at IS NONE ORDER BY name")
             .bind(("tenant_slug", tenant_slug.to_string()))
             .await
             .context("DNSレコード一覧取得失敗")?;
@@ -955,9 +961,10 @@ impl Database {
     }
 
     pub async fn delete_dns_record(&self, record_name: &str) -> Result<bool> {
+        // D#4 soft-delete: hard DELETE → UPDATE deleted_at で復旧可能 + feedback_no_data_deletion.md 整合
         let mut result = self
             .db
-            .query("DELETE FROM dns_record WHERE name = $name RETURN BEFORE")
+            .query("UPDATE dns_record SET deleted_at = time::now() WHERE name = $name AND deleted_at IS NONE RETURN BEFORE")
             .bind(("name", record_name.to_string()))
             .await
             .context("DNSレコード削除失敗")?;
@@ -1426,6 +1433,8 @@ DEFINE FIELD IF NOT EXISTS description ON project TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS repository_url ON project TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS created_at ON project TYPE option<datetime> DEFAULT time::now();
 DEFINE FIELD IF NOT EXISTS updated_at ON project TYPE option<datetime> DEFAULT time::now();
+-- D#4 soft-delete: tombstone (None = active row、UPDATE で time::now() を入れる)
+DEFINE FIELD IF NOT EXISTS deleted_at ON project TYPE option<datetime>;
 DEFINE INDEX IF NOT EXISTS idx_project_tenant_slug ON project FIELDS tenant, slug UNIQUE;
 
 DEFINE TABLE IF NOT EXISTS stage SCHEMAFULL;
@@ -1531,6 +1540,8 @@ DEFINE FIELD IF NOT EXISTS lifecycle.replaced_from ON server TYPE option<record<
 
 DEFINE FIELD IF NOT EXISTS created_at ON server TYPE option<datetime> DEFAULT time::now();
 DEFINE FIELD IF NOT EXISTS updated_at ON server TYPE option<datetime> DEFAULT time::now();
+-- D#4 soft-delete: tombstone (None = active row)
+DEFINE FIELD IF NOT EXISTS deleted_at ON server TYPE option<datetime>;
 DEFINE INDEX IF NOT EXISTS idx_server_tenant_slug ON server FIELDS tenant, slug UNIQUE;
 
 -- FSC-26 Phase B-2: Worker Pool (複数 Server を label で束ねた論理グループ)
@@ -1580,6 +1591,8 @@ DEFINE FIELD IF NOT EXISTS cf_record_id ON dns_record TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS proxied ON dns_record TYPE bool DEFAULT false;
 DEFINE FIELD IF NOT EXISTS created_at ON dns_record TYPE option<datetime> DEFAULT time::now();
 DEFINE FIELD IF NOT EXISTS updated_at ON dns_record TYPE option<datetime> DEFAULT time::now();
+-- D#4 soft-delete: tombstone (None = active row)
+DEFINE FIELD IF NOT EXISTS deleted_at ON dns_record TYPE option<datetime>;
 DEFINE INDEX IF NOT EXISTS idx_dns_record_name ON dns_record FIELDS name UNIQUE;
 
 DEFINE TABLE IF NOT EXISTS tenant_user SCHEMAFULL;
@@ -1587,6 +1600,8 @@ DEFINE FIELD IF NOT EXISTS auth0_sub ON tenant_user TYPE string;
 DEFINE FIELD IF NOT EXISTS tenant ON tenant_user TYPE record<tenant>;
 DEFINE FIELD IF NOT EXISTS role ON tenant_user TYPE string DEFAULT 'member';
 DEFINE FIELD IF NOT EXISTS created_at ON tenant_user TYPE option<datetime> DEFAULT time::now();
+-- D#4 soft-delete: tombstone (None = active row)
+DEFINE FIELD IF NOT EXISTS deleted_at ON tenant_user TYPE option<datetime>;
 -- B#2 fix: 旧 idx_tenant_user_sub は auth0_sub 単独 UNIQUE で multi-tenant
 -- ユーザー (1 Auth0 user → 複数 tenant) を block していた。 (auth0_sub, tenant)
 -- 複合 UNIQUE に切替。 REMOVE は schema 制約のみで data は不変。
@@ -1759,6 +1774,7 @@ mod tests {
             repository_url: Some("https://github.com/chronista-club/creo-memories".into()),
             created_at: None,
             updated_at: None,
+            deleted_at: None,
         };
         let created = db.create_project(&project).await.unwrap();
         assert!(created.id.is_some());
@@ -1818,6 +1834,7 @@ mod tests {
             lifecycle: None,
             created_at: None,
             updated_at: None,
+            deleted_at: None,
         };
         let created = db.register_server(&server).await.unwrap();
         assert!(created.id.is_some());
@@ -1898,6 +1915,7 @@ mod tests {
             lifecycle: None,
             created_at: None,
             updated_at: None,
+            deleted_at: None,
         };
         let created = db.register_server(&server).await.unwrap();
         assert!(created.id.is_some());
@@ -1968,6 +1986,7 @@ mod tests {
             tenant: tenant_id.clone(),
             role: "owner".into(),
             created_at: None,
+            deleted_at: None,
         };
         let created = db.create_tenant_user(&user).await.unwrap();
         assert!(created.id.is_some());
@@ -1989,6 +2008,7 @@ mod tests {
             tenant: tenant_id.clone(),
             role: "member".into(),
             created_at: None,
+            deleted_at: None,
         })
         .await
         .unwrap();
@@ -2062,6 +2082,7 @@ mod tests {
                 repository_url: None,
                 created_at: None,
                 updated_at: None,
+                deleted_at: None,
             })
             .await
             .unwrap();
@@ -2095,6 +2116,7 @@ mod tests {
                 lifecycle: None,
                 created_at: None,
                 updated_at: None,
+                deleted_at: None,
             })
             .await
             .unwrap();
@@ -2192,6 +2214,7 @@ mod tests {
             lifecycle: None,
             created_at: None,
             updated_at: None,
+            deleted_at: None,
         })
         .await
         .unwrap();
@@ -2356,6 +2379,7 @@ mod tests {
             lifecycle: None,
             created_at: None,
             updated_at: None,
+            deleted_at: None,
         };
         let created = db.register_server(&server).await.unwrap();
         assert_eq!(
@@ -2521,6 +2545,7 @@ mod tests {
                 lifecycle: None,
                 created_at: None,
                 updated_at: None,
+                deleted_at: None,
             })
             .await
             .unwrap();
