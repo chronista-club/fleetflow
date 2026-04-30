@@ -35,6 +35,9 @@ data/
 # Vantage development database
 .vantage/
 
+# Code-indexing tool cache (lbug binary + meta.json、 大きい blob で repo 汚染回避)
+.gitnexus/
+
 # Skills - ホワイトリスト形式
 .claude/skills/*
 !.claude/skills/bollard/
