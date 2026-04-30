@@ -181,16 +181,26 @@ impl Usacloud {
         // Build note vars JSON array if provided
         // Format: [{"ID": 123456789012, "Variables": {"key": "value"}}]
         let note_vars_json: Option<String> = if let Some(ref note_vars) = config.note_vars {
+            // 旧実装は note_id.parse::<u64>() 失敗で silent に 0、 to_string 失敗で
+            // 空文字に fallback していた → Sakura API レベルで謎エラーになる anti-pattern。
+            // local validation で早期に明示エラーを返す。
             let notes_array: Vec<serde_json::Value> = note_vars
                 .iter()
                 .map(|(note_id, vars)| {
-                    serde_json::json!({
-                        "ID": note_id.parse::<u64>().unwrap_or(0),
-                        "Variables": vars
-                    })
+                    let id: u64 = note_id.parse().map_err(|e| {
+                        SakuraError::CreationFailed(format!(
+                            "invalid note_id '{}' (expected u64 startup script ID): {}",
+                            note_id, e
+                        ))
+                    })?;
+                    Ok(serde_json::json!({
+                        "ID": id,
+                        "Variables": vars,
+                    }))
                 })
-                .collect();
-            Some(serde_json::to_string(&notes_array).unwrap_or_default())
+                .collect::<Result<Vec<_>>>()?;
+            // serde_json::Error は SakuraError::JsonError に From 実装あり (`?` で OK)
+            Some(serde_json::to_string(&notes_array)?)
         } else {
             None
         };
