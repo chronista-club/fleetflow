@@ -677,6 +677,7 @@ impl Database {
     // ─────────────────────────────────────────
 
     pub async fn register_server(&self, server: &Server) -> Result<Server> {
+        // B#3 fix: 旧実装は CREATE SQL に PR #153 で追加された lifecycle / infra metadata fields を bind せず silent drop していた。 全 field を明示 bind する。
         let mut result = self
             .db
             .query(
@@ -684,7 +685,9 @@ impl Database {
                     tenant: $tenant, slug: $slug, provider: $provider, plan: $plan, \
                     ssh_host: $ssh_host, ssh_user: $ssh_user, deploy_path: $deploy_path, \
                     status: $status, labels: $labels, capacity: $capacity, \
-                    allocated: $allocated, scheduling: $scheduling, pool_id: $pool_id \
+                    allocated: $allocated, scheduling: $scheduling, pool_id: $pool_id, \
+                    desired_state: $desired_state, purpose: $purpose, owner: $owner, \
+                    sakura: $sakura, tailscale: $tailscale, dns: $dns, lifecycle: $lifecycle \
                 }",
             )
             .bind(("tenant", server.tenant.clone()))
@@ -702,6 +705,14 @@ impl Database {
             .bind(("scheduling", server.scheduling.clone()))
             // FSC-26 Phase B-2: Worker Pool 参照
             .bind(("pool_id", server.pool_id.clone()))
+            // PR #153: lifecycle / infra metadata (single-table model)
+            .bind(("desired_state", server.desired_state.clone()))
+            .bind(("purpose", server.purpose.clone()))
+            .bind(("owner", server.owner.clone()))
+            .bind(("sakura", server.sakura.clone()))
+            .bind(("tailscale", server.tailscale.clone()))
+            .bind(("dns", server.dns.clone()))
+            .bind(("lifecycle", server.lifecycle.clone()))
             .await
             .context("サーバー登録失敗")?;
         let created: Option<Server> = result.take(0)?;
@@ -1028,11 +1039,11 @@ impl Database {
                     AND resolved = false
                     LIMIT 1);
                 IF array::len($existing) > 0 THEN
-                    (UPDATE $existing[0].id SET
+                    (UPDATE ONLY $existing[0].id SET
                         severity = $severity,
                         message = $message)
                 ELSE
-                    (CREATE alert CONTENT {
+                    (CREATE ONLY alert CONTENT {
                         tenant: $tenant,
                         server_slug: $server_slug,
                         container_name: $container_name,
@@ -1052,7 +1063,10 @@ impl Database {
             .bind(("message", alert.message.clone()))
             .await
             .context("アラート upsert 失敗")?;
-        // IF-ELSE 結果は statement index 1
+        // B#7 fix: UPDATE/CREATE ONLY で両 branch 単一 record 返却に統一。
+        // 旧実装は UPDATE が Vec<Alert> を返していたため、 IF branch fire 時に
+        // result.take(1) が型不一致で None を返し誤エラーを起こす可能性があった。
+        // IF-ELSE 結果は statement index 1。
         let created: Option<Alert> = result.take(1)?;
         created.context("アラート upsert 結果が空")
     }
@@ -1569,7 +1583,11 @@ DEFINE FIELD IF NOT EXISTS auth0_sub ON tenant_user TYPE string;
 DEFINE FIELD IF NOT EXISTS tenant ON tenant_user TYPE record<tenant>;
 DEFINE FIELD IF NOT EXISTS role ON tenant_user TYPE string DEFAULT 'member';
 DEFINE FIELD IF NOT EXISTS created_at ON tenant_user TYPE option<datetime> DEFAULT time::now();
-DEFINE INDEX IF NOT EXISTS idx_tenant_user_sub ON tenant_user FIELDS auth0_sub UNIQUE;
+-- B#2 fix: 旧 idx_tenant_user_sub は auth0_sub 単独 UNIQUE で multi-tenant
+-- ユーザー (1 Auth0 user → 複数 tenant) を block していた。 (auth0_sub, tenant)
+-- 複合 UNIQUE に切替。 REMOVE は schema 制約のみで data は不変。
+REMOVE INDEX IF EXISTS idx_tenant_user_sub ON tenant_user;
+DEFINE INDEX IF NOT EXISTS idx_tenant_user_sub_tenant ON tenant_user FIELDS auth0_sub, tenant UNIQUE;
 DEFINE INDEX IF NOT EXISTS idx_tenant_user_tenant ON tenant_user FIELDS tenant;
 
 DEFINE TABLE IF NOT EXISTS deployment SCHEMAFULL;
@@ -2783,7 +2801,7 @@ mod tests {
             state: build_job_state::QUEUED.to_string(),
             server: None,
             logs_url: None,
-            submitted_at: None,
+            submitted_at: chrono::Utc::now(),
             started_at: None,
             finished_at: None,
             duration_seconds: None,

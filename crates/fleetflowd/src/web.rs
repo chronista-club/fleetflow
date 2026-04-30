@@ -112,8 +112,8 @@ pub async fn start(
             "/api/v1/stages/{project}/{stage}/services/{service}/restart",
             post(api_v1_service_restart),
         )
-        // Stage Tier adopt phase (FSC-16, 2026-04-24)
-        .route("/api/v1/stages/adopt", post(api_stage_adopt))
+        // Stage Tier adopt phase (FSC-16, 2026-04-24) — `_adopt` prefix で {project} static collision 回避 (B#5)
+        .route("/api/v1/stages/_adopt", post(api_stage_adopt))
         .layer(middleware::from_fn_with_state(
             web_state.clone(),
             auth_middleware,
@@ -1960,7 +1960,7 @@ async fn api_build_list(State(state): State<Arc<WebState>>, req: Request) -> imp
                         "dockerfile": j.source.dockerfile,
                         "image": j.target.image,
                         "logs_url": j.logs_url,
-                        "submitted_at": j.submitted_at.map(|d| d.to_rfc3339()),
+                        "submitted_at": j.submitted_at.to_rfc3339(),
                         "started_at": j.started_at.map(|d| d.to_rfc3339()),
                         "finished_at": j.finished_at.map(|d| d.to_rfc3339()),
                         "duration_seconds": j.duration_seconds,
@@ -2088,7 +2088,7 @@ async fn api_build_submit(State(state): State<Arc<WebState>>, req: Request) -> i
         state: build_job_state::QUEUED.to_string(),
         server: None,
         logs_url: None,
-        submitted_at: None,
+        submitted_at: chrono::Utc::now(),
         started_at: None,
         finished_at: None,
         duration_seconds: None,
@@ -2106,7 +2106,7 @@ async fn api_build_submit(State(state): State<Arc<WebState>>, req: Request) -> i
                     "git_ref": created.source.git_ref,
                     "dockerfile": created.source.dockerfile,
                     "image": created.target.image,
-                    "submitted_at": created.submitted_at.map(|d| d.to_rfc3339()),
+                    "submitted_at": created.submitted_at.to_rfc3339(),
                 }
             })),
         )
@@ -2172,7 +2172,7 @@ async fn api_build_show(
                         "dockerfile": job.source.dockerfile,
                         "image": job.target.image,
                         "logs_url": job.logs_url,
-                        "submitted_at": job.submitted_at.map(|d| d.to_rfc3339()),
+                        "submitted_at": job.submitted_at.to_rfc3339(),
                         "started_at": job.started_at.map(|d| d.to_rfc3339()),
                         "finished_at": job.finished_at.map(|d| d.to_rfc3339()),
                         "duration_seconds": job.duration_seconds,

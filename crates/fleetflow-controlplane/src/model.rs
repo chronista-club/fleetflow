@@ -850,7 +850,7 @@ pub struct BuildJob {
     pub server: Option<RecordId>,
     /// ログの参照先 URL (v1 は polling、logs_url を polling する)
     pub logs_url: Option<String>,
-    pub submitted_at: Option<DateTime<Utc>>,
+    pub submitted_at: DateTime<Utc>,
     pub started_at: Option<DateTime<Utc>>,
     pub finished_at: Option<DateTime<Utc>>,
     /// 実行時間 (秒)

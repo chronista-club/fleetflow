@@ -452,7 +452,9 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                         }
                         "delete" => {
                             let slug = payload["slug"].as_str().unwrap_or_default();
-                            let with_disks = payload["with_disks"].as_bool().unwrap_or(true);
+                            // C1: disk 削除は明示的 opt-in (`feedback_disk_deletion_confirm.md`)。
+                            // field omit / typo で disk silent destroy を回避するため default false。
+                            let with_disks = payload["with_disks"].as_bool().unwrap_or(false);
                             let cloud_id = payload["cloud_id"].as_str();
 
                             // クラウドからも削除する場合

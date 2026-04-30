@@ -599,11 +599,18 @@ impl FleetFlowServer {
         description = "Control Plane に登録されている全プロジェクトの一覧を取得します。CP にログイン済みである必要があります。"
     )]
     async fn fleetflow_cp_projects(&self) -> Result<String, String> {
-        let (client, _creds) = cp::connect().await.map_err(|e| e.to_string())?;
+        let (client, creds) = cp::connect().await.map_err(|e| e.to_string())?;
 
-        let resp = cp::request(&client, "project", "list", serde_json::json!({}))
-            .await
-            .map_err(|e| e.to_string())?;
+        // B#6 family: tenant_slug 渡しで tenant isolation を担保 (overview と同 pattern)
+        let tenant_slug = creds.tenant_slug.as_deref().unwrap_or("default");
+        let resp = cp::request(
+            &client,
+            "project",
+            "list",
+            serde_json::json!({ "tenant_slug": tenant_slug }),
+        )
+        .await
+        .map_err(|e| e.to_string())?;
 
         client.disconnect().await.ok();
 
@@ -634,11 +641,18 @@ impl FleetFlowServer {
         description = "Control Plane に登録されている全サーバーの一覧を取得します。各サーバーのプロバイダ、IP、稼働状態を表示します。"
     )]
     async fn fleetflow_cp_servers(&self) -> Result<String, String> {
-        let (client, _creds) = cp::connect().await.map_err(|e| e.to_string())?;
+        let (client, creds) = cp::connect().await.map_err(|e| e.to_string())?;
 
-        let resp = cp::request(&client, "server", "list", serde_json::json!({}))
-            .await
-            .map_err(|e| e.to_string())?;
+        // B#6 family: tenant_slug 渡しで tenant isolation を担保 (overview と同 pattern)
+        let tenant_slug = creds.tenant_slug.as_deref().unwrap_or("default");
+        let resp = cp::request(
+            &client,
+            "server",
+            "list",
+            serde_json::json!({ "tenant_slug": tenant_slug }),
+        )
+        .await
+        .map_err(|e| e.to_string())?;
 
         client.disconnect().await.ok();
 
@@ -673,13 +687,16 @@ impl FleetFlowServer {
         description = "全プロジェクトのステージ横断状態を取得します。各プロジェクト × ステージのサービス稼働数を表示します。"
     )]
     async fn fleetflow_cp_overview(&self) -> Result<String, String> {
-        let (client, _creds) = cp::connect().await.map_err(|e| e.to_string())?;
+        let (client, creds) = cp::connect().await.map_err(|e| e.to_string())?;
 
+        // B#6 fix: tenant_slug を渡さないと handler 側の `WHERE project.tenant.slug = $tenant_slug`
+        // が空 string で match し、 tenant isolation が効かない (テナント越境リスク)
+        let tenant_slug = creds.tenant_slug.as_deref().unwrap_or("default");
         let resp = cp::request(
             &client,
             "stage",
             "list_across_projects",
-            serde_json::json!({}),
+            serde_json::json!({ "tenant_slug": tenant_slug }),
         )
         .await
         .map_err(|e| e.to_string())?;
