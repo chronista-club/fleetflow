@@ -270,7 +270,8 @@ echo "=== Phase 2: usacloud server create ==="
 
 # stdout=JSON / stderr=NOTICE 分離。 set -e と組み合わせるため if-! で rc を捕まえる
 CREATE_ERR_LOG="$(mktemp -t spawn-build-worker.create-err.XXXXXX)"
-trap 'rm -f "${CREATE_ERR_LOG}"' EXIT
+# Phase 7 の awk 一時ファイル ${HOME}/.ssh/config.tmp も同 trap で cleanup
+trap 'rm -f "${CREATE_ERR_LOG}" "${HOME}/.ssh/config.tmp"' EXIT
 if ! CREATE_OUT=$(usacloud server create -y \
     --zone "${ZONE}" \
     --name "${NAME}" \
@@ -314,6 +315,8 @@ fi
 
 if [ -z "${PUBLIC_IP}" ]; then
   echo "error: 公開 IP の取得に失敗 (server ID=${SERVER_ID})" >&2
+  echo "  cleanup: usacloud server delete -y --with-disks --zone ${ZONE} ${SERVER_ID}" >&2
+  echo "           op item delete ${PW_ITEM_ID} --vault ${OP_VAULT}" >&2
   exit 1
 fi
 
@@ -334,15 +337,18 @@ fi
 
 echo "=== Phase 3: wait SSH ready ==="
 
-SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 -o BatchMode=yes"
-TRIES=30
-for i in $(seq 1 ${TRIES}); do
-  if ssh ${SSH_OPTS} "root@${PUBLIC_IP}" 'true' > /dev/null 2>&1; then
-    echo "  SSH ready (try ${i}/${TRIES})"
+# bash 配列で word-splitting 依存を避ける (zsh 互換 + 値に空白入っても安全)
+SSH_OPTS=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 -o BatchMode=yes)
+SSH_WAIT_TRIES="${SSH_WAIT_TRIES:-30}"
+for ((i=1; i<=SSH_WAIT_TRIES; i++)); do
+  if ssh "${SSH_OPTS[@]}" "root@${PUBLIC_IP}" 'true' > /dev/null 2>&1; then
+    echo "  SSH ready (try ${i}/${SSH_WAIT_TRIES})"
     break
   fi
-  if [ "${i}" -eq "${TRIES}" ]; then
-    echo "error: SSH not reachable after ${TRIES} tries" >&2
+  if [ "${i}" -eq "${SSH_WAIT_TRIES}" ]; then
+    echo "error: SSH not reachable after ${SSH_WAIT_TRIES} tries" >&2
+    echo "  cleanup: usacloud server delete -y --with-disks --zone ${ZONE} ${SERVER_ID}" >&2
+    echo "           op item delete ${PW_ITEM_ID} --vault ${OP_VAULT}" >&2
     exit 1
   fi
   sleep 10
@@ -354,7 +360,7 @@ echo ""
 # ─────────────────────────────────────────
 
 echo "=== Phase 4: provision-worker-base.sh ==="
-ssh ${SSH_OPTS} "root@${PUBLIC_IP}" 'bash -s' < "${SCRIPT_DIR}/provision-worker-base.sh"
+ssh "${SSH_OPTS[@]}" "root@${PUBLIC_IP}" 'bash -s' < "${SCRIPT_DIR}/provision-worker-base.sh"
 echo ""
 
 # ─────────────────────────────────────────
@@ -369,13 +375,17 @@ else
   TS_AUTHKEY=""
 fi
 
-ssh ${SSH_OPTS} "root@${PUBLIC_IP}" \
-  "HOSTNAME='${NAME}' TAILSCALE_AUTHKEY='${TS_AUTHKEY}' bash -s" \
-  < "${SCRIPT_DIR}/worker-init.sh"
+# secret (TAILSCALE_AUTHKEY) を ssh の argv に乗せず stdin で worker-init.sh に流す。
+# argv は `ps aux` で他プロセスから見えるが stdin は不可視。
+# `printf %q` で改行 / quote を含む値もシェル安全に escape。
+ssh "${SSH_OPTS[@]}" "root@${PUBLIC_IP}" 'bash -s' < <(
+  printf 'HOSTNAME=%q\nTAILSCALE_AUTHKEY=%q\n' "${NAME}" "${TS_AUTHKEY}"
+  cat "${SCRIPT_DIR}/worker-init.sh"
+)
 
 TS_IP=""
 if [ "${USE_TAILSCALE}" -eq 1 ]; then
-  TS_IP=$(ssh ${SSH_OPTS} "root@${PUBLIC_IP}" 'tailscale ip -4 2>/dev/null || true' | head -1)
+  TS_IP=$(ssh "${SSH_OPTS[@]}" "root@${PUBLIC_IP}" 'tailscale ip -4 2>/dev/null || true' | head -1)
 fi
 echo ""
 
@@ -388,12 +398,11 @@ echo ""
 
 if [ "${USE_FLEET_AGENT}" -eq 1 ]; then
   echo "=== Phase 5.5: scp fleet-agent + provision-fleet-agent.sh (slug=${FLEET_SLUG}) ==="
-  # scp: SSH_OPTS は `-o k=v ...` のスペース区切り、 zsh で word-split されないので
-  # ここでは個別 -o を直書き (scp は array 展開不可)
-  scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10 \
-    "${FLEET_AGENT_BINARY}" "root@${PUBLIC_IP}:/usr/local/bin/fleet-agent"
-  ssh ${SSH_OPTS} "root@${PUBLIC_IP}" 'chmod +x /usr/local/bin/fleet-agent'
-  ssh ${SSH_OPTS} "root@${PUBLIC_IP}" \
+  # scp は array 展開対応済 ("${SSH_OPTS[@]}" を使えるが scp は SSH_OPTS の subset で十分)
+  scp "${SSH_OPTS[@]}" "${FLEET_AGENT_BINARY}" "root@${PUBLIC_IP}:/usr/local/bin/fleet-agent"
+  ssh "${SSH_OPTS[@]}" "root@${PUBLIC_IP}" 'chmod +x /usr/local/bin/fleet-agent'
+  # --slug / --endpoint は secret ではないので argv 渡しで OK
+  ssh "${SSH_OPTS[@]}" "root@${PUBLIC_IP}" \
     "bash -s -- --slug '${FLEET_SLUG}' --endpoint '${FLEET_CP_ENDPOINT}'" \
     < "${SCRIPT_DIR}/provision-fleet-agent.sh"
   echo ""
@@ -409,7 +418,8 @@ fi
 
 if [ "${USE_IDLE_SHUTDOWN}" -eq 1 ]; then
   echo "=== Phase 6: install-idle-shutdown.sh (idle ${IDLE_MIN} min) ==="
-  ssh ${SSH_OPTS} "root@${PUBLIC_IP}" "IDLE_THRESHOLD_MIN=${IDLE_MIN} bash -s" \
+  # IDLE_THRESHOLD_MIN は secret ではないので argv で OK
+  ssh "${SSH_OPTS[@]}" "root@${PUBLIC_IP}" "IDLE_THRESHOLD_MIN=${IDLE_MIN} bash -s" \
     < "${SCRIPT_DIR}/install-idle-shutdown.sh"
   echo ""
 else
