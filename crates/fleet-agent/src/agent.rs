@@ -192,8 +192,12 @@ async fn handle_deploy(
     );
 
     // 蓄積されたログ行を CP に送信
+    // D#8 fix: 旧実装は `let _ = ...send_event(...)` で silent discard していたため
+    // CP channel が落ちている等で deploy log が全 loss しても何も log に出ず、
+    // 運用 debug が困難だった。 失敗カウントを集計して warn 1 行で可視化。
+    let mut failed_log_sends: usize = 0;
     for line in &log_lines {
-        let _ = channel_for_log
+        if channel_for_log
             .send_event(
                 "deploy_log",
                 &json!({
@@ -201,7 +205,18 @@ async fn handle_deploy(
                     "line": line,
                 }),
             )
-            .await;
+            .await
+            .is_err()
+        {
+            failed_log_sends += 1;
+        }
+    }
+    if failed_log_sends > 0 {
+        warn!(
+            failed = failed_log_sends,
+            total = log_lines.len(),
+            "deploy log lines lost (CP channel error)"
+        );
     }
 
     // 最終結果を Response として返す
