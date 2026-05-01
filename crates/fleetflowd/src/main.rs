@@ -159,7 +159,10 @@ async fn main() -> anyhow::Result<()> {
     info!("シャットダウン開始");
 
     // クリーンアップ
-    drop(web_handle);
+    // drop(handle) は detach (task は走り続ける) — graceful shutdown 不成立。
+    // web_handle は明示的に abort して axum task を終了させる (sprint-3a C6.2)。
+    // CP server 側 handle の同等修正は scope 外 (別 sprint で対応)。
+    web_handle.abort();
     drop(handle);
     daemon::remove_pid_file(&cfg.pid_file);
 

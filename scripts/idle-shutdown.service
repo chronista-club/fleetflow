@@ -7,6 +7,10 @@ After=docker.service fleet-agent.service
 
 [Service]
 Type=oneshot
+# install-idle-shutdown.sh が caller env (IDLE_THRESHOLD_MIN / MIN_UPTIME_MIN /
+# GRACE_MIN) を /etc/default/idle-shutdown に書き出す。 leading `-` で file 不在
+# 時も起動可 (default 値 fallback)。
+EnvironmentFile=-/etc/default/idle-shutdown
 ExecStart=/usr/local/bin/idle-shutdown.sh
 StandardOutput=journal
 StandardError=journal
