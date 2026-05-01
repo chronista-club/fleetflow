@@ -328,6 +328,32 @@ echo "  server_id:  ${SERVER_ID}"
 echo "  public_ip:  ${PUBLIC_IP}"
 echo ""
 
+# ─────────────────────────────────────────
+# Phase 2.5. ERR trap install (Phase 4/5/5.5 SSH 失敗時の cleanup hint)
+# ─────────────────────────────────────────
+# Phase 4 (provision-worker-base.sh) / Phase 5 (worker-init.sh) / Phase 5.5
+# (fleet-agent install) の SSH コマンドが set -e で即 exit すると、
+# server + 1Password item が dangling のまま user に hint が表示されない。
+# ERR trap で uncaught error 時に cleanup commands を stderr に吐く。
+# (Phase 0/1/2 の explicit `echo + exit 1` path は trap 登録前に exit するので
+#  二重出力にはならない。 set -e による即 exit のみ catch する。)
+trap_cleanup_on_err() {
+  local rc=$?
+  echo "" >&2
+  echo "=== ERROR (rc=${rc}) — server may be left dangling ===" >&2
+  if [ -n "${SERVER_ID:-}" ]; then
+    echo "  cleanup: usacloud server delete -y --with-disks --zone ${ZONE} ${SERVER_ID}" >&2
+  fi
+  if [ -n "${PW_ITEM_ID:-}" ]; then
+    echo "           op item delete ${PW_ITEM_ID} --vault ${OP_VAULT}" >&2
+  fi
+  if [ -n "${TS_IP:-}" ]; then
+    echo "  注: Tailscale node ${NAME}-ts (${TS_IP}) が tailnet に残る可能性、 必要なら admin console で remove" >&2
+  fi
+}
+trap trap_cleanup_on_err ERR
+set -E  # ERR trap を function / subshell にも propagate
+
 if [ "${DRY_RUN}" -eq 1 ]; then
   echo "=== DRY-RUN 完了 ==="
   echo "  provision/init/idle-shutdown は skip"

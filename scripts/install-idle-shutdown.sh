@@ -67,11 +67,27 @@ if [ -f "${DISABLE_FLAG}" ]; then
 fi
 
 # ─────────────────────────────────────────
-# 1b. 必須サービスの is-active check
+# 1b. 必須サービスの is-active check (install 済 service のみ)
 # ─────────────────────────────────────────
 # unit file の `After=` は ordering のみで gate にならない。
 # 必須サービスが落ちている場合は idle 判定を skip (誤 shutdown 回避)。
+#
+# ただし worker role 毎に install される service は異なる:
+#   - 通常 build worker:        docker + fleet-agent 両方 install
+#   - --no-fleet-agent worker:  docker のみ (fleet-agent 未 install)
+#   - docker 不使用 worker:     docker 自体未 install
+# Service が install されていない場合は check 対象外と判定 (skip しない)。
+# Install 済 service のみ active 必須を強制する。
+# (旧実装は両方 install 前提で `is-active` のみ確認していたため、 docker / fleet-agent
+#  未 install の worker では永続 skip = idle-shutdown 機能停止していた。)
 for svc in docker fleet-agent; do
+  # `systemctl list-unit-files <name>` は unit 不在でも rc=0 で
+  # "0 unit files listed." を出すため、 行マッチで実在を判定する。
+  if ! systemctl list-unit-files "${svc}.service" --no-legend 2>/dev/null \
+       | grep -q "^${svc}\.service"; then
+    # この worker では該当 service が install されていない → check 対象外
+    continue
+  fi
   if ! systemctl is-active --quiet "${svc}"; then
     log "skip: ${svc} is not active (idle check requires healthy stack)"
     exit 0
@@ -112,9 +128,13 @@ fi
 # epoch 0 fallback による偽陽性 idle 判定 を防ぐため、parse 失敗時は skip 扱い (安全側)。
 LAST_LINE=$(last --time-format=iso -n 5 2>/dev/null | grep -v '^$\|^wtmp\|^reboot' | head -1 || true)
 if [ -n "${LAST_LINE}" ]; then
-  # ISO 8601 timestamp は USER TTY HOST <ISO_TIME> ... の 4 列目
-  # 例: "mito pts/0  100.65.119.86 2026-04-28T22:48:11+09:00 ..."
-  LAST_TS=$(echo "${LAST_LINE}" | awk '{print $4}')
+  # `last` の出力は USER TTY HOST <ISO_TIME> ... 形式だが、 HOST が
+  # 空 / 空白 / IPv6 だと column position が揺れる (col-4 fixed parse は脆弱)。
+  # 全列を走査して ISO 8601 pattern (^YYYY-MM-DDT) に match する最初の field を
+  # 抽出することで、 HOST 列の有無に依存せず timestamp を取得する。
+  # 例 (HOST 有): "mito pts/0  100.65.119.86 2026-04-28T22:48:11+09:00 ..."
+  # 例 (HOST 無): "mito pts/1                 2026-04-29T08:00:00+09:00 ..."
+  LAST_TS=$(echo "${LAST_LINE}" | awk '{for(i=1;i<=NF;i++) if($i~/^[0-9]{4}-[0-9]{2}-[0-9]{2}T/) {print $i; exit}}')
   if [ -n "${LAST_TS}" ]; then
     LAST_EPOCH=$(date -d "${LAST_TS}" +%s 2>/dev/null || echo "")
     if [ -z "${LAST_EPOCH}" ] || [ "${LAST_EPOCH}" -le 0 ]; then
