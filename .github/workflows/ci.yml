@@ -34,7 +34,7 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: mise のインストール
-        uses: jdx/mise-action@v2
+        uses: jdx/mise-action@v4
         with:
           experimental: true
 
@@ -71,7 +71,7 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: mise のインストール
-        uses: jdx/mise-action@v2
+        uses: jdx/mise-action@v4
 
       - name: mise のセットアップ
         run: mise install
@@ -103,7 +103,7 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: mise のインストール
-        uses: jdx/mise-action@v2
+        uses: jdx/mise-action@v4
         with:
           experimental: true
 
