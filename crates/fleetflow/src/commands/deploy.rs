@@ -7,16 +7,27 @@ use fleetflow_container::{DeployEngine, DeployEvent, DeployRequest};
 use crate::utils::is_sensitive_key;
 
 /// dry-run モードでデプロイ計画を表示する
+///
+/// `tenant_override` は CLI flag `--tenant <slug>` の値。 CP creds は呼ばない
+/// (dry-run は無接続) ので、 解決優先度のうち (1) と (2) のみが評価される
+/// — `(creds → "default")` への fallback は実 deploy で初めて確定する。
 fn print_dry_run_plan(
     config: &fleetflow_core::Flow,
     stage_name: &str,
     target_services: &[String],
+    tenant_override: Option<&str>,
 ) -> anyhow::Result<()> {
     println!(
         "{}",
         format!("[dry-run] ステージ '{}' のデプロイ計画:", stage_name)
             .yellow()
             .bold()
+    );
+
+    println!();
+    println!(
+        "  テナント: {}",
+        format_dry_run_tenant(tenant_override, config)
     );
 
     let network_name = fleetflow_container::get_network_name(&config.name, stage_name);
@@ -186,7 +197,12 @@ pub async fn handle(
 
     // dry-run モードの場合は実行計画を表示して終了
     if dry_run {
-        return print_dry_run_plan(config, &stage_name, &target_services);
+        return print_dry_run_plan(
+            config,
+            &stage_name,
+            &target_services,
+            tenant_override.as_deref(),
+        );
     }
 
     // 確認（--yesが指定されていない場合）
@@ -451,6 +467,23 @@ fn resolve_tenant_slug(
     "default".to_string()
 }
 
+/// dry-run 表示用に「テナント解決」 結果と source を 1 行に整形する。
+///
+/// dry-run は CP に接続しないため `creds_tenant` は常に `None` 扱い。
+/// ユーザーには 「決定値 + どこから来たか」 を可視化して、 deploy 前に
+/// 想定通りの tenant に向くか確認できるようにする。
+fn format_dry_run_tenant(cli_override: Option<&str>, config: &fleetflow_core::Flow) -> String {
+    let slug = resolve_tenant_slug(cli_override, config, None);
+    let source = if cli_override.is_some_and(|s| !s.is_empty()) {
+        "CLI flag --tenant"
+    } else if config.tenant.is_some() {
+        "fleet.kdl tenant block"
+    } else {
+        "fallback (creds 未確認 or default)"
+    };
+    format!("{} ({})", slug.cyan(), source)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -512,5 +545,32 @@ mod tests {
         let flow = flow_with_tenant(None);
         let result = resolve_tenant_slug(None, &flow, Some(""));
         assert_eq!(result, "default");
+    }
+
+    // ── format_dry_run_tenant ─────────────────────────
+    // 色 escape 文字列を含むので `contains` で slug + source を確認
+
+    #[test]
+    fn dry_run_tenant_kdl_block_source() {
+        let flow = flow_with_tenant(Some(TenantSpec::from_slug("hq")));
+        let formatted = format_dry_run_tenant(None, &flow);
+        assert!(formatted.contains("hq"));
+        assert!(formatted.contains("fleet.kdl tenant block"));
+    }
+
+    #[test]
+    fn dry_run_tenant_cli_override_source() {
+        let flow = flow_with_tenant(Some(TenantSpec::from_slug("hq")));
+        let formatted = format_dry_run_tenant(Some("override"), &flow);
+        assert!(formatted.contains("override"));
+        assert!(formatted.contains("CLI flag --tenant"));
+    }
+
+    #[test]
+    fn dry_run_tenant_fallback_source() {
+        let flow = flow_with_tenant(None);
+        let formatted = format_dry_run_tenant(None, &flow);
+        assert!(formatted.contains("default"));
+        assert!(formatted.contains("fallback"));
     }
 }
