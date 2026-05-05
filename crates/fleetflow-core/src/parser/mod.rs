@@ -7,18 +7,20 @@ mod cloud;
 mod port;
 mod service;
 mod stage;
+mod tenant;
 mod volume;
 
 // 内部で使用するパース関数
 use cloud::parse_provider;
 use service::parse_service;
 use stage::parse_stage;
+use tenant::parse_tenant;
 
 // 外部クレートから再利用可能なパース関数
 pub use cloud::parse_server;
 
 use crate::error::{FlowError, Result};
-use crate::model::{Flow, Service};
+use crate::model::{Flow, Service, TenantSpec};
 use crate::template::{TemplateProcessor, extract_variables};
 use kdl::KdlDocument;
 use std::collections::{HashMap, HashSet};
@@ -194,6 +196,7 @@ fn parse_kdl_string_raw_with_stage(
     let mut variables: HashMap<String, String> = HashMap::new();
     let mut name = default_name;
     let mut registry: Option<String> = None;
+    let mut tenant: Option<TenantSpec> = None;
 
     for node in doc.nodes() {
         match node.name().value() {
@@ -256,6 +259,11 @@ fn parse_kdl_string_raw_with_stage(
                     registry = Some(reg.to_string());
                 }
             }
+            "tenant" => {
+                // fleet.kdl で project の所有 tenant を declarative に宣言
+                // (last-wins、 同 file 内に複数あれば最後のものが採用される)
+                tenant = Some(parse_tenant(node)?);
+            }
             _ => {
                 // 不明なノードはスキップ（projectなどの追加ノードも許可）
             }
@@ -286,6 +294,7 @@ fn parse_kdl_string_raw_with_stage(
         servers,
         registry,
         variables,
+        tenant,
     })
 }
 

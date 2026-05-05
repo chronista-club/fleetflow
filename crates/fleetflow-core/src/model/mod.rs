@@ -9,6 +9,7 @@ mod port;
 mod process;
 mod service;
 mod stage;
+mod tenant;
 mod volume;
 
 // Re-exports
@@ -18,6 +19,7 @@ pub use port::*;
 pub use process::*;
 pub use service::*;
 pub use stage::*;
+pub use tenant::*;
 pub use volume::*;
 
 #[cfg(test)]
@@ -55,6 +57,7 @@ mod tests {
             servers: HashMap::new(),
             registry: None,
             variables: HashMap::new(),
+            tenant: None,
         };
 
         assert_eq!(flow.name, "my-project");
@@ -80,6 +83,7 @@ mod tests {
             servers: HashMap::new(),
             registry: None,
             variables: HashMap::new(),
+            tenant: None,
         };
 
         assert_eq!(flow.services.len(), 1);
