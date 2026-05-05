@@ -378,8 +378,7 @@ async fn deploy_remote(
     println!("{}", "Control Plane に接続中...".blue());
     let (client, creds) = cp_client::connect().await?;
 
-    let tenant_slug =
-        resolve_tenant_slug(tenant_override, config, creds.tenant_slug.as_deref());
+    let tenant_slug = resolve_tenant_slug(tenant_override, config, creds.tenant_slug.as_deref());
     println!("テナント: {}", tenant_slug.cyan());
 
     let request = DeployRequest {
