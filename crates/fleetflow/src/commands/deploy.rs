@@ -138,6 +138,7 @@ pub async fn handle(
     no_prune: bool,
     yes: bool,
     dry_run: bool,
+    tenant_override: Option<String>,
 ) -> anyhow::Result<()> {
     println!("{}", "デプロイを開始します...".blue().bold());
     utils::print_loaded_config_files(project_root);
@@ -219,7 +220,15 @@ pub async fn handle(
         let is_remote = !stage_config.servers.is_empty();
 
         if is_remote {
-            deploy_remote(config, &stage_name, &container_names, no_pull, no_prune).await?;
+            deploy_remote(
+                config,
+                &stage_name,
+                &container_names,
+                no_pull,
+                no_prune,
+                tenant_override.as_deref(),
+            )
+            .await?;
         } else {
             deploy_local(config, &stage_name, &container_names, no_pull, no_prune).await?;
         }
@@ -351,12 +360,16 @@ async fn deploy_local(
 }
 
 /// リモートデプロイ — CP 経由で DeployEngine を実行
+///
+/// `tenant_override` は CLI flag `--tenant <slug>` 由来 (省略時 None)。
+/// tenant 解決優先度は [`resolve_tenant_slug`] 参照。
 async fn deploy_remote(
     config: &fleetflow_core::Flow,
     stage_name: &str,
     target_services: &[String],
     no_pull: bool,
     no_prune: bool,
+    tenant_override: Option<&str>,
 ) -> anyhow::Result<()> {
     use super::cp_client;
     use serde_json::json;
@@ -364,6 +377,10 @@ async fn deploy_remote(
     println!();
     println!("{}", "Control Plane に接続中...".blue());
     let (client, creds) = cp_client::connect().await?;
+
+    let tenant_slug =
+        resolve_tenant_slug(tenant_override, config, creds.tenant_slug.as_deref());
+    println!("テナント: {}", tenant_slug.cyan());
 
     let request = DeployRequest {
         flow: config.clone(),
@@ -378,7 +395,7 @@ async fn deploy_remote(
         "deploy",
         "execute",
         json!({
-            "tenant_slug": creds.tenant_slug.as_deref().unwrap_or("default"),
+            "tenant_slug": tenant_slug,
             "project_slug": config.name,
             "request": serde_json::to_value(&request)?,
         }),
@@ -406,4 +423,95 @@ async fn deploy_remote(
     }
 
     Ok(())
+}
+
+/// tenant_slug を解決する。
+///
+/// 優先度 (高 → 低):
+/// 1. CLI flag `--tenant <slug>` (`cli_override`) — one-shot deploy 用
+/// 2. fleet.kdl `tenant "<slug>"` block (`config.tenant.slug`) — declarative SSOT
+/// 3. CLI auth context (`creds_tenant`、 `fleetflow login` 時に Auth0 org から取得)
+/// 4. `"default"` — 最終 fallback (旧挙動互換)
+///
+/// 副作用なし、 純関数。 tenant が未設定でも deploy 自体は通る (controlplane 側で
+/// "default" tenant が無いと CREATE される or エラーになるが、 ここでは判断しない)。
+fn resolve_tenant_slug(
+    cli_override: Option<&str>,
+    config: &fleetflow_core::Flow,
+    creds_tenant: Option<&str>,
+) -> String {
+    if let Some(s) = cli_override.filter(|s| !s.is_empty()) {
+        return s.to_string();
+    }
+    if let Some(spec) = &config.tenant {
+        return spec.slug.clone();
+    }
+    if let Some(s) = creds_tenant.filter(|s| !s.is_empty()) {
+        return s.to_string();
+    }
+    "default".to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use fleetflow_core::TenantSpec;
+    use fleetflow_core::model::Flow;
+    use std::collections::HashMap;
+
+    fn flow_with_tenant(tenant: Option<TenantSpec>) -> Flow {
+        Flow {
+            name: "test".to_string(),
+            services: HashMap::new(),
+            stages: HashMap::new(),
+            providers: HashMap::new(),
+            servers: HashMap::new(),
+            registry: None,
+            variables: HashMap::new(),
+            tenant,
+        }
+    }
+
+    #[test]
+    fn cli_override_wins_over_kdl_and_creds() {
+        let flow = flow_with_tenant(Some(TenantSpec::from_slug("hq")));
+        let result = resolve_tenant_slug(Some("override"), &flow, Some("anycreative"));
+        assert_eq!(result, "override");
+    }
+
+    #[test]
+    fn kdl_block_wins_over_creds() {
+        let flow = flow_with_tenant(Some(TenantSpec::from_slug("hq")));
+        let result = resolve_tenant_slug(None, &flow, Some("anycreative"));
+        assert_eq!(result, "hq");
+    }
+
+    #[test]
+    fn creds_used_when_kdl_missing() {
+        let flow = flow_with_tenant(None);
+        let result = resolve_tenant_slug(None, &flow, Some("anycreative"));
+        assert_eq!(result, "anycreative");
+    }
+
+    #[test]
+    fn default_when_all_missing() {
+        let flow = flow_with_tenant(None);
+        let result = resolve_tenant_slug(None, &flow, None);
+        assert_eq!(result, "default");
+    }
+
+    #[test]
+    fn empty_cli_override_falls_through_to_kdl() {
+        // 空文字 --tenant "" は無視 (clap の default=None と同視)
+        let flow = flow_with_tenant(Some(TenantSpec::from_slug("hq")));
+        let result = resolve_tenant_slug(Some(""), &flow, None);
+        assert_eq!(result, "hq");
+    }
+
+    #[test]
+    fn empty_creds_falls_through_to_default() {
+        let flow = flow_with_tenant(None);
+        let result = resolve_tenant_slug(None, &flow, Some(""));
+        assert_eq!(result, "default");
+    }
 }

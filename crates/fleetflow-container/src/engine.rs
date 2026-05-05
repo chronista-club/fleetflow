@@ -539,6 +539,7 @@ mod tests {
             servers: std::collections::HashMap::new(),
             registry: None,
             variables: std::collections::HashMap::new(),
+            tenant: None,
         }
     }
 

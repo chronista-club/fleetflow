@@ -223,6 +223,9 @@ enum Commands {
         /// 実行せずに実行計画のみ表示
         #[arg(long)]
         dry_run: bool,
+        /// テナント slug を override (省略時は fleet.kdl の `tenant` block → CLI auth context → "default" の順で解決)
+        #[arg(long)]
+        tenant: Option<String>,
     },
 
     // ── Admin ──────────────────────────────────
@@ -939,6 +942,7 @@ async fn main() -> anyhow::Result<()> {
             no_prune,
             yes,
             dry_run,
+            tenant,
         } => {
             let stage = resolve_stage(stage, stage_flag);
             commands::deploy::handle(
@@ -950,6 +954,7 @@ async fn main() -> anyhow::Result<()> {
                 no_prune,
                 yes,
                 dry_run,
+                tenant,
             )
             .await?;
         }

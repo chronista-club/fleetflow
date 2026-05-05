@@ -3,6 +3,7 @@
 use super::cloud::{CloudProvider, ServerResource};
 use super::service::Service;
 use super::stage::Stage;
+use super::tenant::TenantSpec;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -30,4 +31,11 @@ pub struct Flow {
     /// プロジェクト共通の変数（全ステージで使用可能）
     #[serde(default)]
     pub variables: HashMap<String, String>,
+    /// fleet.kdl で宣言された tenant 情報 (= project の所有 tenant)。
+    ///
+    /// `None` の場合 deploy CLI が `creds.tenant_slug` (Auth0 org context) や
+    /// "default" にフォールバック。 `Some` のとき deploy 時の tenant_slug は
+    /// この値が optimal な権威を持つ (CLI flag による override は可)。
+    #[serde(default)]
+    pub tenant: Option<TenantSpec>,
 }

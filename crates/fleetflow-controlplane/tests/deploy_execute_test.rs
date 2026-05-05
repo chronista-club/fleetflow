@@ -87,6 +87,7 @@ fn make_test_flow() -> Flow {
         servers: HashMap::new(),
         registry: None,
         variables: HashMap::new(),
+        tenant: None,
     }
 }
 
