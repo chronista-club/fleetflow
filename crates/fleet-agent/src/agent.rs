@@ -121,6 +121,11 @@ async fn command_loop(
             "deploy" => {
                 handle_deploy(&channel, msg.id, &payload, deploy_base).await?;
             }
+            "deploy.execute_kdl" => {
+                // FSC-34: CP から flow.stages[stage].servers で routing された kdl-based deploy
+                // (= bollard + DeployEngine 経由、 既存 docker-compose path とは別)
+                handle_deploy_kdl(&channel, msg.id, &payload).await?;
+            }
             "restart" => {
                 let service = payload["service"].as_str().unwrap_or("");
                 let result = deploy::restart_service(service).await;
@@ -236,6 +241,98 @@ async fn handle_deploy(
     // チャネル送信エラーのみ伝播（ネットワーク断）
     channel
         .send_response(request_id, "deploy", &response)
+        .await?;
+
+    Ok(())
+}
+
+/// FSC-34: kdl-based deploy を local docker daemon で実行する handler。
+///
+/// CP の `deploy.execute` handler が `flow.stages[stage].servers` を resolve して
+/// 該当 server slug の agent (= 自分) にこの method で routing する。 agent は
+/// local docker daemon (= worker の dockerd) に bollard で接続し、 DeployEngine で
+/// container を作成・起動する。
+///
+/// 既存 `deploy` method (= docker-compose 経由) とは **別系統**:
+/// - `deploy`            : payload に compose_path を渡す、 docker-compose CLI spawn
+/// - `deploy.execute_kdl`: payload に DeployRequest (Flow + stage_name + flags)、 bollard 直叩き
+///
+/// log streaming は将来課題 — 現状 deploy 完了まで block して結果を 1 response で返す。
+/// CP 側 timeout を deploy の最大想定時間 (image pull 込み 10 分) に合わせること。
+async fn handle_deploy_kdl(
+    channel: &UnisonChannel,
+    request_id: u64,
+    payload: &serde_json::Value,
+) -> Result<()> {
+    use fleetflow_container::{DeployEngine, DeployRequest};
+
+    // payload を DeployRequest に deserialize
+    let deploy_request: DeployRequest = match serde_json::from_value(payload.clone()) {
+        Ok(r) => r,
+        Err(e) => {
+            channel
+                .send_response(
+                    request_id,
+                    "deploy.execute_kdl",
+                    &json!({
+                        "status": "failed",
+                        "error": format!("invalid DeployRequest: {}", e),
+                    }),
+                )
+                .await?;
+            return Ok(());
+        }
+    };
+
+    // local docker daemon (= worker の dockerd) に bollard 接続
+    let docker = match bollard::Docker::connect_with_local_defaults() {
+        Ok(d) => d,
+        Err(e) => {
+            channel
+                .send_response(
+                    request_id,
+                    "deploy.execute_kdl",
+                    &json!({
+                        "status": "failed",
+                        "error": format!("Docker 接続失敗: {}", e),
+                    }),
+                )
+                .await?;
+            return Ok(());
+        }
+    };
+
+    let engine = DeployEngine::new(docker);
+    let log_buffer = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+    let log_buffer_clone = log_buffer.clone();
+
+    let result = engine
+        .execute(&deploy_request, move |event| {
+            // event は Debug で文字列化、 後で 1 response として CP に返す
+            log_buffer_clone
+                .lock()
+                .unwrap()
+                .push(format!("{:?}", event));
+        })
+        .await;
+
+    let response = match result {
+        Ok(r) => {
+            let combined = log_buffer.lock().unwrap().join("\n");
+            json!({
+                "status": "success",
+                "log": combined + "\n" + &r.log.join("\n"),
+                "services_deployed": r.services_deployed,
+            })
+        }
+        Err(e) => json!({
+            "status": "failed",
+            "error": e.to_string(),
+        }),
+    };
+
+    channel
+        .send_response(request_id, "deploy.execute_kdl", &response)
         .await?;
 
     Ok(())

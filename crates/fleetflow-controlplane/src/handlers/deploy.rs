@@ -383,13 +383,27 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                 }
                             };
 
+                            // FSC-34: flow.stages[stage_name].servers から target server を resolve。
+                            // - 0 件 → CP local docker で実行 (= 旧挙動、 backwards compat)
+                            // - 1 件以上 → 該当 server slug の fleet-agent に RPC routing
+                            //   (現状は first server のみ honor、 multi-server fan-out は将来課題)
+                            let target_server_slug: Option<String> = deploy_request
+                                .flow
+                                .stages
+                                .get(&deploy_request.stage_name)
+                                .and_then(|s| s.servers.first().cloned());
+
+                            let recorded_server_slug = target_server_slug
+                                .clone()
+                                .unwrap_or_else(|| "local".to_string());
+
                             // Deployment レコード作成 (status: "running")
                             let deployment = Deployment {
                                 id: None,
                                 tenant: tenant_id,
                                 project: project_id,
                                 stage: deploy_request.stage_name.clone(),
-                                server_slug: "local".into(),
+                                server_slug: recorded_server_slug.clone(),
                                 status: "running".into(),
                                 command: "deploy.execute".into(),
                                 log: None,
@@ -414,41 +428,82 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                     }
                                 };
 
-                            // Docker 接続 → DeployEngine 実行
-                            let docker = match bollard::Docker::connect_with_local_defaults() {
-                                Ok(d) => d,
-                                Err(e) => {
-                                    error!(error = %e, "Docker 接続失敗");
-                                    channel
-                                        .send_response(
-                                            msg.id,
-                                            "execute",
-                                            &json!({ "error": format!("Docker connection failed: {}", e) }),
-                                        )
-                                        .await?;
-                                    continue;
+                            // ─── deploy 実行: CP local OR agent routing ───
+                            let (status, log_str) = if let Some(server_slug) = &target_server_slug {
+                                // FSC-34: agent 経由 routing
+                                info!(
+                                    server = %server_slug,
+                                    project = project_slug,
+                                    stage = deploy_request.stage_name.as_str(),
+                                    "deploy.execute → agent routing"
+                                );
+
+                                match serde_json::to_value(&deploy_request) {
+                                    Ok(payload_value) => {
+                                        let result = state
+                                            .agent_registry
+                                            .send_command_with_timeout(
+                                                server_slug,
+                                                "deploy.execute_kdl",
+                                                payload_value,
+                                                std::time::Duration::from_secs(600),
+                                            )
+                                            .await;
+
+                                        match result {
+                                            Ok(resp) => {
+                                                let s = resp["status"].as_str().unwrap_or("unknown").to_string();
+                                                let log = resp["log"].as_str()
+                                                    .or_else(|| resp["error"].as_str())
+                                                    .unwrap_or("(no log)")
+                                                    .to_string();
+                                                (s, log)
+                                            }
+                                            Err(e) => ("failed".to_string(), format!("agent routing error: {}", e)),
+                                        }
+                                    }
+                                    Err(e) => {
+                                        error!(error = %e, "DeployRequest serialize 失敗");
+                                        ("failed".to_string(), format!("DeployRequest serialize 失敗: {}", e))
+                                    }
                                 }
-                            };
+                            } else {
+                                // 旧挙動: CP local docker daemon で直接実行
+                                let docker = match bollard::Docker::connect_with_local_defaults() {
+                                    Ok(d) => d,
+                                    Err(e) => {
+                                        error!(error = %e, "Docker 接続失敗");
+                                        channel
+                                            .send_response(
+                                                msg.id,
+                                                "execute",
+                                                &json!({ "error": format!("Docker connection failed: {}", e) }),
+                                            )
+                                            .await?;
+                                        continue;
+                                    }
+                                };
 
-                            let engine = DeployEngine::new(docker);
-                            let logs = Arc::new(Mutex::new(Vec::<String>::new()));
-                            let logs_clone = logs.clone();
+                                let engine = DeployEngine::new(docker);
+                                let logs = Arc::new(Mutex::new(Vec::<String>::new()));
+                                let logs_clone = logs.clone();
 
-                            let result = engine
-                                .execute(&deploy_request, move |event| {
-                                    logs_clone
-                                        .lock()
-                                        .unwrap()
-                                        .push(format!("{:?}", event));
-                                })
-                                .await;
+                                let result = engine
+                                    .execute(&deploy_request, move |event| {
+                                        logs_clone
+                                            .lock()
+                                            .unwrap()
+                                            .push(format!("{:?}", event));
+                                    })
+                                    .await;
 
-                            let (status, log_str) = match &result {
-                                Ok(r) => {
-                                    let combined_log = logs.lock().unwrap().join("\n");
-                                    ("success".to_string(), combined_log + "\n" + &r.log.join("\n"))
+                                match &result {
+                                    Ok(r) => {
+                                        let combined_log = logs.lock().unwrap().join("\n");
+                                        ("success".to_string(), combined_log + "\n" + &r.log.join("\n"))
+                                    }
+                                    Err(e) => ("failed".to_string(), e.to_string()),
                                 }
-                                Err(e) => ("failed".to_string(), e.to_string()),
                             };
 
                             // Deployment レコード更新

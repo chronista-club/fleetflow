@@ -79,6 +79,28 @@ impl AgentRegistry {
         method: &str,
         payload: Value,
     ) -> Result<Value, String> {
+        self.send_command_with_timeout(
+            server_slug,
+            method,
+            payload,
+            std::time::Duration::from_secs(60),
+        )
+        .await
+    }
+
+    /// Agent にコマンドを送信し、 timeout を caller で指定する版。
+    ///
+    /// 用途例:
+    /// - `deploy.execute_kdl`: image pull 込み 10 分前後 → 600s
+    /// - `build.execute`: 大きな repo の docker build → 1800s
+    /// - `restart` / `status`: 数秒 → 60s で十分
+    pub async fn send_command_with_timeout(
+        &self,
+        server_slug: &str,
+        method: &str,
+        payload: Value,
+        timeout: std::time::Duration,
+    ) -> Result<Value, String> {
         // ロックを最小限に保持: tx を clone して即解放
         let tx = {
             let agents = self.agents.lock().await;
@@ -99,10 +121,15 @@ impl AgentRegistry {
         .await
         .map_err(|_| format!("Agent '{}' へのコマンド送信失敗", server_slug))?;
 
-        // Agent からの応答を待つ（タイムアウト 60 秒）
-        tokio::time::timeout(std::time::Duration::from_secs(60), response_rx)
+        // Agent からの応答を待つ
+        tokio::time::timeout(timeout, response_rx)
             .await
-            .map_err(|_| format!("Agent '{}' からの応答タイムアウト", server_slug))?
+            .map_err(|_| {
+                format!(
+                    "Agent '{}' からの応答タイムアウト ({:?})",
+                    server_slug, timeout
+                )
+            })?
             .map_err(|_| format!("Agent '{}' の応答チャネルがドロップ", server_slug))
     }
 
