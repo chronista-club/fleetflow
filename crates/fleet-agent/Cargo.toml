@@ -40,6 +40,10 @@ bollard.workspace = true
 # Build Tier
 fleetflow-build.workspace = true
 
+# kdl-based deploy (DeployEngine + DeployRequest)
+# CP の deploy.execute が server 宣言を読んで agent にリレーする path で必要 (FSC-34)
+fleetflow-container.workspace = true
+
 # CLI
 clap.workspace = true
 
