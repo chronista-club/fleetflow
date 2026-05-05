@@ -361,7 +361,7 @@ impl Database {
     pub async fn list_stages_by_project(&self, project_id: &RecordId) -> Result<Vec<Stage>> {
         let mut result = self
             .db
-            .query("SELECT * FROM stage WHERE project = $project_id ORDER BY slug")
+            .query("SELECT * FROM stage WHERE project = $project_id AND deleted_at IS NONE ORDER BY slug")
             .bind(("project_id", project_id.clone()))
             .await
             .context("ステージ一覧取得失敗")?;
@@ -377,7 +377,7 @@ impl Database {
         let mut result = self
             .db
             .query(
-                "SELECT id, slug, description, project.slug AS project_slug, project.name AS project_name, project.tenant.slug AS tenant_slug FROM stage WHERE project.tenant.slug = $tenant_slug ORDER BY project_slug, slug",
+                "SELECT id, slug, description, project.slug AS project_slug, project.name AS project_name, project.tenant.slug AS tenant_slug FROM stage WHERE project.tenant.slug = $tenant_slug AND deleted_at IS NONE ORDER BY project_slug, slug",
             )
             .bind(("tenant_slug", tenant_slug.to_string()))
             .await
@@ -395,7 +395,7 @@ impl Database {
         let mut result = self
             .db
             .query(
-                "SELECT id, slug, description, project.slug AS project_slug, project.name AS project_name, project.tenant.slug AS tenant_slug FROM stage WHERE slug = $stage_slug AND project.tenant.slug = $tenant_slug ORDER BY project_slug",
+                "SELECT id, slug, description, project.slug AS project_slug, project.name AS project_name, project.tenant.slug AS tenant_slug FROM stage WHERE slug = $stage_slug AND project.tenant.slug = $tenant_slug AND deleted_at IS NONE ORDER BY project_slug",
             )
             .bind(("tenant_slug", tenant_slug.to_string()))
             .bind(("stage_slug", stage_slug.to_string()))
@@ -424,7 +424,7 @@ impl Database {
                     (SELECT status, created_at FROM deployment WHERE project = $parent.project AND stage = $parent.slug ORDER BY created_at DESC LIMIT 1)[0].created_at AS last_deploy_at,
                     (SELECT count() FROM alert WHERE server_slug = $parent.server.slug AND tenant = $parent.project.tenant AND resolved = false GROUP ALL)[0].count AS alert_count
                 FROM stage
-                WHERE project.tenant.slug = $tenant_slug
+                WHERE project.tenant.slug = $tenant_slug AND deleted_at IS NONE
                 ORDER BY project_slug, slug
                 "#,
             )
@@ -460,7 +460,7 @@ impl Database {
     ) -> Result<Option<Stage>> {
         let mut result = self
             .db
-            .query("SELECT * FROM stage WHERE project = $project AND slug = $slug LIMIT 1")
+            .query("SELECT * FROM stage WHERE project = $project AND slug = $slug AND deleted_at IS NONE LIMIT 1")
             .bind(("project", project_id.clone()))
             .bind(("slug", stage_slug.to_string()))
             .await
@@ -534,6 +534,7 @@ impl Database {
                 server: Some(req.server_id.clone()),
                 created_at: None,
                 updated_at: None,
+                deleted_at: None,
             })
             .await?;
         let stage_id = stage
@@ -2130,6 +2131,7 @@ mod tests {
             server: server.id.clone(),
             created_at: None,
             updated_at: None,
+            deleted_at: None,
         })
         .await
         .unwrap();
@@ -2143,6 +2145,7 @@ mod tests {
             server: None,
             created_at: None,
             updated_at: None,
+            deleted_at: None,
         })
         .await
         .unwrap();

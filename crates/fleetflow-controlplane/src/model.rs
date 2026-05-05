@@ -245,6 +245,10 @@ pub struct Stage {
     pub server: Option<RecordId>,
     pub created_at: Option<DateTime<Utc>>,
     pub updated_at: Option<DateTime<Utc>>,
+    /// Soft-delete tombstone (None = active)。 物理削除は禁止 (memory
+    /// `feedback_no_data_deletion.md` 準拠、 tenant_user / project / server と
+    /// 同 pattern で stage にも soft-delete を提供する)。
+    pub deleted_at: Option<DateTime<Utc>>,
 }
 
 /// Stage with project info for cross-project queries
