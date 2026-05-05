@@ -33,6 +33,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                 server: None,
                                 created_at: None,
                                 updated_at: None,
+                                deleted_at: None,
                             };
 
                             match state.db.create_stage(&stage).await {
