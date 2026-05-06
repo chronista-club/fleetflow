@@ -2422,10 +2422,10 @@ pub fn container_name_to_service<'a>(
 fn compose_default_to_service<'a>(container_name: &'a str, project: &str) -> Option<&'a str> {
     for sep in ['-', '_'] {
         let prefix = format!("{}{}", project, sep);
-        if let Some(rest) = container_name.strip_prefix(&prefix) {
-            if let Some(svc) = strip_replica_suffix(rest, sep) {
-                return Some(svc);
-            }
+        if let Some(rest) = container_name.strip_prefix(&prefix)
+            && let Some(svc) = strip_replica_suffix(rest, sep)
+        {
+            return Some(svc);
         }
     }
     None
@@ -2433,7 +2433,7 @@ fn compose_default_to_service<'a>(container_name: &'a str, project: &str) -> Opt
 
 /// trailing `{sep}{digits}` (compose の replica index) を削って前半 (= service slug) を返す。
 /// digits が空 / 非数値 / sep なしなら None。
-fn strip_replica_suffix<'a>(s: &'a str, sep: char) -> Option<&'a str> {
+fn strip_replica_suffix(s: &str, sep: char) -> Option<&str> {
     let last_sep = s.rfind(sep)?;
     let head = &s[..last_sep];
     let digits = &s[last_sep + 1..];
