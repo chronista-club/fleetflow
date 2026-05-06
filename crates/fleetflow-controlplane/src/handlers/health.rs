@@ -54,6 +54,15 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                 }
                             }
                         }
+                        "heartbeat" => {
+                            // fleet-agent からの定期 heartbeat。 last_heartbeat_at を更新するだけ。
+                            // (handlers/agent.rs / handlers/server.rs と同 logic、 health channel 経路にも対応)
+                            let server_slug = payload["server_slug"].as_str().unwrap_or_default();
+                            state.db.update_server_heartbeat(server_slug).await.ok();
+                            channel
+                                .send_response(msg.id, "heartbeat", &json!({ "status": "ok" }))
+                                .await?;
+                        }
                         method => {
                             info!(method, "health: 不明なメソッド");
                             channel
