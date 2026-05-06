@@ -2393,16 +2393,55 @@ pub fn state_from_docker_state(docker_state: &str) -> &'static str {
     }
 }
 
-/// docker container name（例: "gfp-dev-gfp-web"）から service 名を逆引きする。
-/// フォーマット: `{project}-{stage}-{service_slug}` だが service_slug 自体に `-` を含む場合がある。
-/// → project と stage prefix を取り除く。
+/// docker container name から service 名を逆引きする。
+///
+/// 2 段階で照合:
+///
+/// 1. **fleetstage 規約**: `{project}-{stage}-{service_slug}` (例: `gfp-dev-gfp-web` → `gfp-web`)。
+///    `fleet deploy` 経由で起動した container はこの規約に従う。
+/// 2. **docker compose default 規約 fallback** (FSC-32): primary が hit しなかった時、
+///    compose project 名 = `{project}` 前提で:
+///    - hyphen 形式 (compose v2 default): `{project}-{service}-{N}` (例: `creo-memories-surrealdb-1` → `surrealdb`)
+///    - underscore 形式 (compose v1 互換): `{project}_{service}_{N}` (例: `creo-memories_surrealdb_1` → `surrealdb`)
+///
+///    compose default は container 名に stage を含めないため、 stage 衝突は server 分離で回避する前提
+///    (`adopt` 後の Creo Memories 等、 fleetstage 外で起動された fleet を観測する用途)。
 pub fn container_name_to_service<'a>(
     container_name: &'a str,
     project: &str,
     stage: &str,
 ) -> Option<&'a str> {
-    let prefix = format!("{}-{}-", project, stage);
-    container_name.strip_prefix(&prefix)
+    let primary_prefix = format!("{}-{}-", project, stage);
+    if let Some(rest) = container_name.strip_prefix(&primary_prefix) {
+        return Some(rest);
+    }
+    compose_default_to_service(container_name, project)
+}
+
+/// docker compose default 命名 (`{project}{sep}{service}{sep}{N}`、 sep ∈ {'-', '_'}) を service slug に逆引き。
+fn compose_default_to_service<'a>(container_name: &'a str, project: &str) -> Option<&'a str> {
+    for sep in ['-', '_'] {
+        let prefix = format!("{}{}", project, sep);
+        if let Some(rest) = container_name.strip_prefix(&prefix) {
+            if let Some(svc) = strip_replica_suffix(rest, sep) {
+                return Some(svc);
+            }
+        }
+    }
+    None
+}
+
+/// trailing `{sep}{digits}` (compose の replica index) を削って前半 (= service slug) を返す。
+/// digits が空 / 非数値 / sep なしなら None。
+fn strip_replica_suffix<'a>(s: &'a str, sep: char) -> Option<&'a str> {
+    let last_sep = s.rfind(sep)?;
+    let head = &s[..last_sep];
+    let digits = &s[last_sep + 1..];
+    if !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit()) {
+        Some(head)
+    } else {
+        None
+    }
 }
 
 /// GET /api/v1/stages/{project}/{stage}/status — ステージの実 runtime status
@@ -2695,6 +2734,67 @@ mod tests {
         assert_eq!(
             container_name_to_service("gfp-dev-gfp-estimate-worker", "gfp", "dev"),
             Some("gfp-estimate-worker")
+        );
+    }
+
+    // FSC-32: compose default 規約への fallback (project 名に stage を含まない fleet)
+
+    #[test]
+    fn container_name_to_service_compose_hyphen() {
+        // compose v2 default: {project}-{service}-{N}
+        assert_eq!(
+            container_name_to_service("creo-memories-surrealdb-1", "creo-memories", "prod"),
+            Some("surrealdb")
+        );
+    }
+
+    #[test]
+    fn container_name_to_service_compose_underscore() {
+        // compose v1 互換: {project}_{service}_{N}
+        assert_eq!(
+            container_name_to_service("creo-memories_surrealdb_1", "creo-memories", "prod"),
+            Some("surrealdb")
+        );
+    }
+
+    #[test]
+    fn container_name_to_service_compose_other_project() {
+        // 別 project の container は project mismatch で None
+        assert_eq!(
+            container_name_to_service("other-app-web-1", "creo-memories", "prod"),
+            None
+        );
+    }
+
+    #[test]
+    fn container_name_to_service_compose_no_replica_suffix() {
+        // compose 命名でも replica suffix 無しは reject
+        // (= 通常の `docker run --name foo-bar` 等を service と誤認しない)
+        assert_eq!(
+            container_name_to_service("creo-memories-surrealdb", "creo-memories", "prod"),
+            None
+        );
+    }
+
+    #[test]
+    fn container_name_to_service_compose_hyphen_with_dashed_service() {
+        // service 名自体に `-` を含む compose container も逆引き可
+        assert_eq!(
+            container_name_to_service(
+                "creo-memories-app-server-1",
+                "creo-memories",
+                "prod"
+            ),
+            Some("app-server")
+        );
+    }
+
+    #[test]
+    fn container_name_to_service_compose_multi_digit_replica() {
+        // replica index は 1+ 桁数値
+        assert_eq!(
+            container_name_to_service("creo-memories-surrealdb-12", "creo-memories", "prod"),
+            Some("surrealdb")
         );
     }
 }
