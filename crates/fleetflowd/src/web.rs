@@ -2780,11 +2780,7 @@ mod tests {
     fn container_name_to_service_compose_hyphen_with_dashed_service() {
         // service 名自体に `-` を含む compose container も逆引き可
         assert_eq!(
-            container_name_to_service(
-                "creo-memories-app-server-1",
-                "creo-memories",
-                "prod"
-            ),
+            container_name_to_service("creo-memories-app-server-1", "creo-memories", "prod"),
             Some("app-server")
         );
     }
