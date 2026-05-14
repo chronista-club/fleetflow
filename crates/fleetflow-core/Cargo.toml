@@ -13,7 +13,7 @@ readme = "README.md"
 
 [dependencies]
 kdl.workspace = true
-unison-kdl.workspace = true
+club-kdl.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
