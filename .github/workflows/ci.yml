@@ -41,6 +41,20 @@ jobs:
       - name: mise のセットアップ
         run: mise install
 
+      # macOS GH runner では `~/.cargo/bin/rustup` が `rustup-init` (= installer 本体)
+      # を指していて `rustup component add` が unrecognized argument で失敗する
+      # (2026-05-06 頃の runner image 更新で全 PR が同症状)。 公式 rustup-init script
+      # を non-interactive で実行して proper rustup を上書き install、 component subcommand
+      # を使えるようにする。 --default-toolchain none で mise 管理 toolchain と重複回避、
+      # --no-modify-path で PATH 改変 skip、 --profile minimal で余計な component を持たない。
+      # Linux runner は元々 proper rustup なのでこの step は skip。
+      - name: Rust toolchain proper install (macOS workaround)
+        if: matrix.os == 'macos-latest'
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
+            sh -s -- -y --no-modify-path --default-toolchain none --profile minimal
+          rustup --version
+
       - uses: Swatinem/rust-cache@v2
 
       - name: Rustツールのインストール
