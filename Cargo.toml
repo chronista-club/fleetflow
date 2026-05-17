@@ -20,6 +20,9 @@ members = [
 [workspace.package]
 version = "0.14.2"
 edition = "2024"
+# rust-version は mise の `[tools].rust` (.mise.toml) と一致させる (SSOT 統一)。
+# 1.95: club-unison v0.10 / constant_time_eq@0.4.3 が rustc 1.95+ を要求するため。
+rust-version = "1.95"
 authors = ["Mito <mito@chronista.club>"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/chronista-club/fleetflow"

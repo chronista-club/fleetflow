@@ -150,7 +150,9 @@ jobs:
           version: "27.x"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: dtolnay/rust-toolchain@stable
+      # rust version は repo 全体で 1.95 に統一 (.mise.toml / Cargo.toml rust-version と一致)。
+      # coverage job だけ mise でなく dtolnay action 経由なので、 ここも 1.95 pin にする。
+      - uses: dtolnay/rust-toolchain@1.95
         with:
           components: llvm-tools-preview
 
