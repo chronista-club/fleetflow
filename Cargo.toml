@@ -20,6 +20,9 @@ members = [
 [workspace.package]
 version = "0.14.2"
 edition = "2024"
+# rust-version は mise の `[tools].rust` (.mise.toml) と一致させる (SSOT 統一)。
+# 1.95: club-unison v0.10 / constant_time_eq@0.4.3 が rustc 1.95+ を要求するため。
+rust-version = "1.95"
 authors = ["Mito <mito@chronista.club>"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/chronista-club/fleetflow"
@@ -67,8 +70,13 @@ aes-gcm = "0.10"
 
 # KDL parser
 kdl = "6"
-unison-kdl = { git = "https://github.com/chronista-club/unison-kdl", rev = "a5a37ce" }
-unison = { git = "https://github.com/chronista-club/unison", rev = "6a37611" }
+# crates.io 公開命名規則 (club- prefix) — 2026-05-15 移行、 git dep → crates.io dep
+# 旧名 `unison` は RobertWHurst/unison (2018-) と衝突、 旧名 `unison-kdl` も同様に
+# 衝突回避で club- prefix を採用 (chronista-club ecosystem 標準)。
+# v0.10: builder API (v0.8) + buffa pivot (v0.9) + datagram channel (v0.10) を取り込み。
+# fleetflow は higher-level ProtocolClient/ProtocolServer 利用なので additive 互換。
+club-kdl = "0.5"
+club-unison = "0.10"
 
 # Template engine
 tera = "1"

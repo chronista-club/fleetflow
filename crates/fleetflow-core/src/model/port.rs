@@ -1,9 +1,9 @@
 //! ポート定義
 
-use serde::{Deserialize, Serialize};
-use unison_kdl::{
+use club_kdl::{
     Error as KdlError, FromKdlValue, KdlDeserialize, KdlSerialize, KdlValue, ToKdlValue,
 };
+use serde::{Deserialize, Serialize};
 
 /// ポート定義
 #[derive(Debug, Clone, Serialize, Deserialize, KdlDeserialize, KdlSerialize)]
@@ -49,7 +49,7 @@ impl Protocol {
 
 // KDL変換の実装
 impl<'de> FromKdlValue<'de> for Protocol {
-    fn from_kdl_value(value: &'de KdlValue) -> unison_kdl::Result<Self> {
+    fn from_kdl_value(value: &'de KdlValue) -> club_kdl::Result<Self> {
         value
             .as_string()
             .map(Protocol::parse)

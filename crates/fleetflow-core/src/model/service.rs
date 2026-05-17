@@ -2,12 +2,12 @@
 
 use super::port::Port;
 use super::volume::Volume;
+use club_kdl::{
+    Error as KdlError, FromKdlValue, KdlDeserialize, KdlSerialize, KdlValue, ToKdlValue,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use unison_kdl::{
-    Error as KdlError, FromKdlValue, KdlDeserialize, KdlSerialize, KdlValue, ToKdlValue,
-};
 
 /// サービス定義
 ///
@@ -90,7 +90,7 @@ impl ServiceType {
 }
 
 impl<'de> FromKdlValue<'de> for ServiceType {
-    fn from_kdl_value(value: &'de KdlValue) -> unison_kdl::Result<Self> {
+    fn from_kdl_value(value: &'de KdlValue) -> club_kdl::Result<Self> {
         value
             .as_string()
             .and_then(Self::parse)
@@ -178,7 +178,7 @@ impl RestartPolicy {
 
 // KDL変換の実装
 impl<'de> FromKdlValue<'de> for RestartPolicy {
-    fn from_kdl_value(value: &'de KdlValue) -> unison_kdl::Result<Self> {
+    fn from_kdl_value(value: &'de KdlValue) -> club_kdl::Result<Self> {
         value
             .as_string()
             .and_then(Self::parse)

@@ -18,7 +18,7 @@ fleetflow-cloud-cloudflare.workspace = true
 fleetflow-cloud-aws = { workspace = true, optional = true }
 
 # Communication
-unison.workspace = true
+club-unison.workspace = true
 
 # Docker
 bollard.workspace = true

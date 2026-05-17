@@ -1,6 +1,6 @@
 use super::*;
 use crate::model::{Port, Protocol, ServiceType, Volume};
-use unison_kdl::{KdlDeserialize, KdlNodeExt, KdlSerialize};
+use club_kdl::{KdlDeserialize, KdlNodeExt, KdlSerialize};
 
 #[test]
 fn test_parse_static_service() {
