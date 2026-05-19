@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use club_unison::network::server::{ProtocolServer, ServerHandle};
 use tracing::info;
+use unison::network::server::{ProtocolServer, ServerHandle};
 
 use crate::agent_registry::AgentRegistry;
 use crate::auth::{Auth0Config, Auth0Verifier, AuthProviderKind};

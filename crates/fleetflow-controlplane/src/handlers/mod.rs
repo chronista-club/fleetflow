@@ -12,8 +12,8 @@ pub mod stage;
 pub mod tenant;
 pub mod volume;
 
-use club_unison::network::server::ProtocolServer;
 use std::sync::Arc;
+use unison::network::server::ProtocolServer;
 
 use crate::server::AppState;
 
