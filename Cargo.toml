@@ -73,10 +73,9 @@ kdl = "6"
 # crates.io 公開命名規則 (club- prefix) — 2026-05-15 移行、 git dep → crates.io dep
 # 旧名 `unison` は RobertWHurst/unison (2018-) と衝突、 旧名 `unison-kdl` も同様に
 # 衝突回避で club- prefix を採用 (chronista-club ecosystem 標準)。
-# v0.10: builder API (v0.8) + buffa pivot (v0.9) + datagram channel (v0.10) を取り込み。
-# fleetflow は higher-level ProtocolClient/ProtocolServer 利用なので additive 互換。
-club-kdl = "0.5"
-club-unison = "0.10"
+# v1.0.0-rc.1: 1.0 リリース候補。 fleetflow は higher-level ProtocolClient/ProtocolServer 利用。
+club-kdl = "0.8"
+club-unison = "1.0.0-rc.1"
 
 # Template engine
 tera = "1"

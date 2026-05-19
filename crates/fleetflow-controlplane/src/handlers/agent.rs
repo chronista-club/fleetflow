@@ -9,8 +9,8 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use club_unison::network::channel::UnisonChannel;
-use club_unison::network::server::ProtocolServer;
+use unison::network::channel::UnisonChannel;
+use unison::network::server::ProtocolServer;
 use serde_json::{Value, json};
 use tracing::{error, info, warn};
 

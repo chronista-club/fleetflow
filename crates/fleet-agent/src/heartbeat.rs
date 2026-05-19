@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use club_unison::network::client::ProtocolClient;
+use unison::network::client::ProtocolClient;
 use serde_json::json;
 use tracing::{debug, warn};
 

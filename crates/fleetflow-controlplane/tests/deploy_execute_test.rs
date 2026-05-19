@@ -6,8 +6,8 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use club_unison::network::client::ProtocolClient;
-use club_unison::network::server::ProtocolServer;
+use unison::network::client::ProtocolClient;
+use unison::network::server::ProtocolServer;
 use serde_json::json;
 
 use fleetflow_controlplane::agent_registry::AgentRegistry;

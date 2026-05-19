@@ -3,7 +3,7 @@
 //! CLI 側の cp_client と同じロジックだが、MCP crate 内で自己完結するよう簡略版として実装。
 
 use anyhow::{Context, Result};
-use club_unison::network::client::ProtocolClient;
+use unison::network::client::ProtocolClient;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 

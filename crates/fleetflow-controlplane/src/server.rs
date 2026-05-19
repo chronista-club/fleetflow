@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use club_unison::network::server::{ProtocolServer, ServerHandle};
+use unison::network::server::{ProtocolServer, ServerHandle};
 use tracing::info;
 
 use crate::agent_registry::AgentRegistry;
