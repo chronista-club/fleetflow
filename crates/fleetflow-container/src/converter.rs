@@ -54,7 +54,8 @@ pub fn service_to_container_config_with_network(
 
     // ポートバインディングの設定
     let mut port_bindings = HashMap::new();
-    let mut exposed_ports: HashMap<String, HashMap<(), ()>> = HashMap::new();
+    // bollard 0.21: exposed_ports は Vec<String>（旧 HashMap<String, HashMap<(),()>> から変更）
+    let mut exposed_ports: Vec<String> = Vec::new();
 
     for port in &service.ports {
         let container_port = format!(
@@ -68,7 +69,7 @@ pub fn service_to_container_config_with_network(
         );
 
         // ポート公開設定
-        exposed_ports.insert(container_port.clone(), HashMap::new());
+        exposed_ports.push(container_port.clone());
 
         // ホストポートバインディング
         let host_ip = port.host_ip.as_deref().unwrap_or("0.0.0.0");
@@ -273,8 +274,8 @@ mod tests {
         let (config, _) = service_to_container_config("web", &service, "local", "test");
 
         let exposed_ports = config.exposed_ports.unwrap();
-        assert!(exposed_ports.contains_key("3000/tcp"));
-        assert!(exposed_ports.contains_key("5432/tcp"));
+        assert!(exposed_ports.contains(&"3000/tcp".to_string()));
+        assert!(exposed_ports.contains(&"5432/tcp".to_string()));
 
         let host_config = config.host_config.unwrap();
         let port_bindings = host_config.port_bindings.unwrap();
@@ -304,7 +305,7 @@ mod tests {
         let (config, _) = service_to_container_config("dns", &service, "local", "test");
 
         let exposed_ports = config.exposed_ports.unwrap();
-        assert!(exposed_ports.contains_key("53/udp"));
+        assert!(exposed_ports.contains(&"53/udp".to_string()));
     }
 
     #[test]

@@ -62,8 +62,14 @@ impl ImagePusher {
         while let Some(result) = stream.next().await {
             match result {
                 Ok(info) => {
-                    if let Some(err) = info.error {
-                        error_message = Some(err);
+                    // bollard 0.21: error: Option<String> → error_detail: Option<ErrorDetail>
+                    if let Some(detail) = &info.error_detail {
+                        error_message = Some(
+                            detail
+                                .message
+                                .clone()
+                                .unwrap_or_else(|| "unknown push error".to_string()),
+                        );
                     } else {
                         self.handle_progress(&info, &mut last_status);
                     }
@@ -126,7 +132,15 @@ impl ImagePusher {
     /// プッシュ進捗を表示
     fn handle_progress(&self, info: &PushImageInfo, last_status: &mut String) {
         if let Some(status) = &info.status {
-            let progress = info.progress.as_deref().unwrap_or("");
+            // bollard 0.21: 整形済み progress 文字列が廃止 → progress_detail(current/total) から再構成
+            let progress = info
+                .progress_detail
+                .as_ref()
+                .and_then(|pd| match (pd.current, pd.total) {
+                    (Some(c), Some(t)) if t > 0 => Some(format!("{c}/{t}")),
+                    _ => None,
+                })
+                .unwrap_or_default();
 
             // 状態に応じた表示
             match status.as_str() {
