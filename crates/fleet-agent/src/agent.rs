@@ -4,11 +4,11 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use unison::network::channel::UnisonChannel;
-use unison::network::client::ProtocolClient;
 use serde_json::json;
 use tokio::sync::mpsc;
 use tracing::{error, info, warn};
+use unison::network::channel::UnisonChannel;
+use unison::network::client::ProtocolClient;
 
 use crate::deploy;
 use crate::heartbeat;

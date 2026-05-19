@@ -7,10 +7,10 @@
 
 use std::sync::Arc;
 
-use unison::network::channel::UnisonChannel;
-use unison::network::server::ProtocolServer;
 use serde_json::json;
 use tracing::{error, info};
+use unison::network::channel::UnisonChannel;
+use unison::network::server::ProtocolServer;
 
 use crate::model::volume_tier;
 use crate::server::AppState;

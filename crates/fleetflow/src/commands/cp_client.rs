@@ -4,9 +4,9 @@
 //! ProtocolClient で CP に接続して channel を開く。
 
 use anyhow::{Context, Result};
-use unison::network::client::ProtocolClient;
 use colored::Colorize;
 use serde_json::Value;
+use unison::network::client::ProtocolClient;
 
 use super::auth::Credentials;
 

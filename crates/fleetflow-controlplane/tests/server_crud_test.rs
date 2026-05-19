@@ -5,9 +5,9 @@
 
 use std::sync::Arc;
 
+use serde_json::json;
 use unison::network::client::ProtocolClient;
 use unison::network::server::ProtocolServer;
-use serde_json::json;
 
 use fleetflow_controlplane::agent_registry::AgentRegistry;
 use fleetflow_controlplane::auth::AuthProviderKind;

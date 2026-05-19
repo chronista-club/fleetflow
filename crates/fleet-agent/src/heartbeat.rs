@@ -2,9 +2,9 @@
 
 use std::sync::Arc;
 
-use unison::network::client::ProtocolClient;
 use serde_json::json;
 use tracing::{debug, warn};
+use unison::network::client::ProtocolClient;
 
 /// ハートビート送信ループ
 pub async fn run_loop(client: &Arc<ProtocolClient>, server_slug: &str, interval_secs: u64) {

@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
 use chrono::Utc;
-use unison::network::channel::UnisonChannel;
-use unison::network::server::ProtocolServer;
 use serde_json::json;
 use tracing::{error, info};
+use unison::network::channel::UnisonChannel;
+use unison::network::server::ProtocolServer;
 
 use crate::model::{Alert, Server, ServerStatusUpdate};
 use crate::server::AppState;

@@ -3,9 +3,9 @@
 //! CLI 側の cp_client と同じロジックだが、MCP crate 内で自己完結するよう簡略版として実装。
 
 use anyhow::{Context, Result};
-use unison::network::client::ProtocolClient;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use unison::network::client::ProtocolClient;
 
 /// Dashboard API のベース URL
 const DASHBOARD_BASE: &str = "http://127.0.0.1:32080";
