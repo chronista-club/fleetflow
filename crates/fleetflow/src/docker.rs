@@ -38,21 +38,21 @@ async fn pull_image_inner(
 
     while let Some(info) = stream.next().await {
         match info {
+            // bollard 0.21: 整形済み progress 文字列が廃止 → progress_detail から再構成
             Ok(bollard::models::CreateImageInfo {
                 status: Some(status),
-                progress: Some(progress),
+                progress_detail,
                 ..
             }) => {
-                print!("\r  ↓ {}: {}", status, progress);
+                let progress = progress_detail.and_then(|pd| match (pd.current, pd.total) {
+                    (Some(c), Some(t)) if t > 0 => Some(format!("{c}/{t}")),
+                    _ => None,
+                });
                 use std::io::Write;
-                std::io::stdout().flush()?;
-            }
-            Ok(bollard::models::CreateImageInfo {
-                status: Some(status),
-                ..
-            }) => {
-                print!("\r  ↓ {}                    ", status);
-                use std::io::Write;
+                match progress {
+                    Some(p) => print!("\r  ↓ {}: {}", status, p),
+                    None => print!("\r  ↓ {}                    ", status),
+                }
                 std::io::stdout().flush()?;
             }
             Err(e) => {
