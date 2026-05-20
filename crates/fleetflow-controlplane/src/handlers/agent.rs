@@ -94,11 +94,20 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                             handle_agent_alert(&state, &p).await;
                                             channel.send_response(m.id, "alert", &json!({"status": "ok"})).await?;
                                         }
-                                        "deploy_result" | "restart_result" | "status_result" => {
-                                            // Agent からの応答 → pending_responses に返す
+                                        "command_result" => {
+                                            // Agent からのコマンド応答 → request_id で pending request に相関。
+                                            // deploy/restart/status/build/ping 全コマンドの応答を
+                                            // 統一 method `command_result` で受ける（method 名でなく
+                                            // request_id だけで相関させる）。
                                             let req_id = p["request_id"].as_u64().unwrap_or(0);
-                                            if let Some(tx) = pending_responses.remove(&req_id) {
-                                                let _ = tx.send(p);
+                                            match pending_responses.remove(&req_id) {
+                                                Some(tx) => {
+                                                    let _ = tx.send(p);
+                                                }
+                                                None => warn!(
+                                                    request_id = req_id,
+                                                    "command_result: 対応する pending request 無し"
+                                                ),
                                             }
                                         }
                                         "log" => {

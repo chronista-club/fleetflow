@@ -115,16 +115,19 @@ async fn command_loop(
     // コマンド受信ループ
     loop {
         let msg = channel.recv().await?;
-        let payload = msg.payload_as_value()?;
+        let envelope = msg.payload_as_value()?;
+        // CP (fleetflow-controlplane handlers/agent.rs) は AgentRegistry 経由の
+        // 全コマンドを `{request_id, payload}` で wrap して send_event する。
+        let (request_id, payload) = parse_command_envelope(&envelope);
 
         match msg.method.as_str() {
             "deploy" => {
-                handle_deploy(&channel, msg.id, &payload, deploy_base).await?;
+                handle_deploy(&channel, request_id, &payload, deploy_base).await?;
             }
             "deploy.execute_kdl" => {
                 // FSC-34: CP から flow.stages[stage].servers で routing された kdl-based deploy
                 // (= bollard + DeployEngine 経由、 既存 docker-compose path とは別)
-                handle_deploy_kdl(&channel, msg.id, &payload).await?;
+                handle_deploy_kdl(&channel, request_id, &payload).await?;
             }
             "restart" => {
                 let service = payload["service"].as_str().unwrap_or("");
@@ -133,7 +136,7 @@ async fn command_loop(
                     Ok(()) => json!({ "status": "ok" }),
                     Err(e) => json!({ "status": "failed", "error": e.to_string() }),
                 };
-                channel.send_response(msg.id, "restart", &response).await?;
+                send_command_result(&channel, request_id, response).await?;
             }
             "status" => {
                 let result = deploy::container_status().await;
@@ -141,28 +144,71 @@ async fn command_loop(
                     Ok(v) => json!({ "status": "ok", "data": v }),
                     Err(e) => json!({ "status": "failed", "error": e.to_string() }),
                 };
-                channel.send_response(msg.id, "status", &response).await?;
+                send_command_result(&channel, request_id, response).await?;
             }
             "build" => {
-                handle_build(&channel, msg.id, &payload).await?;
+                handle_build(&channel, request_id, &payload).await?;
             }
             "ping" => {
-                channel
-                    .send_response(msg.id, "ping", &json!({ "pong": true }))
-                    .await?;
+                send_command_result(&channel, request_id, json!({ "pong": true })).await?;
             }
             method => {
                 warn!(method, "不明なコマンド");
-                channel
-                    .send_response(
-                        msg.id,
-                        method,
-                        &json!({ "error": format!("unknown command: {}", method) }),
-                    )
-                    .await?;
+                send_command_result(
+                    &channel,
+                    request_id,
+                    json!({ "error": format!("unknown command: {}", method) }),
+                )
+                .await?;
             }
         }
     }
+}
+
+/// CP が送るコマンド envelope `{request_id, payload}` を分解する。
+///
+/// CP (`fleetflow-controlplane` handlers/agent.rs) は AgentRegistry 経由の
+/// 全コマンドを `{"request_id": u64, "payload": <actual>}` で wrap して
+/// `send_event` する。`request_id` は応答相関キー。
+fn parse_command_envelope(envelope: &serde_json::Value) -> (u64, serde_json::Value) {
+    let request_id = envelope["request_id"].as_u64().unwrap_or(0);
+    let payload = envelope
+        .get("payload")
+        .cloned()
+        .unwrap_or(serde_json::Value::Null);
+    (request_id, payload)
+}
+
+/// `command_result` の payload を組み立てる（純粋関数 — テスト可能）。
+///
+/// result object に `request_id` を merge して flat に返す。caller（CP の
+/// deploy handler 等）は `resp["status"]` を top-level で読むため nest しない。
+fn build_command_result_payload(
+    request_id: u64,
+    mut result: serde_json::Value,
+) -> serde_json::Value {
+    match result.as_object_mut() {
+        Some(obj) => {
+            obj.insert("request_id".to_string(), json!(request_id));
+            result
+        }
+        // result が object でない異常系のみ wrap
+        None => json!({ "request_id": request_id, "result": result }),
+    }
+}
+
+/// コマンド応答を統一 method `command_result` で CP に返す。
+///
+/// CP は method `command_result` + payload の `request_id` で pending request に
+/// 相関させる（handlers/agent.rs）。deploy/restart/status/build/ping 共通。
+async fn send_command_result(
+    channel: &UnisonChannel,
+    request_id: u64,
+    result: serde_json::Value,
+) -> Result<()> {
+    let payload = build_command_result_payload(request_id, result);
+    channel.send_event("command_result", &payload).await?;
+    Ok(())
 }
 
 /// デプロイコマンド処理 — ログを非同期ストリーミング送信しつつ最終結果を返す
@@ -239,9 +285,7 @@ async fn handle_deploy(
 
     // deploy のビジネスエラーはレスポンスに含め、セッション切断しない
     // チャネル送信エラーのみ伝播（ネットワーク断）
-    channel
-        .send_response(request_id, "deploy", &response)
-        .await?;
+    send_command_result(channel, request_id, response).await?;
 
     Ok(())
 }
@@ -270,16 +314,15 @@ async fn handle_deploy_kdl(
     let deploy_request: DeployRequest = match serde_json::from_value(payload.clone()) {
         Ok(r) => r,
         Err(e) => {
-            channel
-                .send_response(
-                    request_id,
-                    "deploy.execute_kdl",
-                    &json!({
-                        "status": "failed",
-                        "error": format!("invalid DeployRequest: {}", e),
-                    }),
-                )
-                .await?;
+            send_command_result(
+                channel,
+                request_id,
+                json!({
+                    "status": "failed",
+                    "error": format!("invalid DeployRequest: {}", e),
+                }),
+            )
+            .await?;
             return Ok(());
         }
     };
@@ -288,16 +331,15 @@ async fn handle_deploy_kdl(
     let docker = match bollard::Docker::connect_with_local_defaults() {
         Ok(d) => d,
         Err(e) => {
-            channel
-                .send_response(
-                    request_id,
-                    "deploy.execute_kdl",
-                    &json!({
-                        "status": "failed",
-                        "error": format!("Docker 接続失敗: {}", e),
-                    }),
-                )
-                .await?;
+            send_command_result(
+                channel,
+                request_id,
+                json!({
+                    "status": "failed",
+                    "error": format!("Docker 接続失敗: {}", e),
+                }),
+            )
+            .await?;
             return Ok(());
         }
     };
@@ -331,9 +373,7 @@ async fn handle_deploy_kdl(
         }),
     };
 
-    channel
-        .send_response(request_id, "deploy.execute_kdl", &response)
-        .await?;
+    send_command_result(channel, request_id, response).await?;
 
     Ok(())
 }
@@ -359,26 +399,24 @@ async fn handle_build(
     let job_id = payload["job_id"].as_str().unwrap_or("unknown");
 
     if git_url.is_empty() {
-        channel
-            .send_response(
-                request_id,
-                "build",
-                &json!({ "status": "failed", "error": "git_url required" }),
-            )
-            .await?;
+        send_command_result(
+            channel,
+            request_id,
+            json!({ "status": "failed", "error": "git_url required" }),
+        )
+        .await?;
         return Ok(());
     }
 
     // work dir: /var/lib/fleet-agent/builds/<job-id>/
     let work_dir = std::path::PathBuf::from(format!("/var/lib/fleet-agent/builds/{}", job_id));
     if let Err(e) = std::fs::create_dir_all(&work_dir) {
-        channel
-            .send_response(
-                request_id,
-                "build",
-                &json!({ "status": "failed", "error": format!("work dir 作成失敗: {}", e) }),
-            )
-            .await?;
+        send_command_result(
+            channel,
+            request_id,
+            json!({ "status": "failed", "error": format!("work dir 作成失敗: {}", e) }),
+        )
+        .await?;
         return Ok(());
     }
 
@@ -396,25 +434,23 @@ async fn handle_build(
         Ok(status) => {
             let err = format!("git clone failed (exit code: {:?})", status.code());
             error!(job_id, error = %err, "git clone 失敗");
-            channel
-                .send_response(
-                    request_id,
-                    "build",
-                    &json!({ "status": "failed", "error": err }),
-                )
-                .await?;
+            send_command_result(
+                channel,
+                request_id,
+                json!({ "status": "failed", "error": err }),
+            )
+            .await?;
             return Ok(());
         }
         Err(e) => {
             let err = format!("git clone shellout 失敗: {}", e);
             error!(job_id, error = %err);
-            channel
-                .send_response(
-                    request_id,
-                    "build",
-                    &json!({ "status": "failed", "error": err }),
-                )
-                .await?;
+            send_command_result(
+                channel,
+                request_id,
+                json!({ "status": "failed", "error": err }),
+            )
+            .await?;
             return Ok(());
         }
     }
@@ -426,13 +462,12 @@ async fn handle_build(
         Err(e) => {
             let err = format!("docker daemon 接続失敗: {}", e);
             error!(job_id, error = %err);
-            channel
-                .send_response(
-                    request_id,
-                    "build",
-                    &json!({ "status": "failed", "error": err }),
-                )
-                .await?;
+            send_command_result(
+                channel,
+                request_id,
+                json!({ "status": "failed", "error": err }),
+            )
+            .await?;
             return Ok(());
         }
     };
@@ -463,13 +498,12 @@ async fn handle_build(
         Err(e) => {
             let err = format!("docker build 失敗: {}", e);
             error!(job_id, error = %err);
-            channel
-                .send_response(
-                    request_id,
-                    "build",
-                    &json!({ "status": "failed", "error": err, "duration_ms": duration_ms }),
-                )
-                .await?;
+            send_command_result(
+                channel,
+                request_id,
+                json!({ "status": "failed", "error": err, "duration_ms": duration_ms }),
+            )
+            .await?;
             return Ok(());
         }
     }
@@ -488,25 +522,23 @@ async fn handle_build(
             Ok(status) => {
                 let err = format!("docker push failed (exit code: {:?})", status.code());
                 error!(job_id, error = %err);
-                channel
-                    .send_response(
-                        request_id,
-                        "build",
-                        &json!({ "status": "failed", "error": err, "duration_ms": duration_ms }),
-                    )
-                    .await?;
+                send_command_result(
+                    channel,
+                    request_id,
+                    json!({ "status": "failed", "error": err, "duration_ms": duration_ms }),
+                )
+                .await?;
                 return Ok(());
             }
             Err(e) => {
                 let err = format!("docker push shellout 失敗: {}", e);
                 error!(job_id, error = %err);
-                channel
-                    .send_response(
-                        request_id,
-                        "build",
-                        &json!({ "status": "failed", "error": err, "duration_ms": duration_ms }),
-                    )
-                    .await?;
+                send_command_result(
+                    channel,
+                    request_id,
+                    json!({ "status": "failed", "error": err, "duration_ms": duration_ms }),
+                )
+                .await?;
                 return Ok(());
             }
         }
@@ -515,18 +547,80 @@ async fn handle_build(
     // 成功
     let duration_secs = duration_ms / 1000;
     info!(job_id, image, duration_secs, "build 完了");
-    channel
-        .send_response(
-            request_id,
-            "build",
-            &json!({
-                "status": "success",
-                "image": image,
-                "duration_ms": duration_ms,
-                "duration_seconds": duration_secs,
-            }),
-        )
-        .await?;
+    send_command_result(
+        channel,
+        request_id,
+        json!({
+            "status": "success",
+            "image": image,
+            "duration_ms": duration_ms,
+            "duration_seconds": duration_secs,
+        }),
+    )
+    .await?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{build_command_result_payload, parse_command_envelope};
+    use serde_json::json;
+
+    /// CP が送る正常な envelope `{request_id, payload}` を分解できる。
+    #[test]
+    fn parse_command_envelope_well_formed() {
+        let envelope = json!({
+            "request_id": 42,
+            "payload": { "service": "web", "stage_name": "live" },
+        });
+        let (request_id, payload) = parse_command_envelope(&envelope);
+        assert_eq!(request_id, 42);
+        assert_eq!(payload, json!({ "service": "web", "stage_name": "live" }));
+    }
+
+    /// request_id 欠落時は 0（相関不能だが panic しない）、payload 欠落時は Null。
+    #[test]
+    fn parse_command_envelope_missing_fields() {
+        let (rid, payload) = parse_command_envelope(&json!({}));
+        assert_eq!(rid, 0);
+        assert_eq!(payload, json!(null));
+    }
+
+    /// command_result は result object に request_id を flat に merge する
+    /// （caller は resp["status"] を top-level で読むため nest しない）。
+    #[test]
+    fn build_command_result_payload_merges_request_id_flat() {
+        let result = json!({ "status": "success", "log": "ok" });
+        let payload = build_command_result_payload(7, result);
+        assert_eq!(payload["request_id"], json!(7));
+        assert_eq!(payload["status"], json!("success"));
+        assert_eq!(payload["log"], json!("ok"));
+    }
+
+    /// result が object でない異常系は wrap して request_id を保つ。
+    #[test]
+    fn build_command_result_payload_wraps_non_object() {
+        let payload = build_command_result_payload(9, json!("bare string"));
+        assert_eq!(payload["request_id"], json!(9));
+        assert_eq!(payload["result"], json!("bare string"));
+    }
+
+    /// CP↔agent 往復: CP が wrap した envelope を agent が分解し、
+    /// agent の応答に CP の request_id がそのまま乗る（相関キーが保たれる）。
+    #[test]
+    fn command_envelope_roundtrip_preserves_request_id() {
+        // CP 側 (handlers/agent.rs) の wrap 相当
+        let cp_request_id = 123u64;
+        let envelope = json!({
+            "request_id": cp_request_id,
+            "payload": { "dummy": true },
+        });
+        // agent 側で分解
+        let (rid, _payload) = parse_command_envelope(&envelope);
+        // agent が応答を組み立て
+        let response = build_command_result_payload(rid, json!({ "status": "ok" }));
+        // CP は response["request_id"] で pending request に相関させる
+        assert_eq!(response["request_id"].as_u64(), Some(cp_request_id));
+    }
 }
