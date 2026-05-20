@@ -1141,11 +1141,15 @@ impl Database {
         server_slug: &str,
         containers: &[ObservedContainer],
     ) -> Result<()> {
+        // SurrealDB の query は文単位のエラーを Response に内包するため、
+        // .check() を呼ばないとサイドエラーがサイレントに見逃される。
         self.db
             .query("DELETE observed_container WHERE server_slug = $server_slug")
             .bind(("server_slug", server_slug.to_string()))
             .await
-            .context("observed_container 旧 snapshot 削除失敗")?;
+            .context("observed_container 旧 snapshot 削除失敗")?
+            .check()
+            .context("observed_container DELETE クエリエラー")?;
 
         for c in containers {
             // server_slug は引数を権威とする（DELETE と CREATE で同一スコープに
@@ -1167,7 +1171,9 @@ impl Database {
                 .bind(("started_at", c.started_at))
                 .bind(("last_seen_at", c.last_seen_at))
                 .await
-                .context("observed_container 挿入失敗")?;
+                .context("observed_container 挿入失敗")?
+                .check()
+                .context("observed_container CREATE クエリエラー")?;
         }
         Ok(())
     }

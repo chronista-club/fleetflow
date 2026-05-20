@@ -750,6 +750,21 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                             // container snapshot を server 単位で全置換する。
                             let server_slug =
                                 payload["server_slug"].as_str().unwrap_or_default();
+
+                            // server_slug 無指定での全置換は危険（空文字 WHERE で
+                            // 意図しない範囲を DELETE しうる）。alert ハンドラと同様に
+                            // 早期リターンで防御する。
+                            if server_slug.is_empty() {
+                                channel
+                                    .send_response(
+                                        msg.id,
+                                        "inventory_report",
+                                        &json!({ "error": "server_slug missing" }),
+                                    )
+                                    .await?;
+                                continue;
+                            }
+
                             let containers = parse_inventory_payload(&payload);
 
                             match state
