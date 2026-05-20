@@ -46,6 +46,7 @@ mod tests {
                 servers: vec![],
                 variables: HashMap::new(),
                 registry: None,
+                ..Default::default()
             },
         );
 

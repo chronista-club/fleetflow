@@ -496,6 +496,52 @@ fn test_parse_stage_with_servers() {
 }
 
 #[test]
+fn test_parse_stage_runtime_quadlet() {
+    // WS2: stage に runtime を明示宣言できる
+    let kdl = r#"
+        service "api" { image "node:20" }
+
+        stage "live" {
+            runtime "quadlet"
+            service "api"
+        }
+    "#;
+
+    let flow = parse_kdl_string(kdl, "test".to_string()).unwrap();
+    assert_eq!(flow.stages["live"].runtime, crate::model::Runtime::Quadlet);
+}
+
+#[test]
+fn test_parse_stage_runtime_defaults_to_docker() {
+    // runtime 未宣言の stage は Docker（後方互換）
+    let kdl = r#"
+        service "api" { image "node:20" }
+
+        stage "local" {
+            service "api"
+        }
+    "#;
+
+    let flow = parse_kdl_string(kdl, "test".to_string()).unwrap();
+    assert_eq!(flow.stages["local"].runtime, crate::model::Runtime::Docker);
+}
+
+#[test]
+fn test_parse_stage_runtime_invalid_is_error() {
+    // 未知の runtime 値はパースエラー
+    let kdl = r#"
+        service "api" { image "node:20" }
+
+        stage "live" {
+            runtime "k8s"
+            service "api"
+        }
+    "#;
+
+    assert!(parse_kdl_string(kdl, "test".to_string()).is_err());
+}
+
+#[test]
 fn test_parse_full_cloud_config() {
     let kdl = r#"
         project "creo-memories"

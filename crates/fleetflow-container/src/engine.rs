@@ -529,6 +529,7 @@ mod tests {
                 servers: vec![],
                 variables: std::collections::HashMap::new(),
                 registry: None,
+                ..Default::default()
             },
         );
         Flow {
