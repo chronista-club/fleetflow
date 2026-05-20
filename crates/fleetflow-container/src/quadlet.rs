@@ -16,6 +16,9 @@
 //! - 命名 `{project}-{stage}-{service}`（fleetflow コンテナ命名規約）
 //! - attribution は `fleetflow.{project,stage,service}` label
 
+use std::io;
+use std::path::{Path, PathBuf};
+
 use fleetflow_core::{Protocol, RestartPolicy, Service};
 
 /// `{project}-{stage}-{service}` 形式の正準名を組み立てる。
@@ -191,6 +194,96 @@ pub fn generate_network_unit(project: &str, stage: &str) -> String {
     out
 }
 
+// ─────────────────────────────────────────────
+// 適用層（WS2 Stage 2b）— 生成済みユニットをディスクに反映 + systemctl
+// ─────────────────────────────────────────────
+
+/// 生成済み Quadlet ユニット 1 つ（ファイル名 + 内容）。
+#[derive(Debug, Clone)]
+pub struct QuadletUnit {
+    /// ファイル名（`*.container` / `*.network`）。
+    pub file_name: String,
+    /// ファイル内容。
+    pub content: String,
+}
+
+/// rootless Quadlet の標準配置ディレクトリ `~/.config/containers/systemd/`。
+///
+/// `XDG_CONFIG_HOME` → `$HOME/.config` の順で base を解決する。
+pub fn default_quadlet_dir() -> Option<PathBuf> {
+    let base = std::env::var_os("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))?;
+    Some(base.join("containers/systemd"))
+}
+
+/// 指定 project/stage の fleetflow 生成 Quadlet ファイルか判定する（純粋関数）。
+///
+/// `{project}-{stage}-*.container` または `{project}-{stage}.network` に一致。
+/// 他 project/stage・ユーザー手書きファイルは false。
+pub fn is_fleetflow_unit(file_name: &str, project: &str, stage: &str) -> bool {
+    let container_prefix = format!("{project}-{stage}-");
+    (file_name.starts_with(&container_prefix) && file_name.ends_with(".container"))
+        || file_name == network_file_name(project, stage)
+}
+
+/// project/stage の Quadlet ユニット束を systemd quadlet ディレクトリに反映する。
+///
+/// snapshot 全置換: 既存の同 project/stage の fleetflow 生成ファイルを削除して
+/// から新しい束を書き出す（KDL から消えた service の unit も消える）。
+/// 他 project/stage のファイル・ユーザー手書きファイルには触れない。
+pub fn sync_quadlet_dir(
+    systemd_dir: &Path,
+    project: &str,
+    stage: &str,
+    units: &[QuadletUnit],
+) -> io::Result<()> {
+    std::fs::create_dir_all(systemd_dir)?;
+
+    // 旧 fleetflow ファイルを削除（snapshot 置換）
+    for entry in std::fs::read_dir(systemd_dir)? {
+        let entry = entry?;
+        if let Some(name) = entry.file_name().to_str()
+            && is_fleetflow_unit(name, project, stage)
+        {
+            std::fs::remove_file(entry.path())?;
+        }
+    }
+
+    // 新ファイルを書き出し
+    for unit in units {
+        std::fs::write(systemd_dir.join(&unit.file_name), &unit.content)?;
+    }
+    Ok(())
+}
+
+/// `systemctl --user daemon-reload` — Quadlet generator を再走させ、
+/// `.container`/`.network` から systemd `.service` を再生成する。
+pub fn systemctl_user_daemon_reload() -> io::Result<()> {
+    run_systemctl_user(&["daemon-reload"])
+}
+
+/// `systemctl --user start <unit>`。
+pub fn systemctl_user_start(unit: &str) -> io::Result<()> {
+    run_systemctl_user(&["start", unit])
+}
+
+fn run_systemctl_user(args: &[&str]) -> io::Result<()> {
+    let status = std::process::Command::new("systemctl")
+        .arg("--user")
+        .args(args)
+        .status()?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(io::Error::other(format!(
+            "`systemctl --user {}` failed (exit {:?})",
+            args.join(" "),
+            status.code()
+        )))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -331,5 +424,121 @@ mod tests {
         assert!(unit.contains("[Network]"));
         assert!(unit.contains("NetworkName=myapp-live"));
         assert!(unit.contains("Label=fleetflow.project=myapp"));
+    }
+
+    // ── 適用層（WS2 Stage 2b）──
+
+    #[test]
+    fn is_fleetflow_unit_matches_own_project_stage_only() {
+        // 自 project/stage の .container / .network は true
+        assert!(is_fleetflow_unit(
+            "myapp-live-db.container",
+            "myapp",
+            "live"
+        ));
+        assert!(is_fleetflow_unit(
+            "myapp-live-web.container",
+            "myapp",
+            "live"
+        ));
+        assert!(is_fleetflow_unit("myapp-live.network", "myapp", "live"));
+        // 別 stage / 別 project は false
+        assert!(!is_fleetflow_unit(
+            "myapp-dev-db.container",
+            "myapp",
+            "live"
+        ));
+        assert!(!is_fleetflow_unit(
+            "other-live-db.container",
+            "myapp",
+            "live"
+        ));
+        assert!(!is_fleetflow_unit("myapp-dev.network", "myapp", "live"));
+        // ユーザー手書きファイルは false
+        assert!(!is_fleetflow_unit(
+            "my-hand-written.container",
+            "myapp",
+            "live"
+        ));
+    }
+
+    #[test]
+    fn sync_quadlet_dir_writes_units() {
+        let dir = tempfile::tempdir().unwrap();
+        let units = vec![
+            QuadletUnit {
+                file_name: "myapp-live-db.container".to_string(),
+                content: "[Container]\nImage=postgres\n".to_string(),
+            },
+            QuadletUnit {
+                file_name: "myapp-live.network".to_string(),
+                content: "[Network]\n".to_string(),
+            },
+        ];
+        sync_quadlet_dir(dir.path(), "myapp", "live", &units).unwrap();
+
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("myapp-live-db.container")).unwrap(),
+            "[Container]\nImage=postgres\n"
+        );
+        assert!(dir.path().join("myapp-live.network").exists());
+    }
+
+    #[test]
+    fn sync_quadlet_dir_replaces_stale_units_keeps_others() {
+        let dir = tempfile::tempdir().unwrap();
+
+        // 初回: db + web の 2 service
+        sync_quadlet_dir(
+            dir.path(),
+            "myapp",
+            "live",
+            &[
+                QuadletUnit {
+                    file_name: "myapp-live-db.container".into(),
+                    content: "db".into(),
+                },
+                QuadletUnit {
+                    file_name: "myapp-live-web.container".into(),
+                    content: "web".into(),
+                },
+            ],
+        )
+        .unwrap();
+
+        // 別 project/stage のファイルとユーザー手書きファイルを同ディレクトリに置く
+        std::fs::write(dir.path().join("other-dev-x.container"), "other").unwrap();
+        std::fs::write(dir.path().join("hand-written.container"), "manual").unwrap();
+
+        // 2 回目: web を削除（db のみ）→ snapshot 置換
+        sync_quadlet_dir(
+            dir.path(),
+            "myapp",
+            "live",
+            &[QuadletUnit {
+                file_name: "myapp-live-db.container".into(),
+                content: "db-v2".into(),
+            }],
+        )
+        .unwrap();
+
+        // db は更新、web は削除される（KDL から消えた service）
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("myapp-live-db.container")).unwrap(),
+            "db-v2"
+        );
+        assert!(!dir.path().join("myapp-live-web.container").exists());
+        // 別 project/stage・手書きファイルは touch されない
+        assert!(dir.path().join("other-dev-x.container").exists());
+        assert!(dir.path().join("hand-written.container").exists());
+    }
+
+    #[test]
+    fn sync_quadlet_dir_creates_missing_directory() {
+        let base = tempfile::tempdir().unwrap();
+        let nested = base.path().join("containers/systemd");
+        assert!(!nested.exists());
+        sync_quadlet_dir(&nested, "myapp", "live", &[]).unwrap();
+        assert!(nested.exists());
     }
 }
