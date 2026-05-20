@@ -1129,6 +1129,73 @@ impl Database {
     }
 
     // ─────────────────────────────────────────
+    // ObservedContainer (#185 fleet-agent observability)
+    // ─────────────────────────────────────────
+
+    /// server の observed_container snapshot を丸ごと差し替える。
+    ///
+    /// `inventory_report` 毎に呼ばれ、その server の旧 record を全削除して
+    /// 新スナップショットを挿入する（最新 snapshot のみ保持 — 履歴は持たない）。
+    pub async fn replace_observed_containers(
+        &self,
+        server_slug: &str,
+        containers: &[ObservedContainer],
+    ) -> Result<()> {
+        // SurrealDB の query は文単位のエラーを Response に内包するため、
+        // .check() を呼ばないとサイドエラーがサイレントに見逃される。
+        self.db
+            .query("DELETE observed_container WHERE server_slug = $server_slug")
+            .bind(("server_slug", server_slug.to_string()))
+            .await
+            .context("observed_container 旧 snapshot 削除失敗")?
+            .check()
+            .context("observed_container DELETE クエリエラー")?;
+
+        for c in containers {
+            // server_slug は引数を権威とする（DELETE と CREATE で同一スコープに
+            // 揃え、c.server_slug との食い違いによる不整合を防ぐ）。
+            self.db
+                .query(
+                    "CREATE observed_container CONTENT { server_slug: $server_slug, runtime: $runtime, container_id: $container_id, container_name: $container_name, status: $status, health: $health, image: $image, project: $project, stage: $stage, service: $service, started_at: $started_at, last_seen_at: $last_seen_at }",
+                )
+                .bind(("server_slug", server_slug.to_string()))
+                .bind(("runtime", c.runtime.clone()))
+                .bind(("container_id", c.container_id.clone()))
+                .bind(("container_name", c.container_name.clone()))
+                .bind(("status", c.status.clone()))
+                .bind(("health", c.health.clone()))
+                .bind(("image", c.image.clone()))
+                .bind(("project", c.project.clone()))
+                .bind(("stage", c.stage.clone()))
+                .bind(("service", c.service.clone()))
+                .bind(("started_at", c.started_at))
+                .bind(("last_seen_at", c.last_seen_at))
+                .await
+                .context("observed_container 挿入失敗")?
+                .check()
+                .context("observed_container CREATE クエリエラー")?;
+        }
+        Ok(())
+    }
+
+    /// server の observed_container 一覧（最新 snapshot）を取得。
+    pub async fn list_observed_containers(
+        &self,
+        server_slug: &str,
+    ) -> Result<Vec<ObservedContainer>> {
+        let mut result = self
+            .db
+            .query(
+                "SELECT * FROM observed_container WHERE server_slug = $server_slug ORDER BY container_name",
+            )
+            .bind(("server_slug", server_slug.to_string()))
+            .await
+            .context("observed_container 一覧取得失敗")?;
+        let containers: Vec<ObservedContainer> = result.take(0)?;
+        Ok(containers)
+    }
+
+    // ─────────────────────────────────────────
     // Volume CRUD (Persistence Volume Tier P-1, 2026-04-23)
     //
     // 詳細設計: fleetstage repo docs/design/20-persistence-volume-tier.md
@@ -1699,6 +1766,24 @@ DEFINE FIELD IF NOT EXISTS started_at ON build_job TYPE option<datetime>;
 DEFINE FIELD IF NOT EXISTS finished_at ON build_job TYPE option<datetime>;
 DEFINE FIELD IF NOT EXISTS duration_seconds ON build_job TYPE option<int>;
 DEFINE INDEX IF NOT EXISTS idx_build_job_tenant_state ON build_job FIELDS tenant, state;
+
+-- #185: fleet-agent observability — monitor が全 runtime から観測した container
+-- の inventory snapshot。inventory_report 毎に server 単位で全置換（最新のみ保持）。
+-- 既存 `container` と別テーブル: `container` は service FK 必須で Quadlet を弾くため。
+DEFINE TABLE IF NOT EXISTS observed_container SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS server_slug ON observed_container TYPE string;
+DEFINE FIELD IF NOT EXISTS runtime ON observed_container TYPE string;
+DEFINE FIELD IF NOT EXISTS container_id ON observed_container TYPE string;
+DEFINE FIELD IF NOT EXISTS container_name ON observed_container TYPE string;
+DEFINE FIELD IF NOT EXISTS status ON observed_container TYPE string;
+DEFINE FIELD IF NOT EXISTS health ON observed_container TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS image ON observed_container TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS project ON observed_container TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS stage ON observed_container TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS service ON observed_container TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS started_at ON observed_container TYPE option<datetime>;
+DEFINE FIELD IF NOT EXISTS last_seen_at ON observed_container TYPE option<datetime> DEFAULT time::now();
+DEFINE INDEX IF NOT EXISTS idx_observed_container_server ON observed_container FIELDS server_slug;
 "#;
 
 #[cfg(test)]
@@ -1709,6 +1794,65 @@ mod tests {
     async fn test_connect_memory() {
         let db = Database::connect_memory().await;
         assert!(db.is_ok(), "in-memory 接続に失敗: {:?}", db.err());
+    }
+
+    /// #185: observed_container は inventory_report 毎に snapshot 全置換される。
+    /// 2 件 → 1 件で list したとき append でなく overwrite されることを検証。
+    #[tokio::test]
+    async fn test_observed_container_snapshot_replace() {
+        let db = Database::connect_memory().await.unwrap();
+
+        let mk = |name: &str, runtime: &str| ObservedContainer {
+            id: None,
+            server_slug: "worker-01".into(),
+            runtime: runtime.into(),
+            container_id: format!("id-{name}"),
+            container_name: name.into(),
+            status: "running".into(),
+            health: None,
+            image: Some("ghcr.io/x:latest".into()),
+            project: Some("fleetstage".into()),
+            stage: Some("live".into()),
+            service: Some(name.into()),
+            started_at: None,
+            last_seen_at: None,
+        };
+
+        // 初回 snapshot: 2 件（Docker + Podman runtime 混在）
+        db.replace_observed_containers(
+            "worker-01",
+            &[
+                mk("hq-api", "docker"),
+                mk("backstage", "podman-rootless-1000"),
+            ],
+        )
+        .await
+        .unwrap();
+        let listed = db.list_observed_containers("worker-01").await.unwrap();
+        assert_eq!(listed.len(), 2, "初回 snapshot は 2 件");
+
+        // 2 回目 snapshot: 1 件 → overwrite（append でないことを検証）
+        db.replace_observed_containers("worker-01", &[mk("hq-api", "docker")])
+            .await
+            .unwrap();
+        let listed = db.list_observed_containers("worker-01").await.unwrap();
+        assert_eq!(listed.len(), 1, "snapshot は overwrite され 1 件");
+        assert_eq!(listed[0].container_name, "hq-api");
+        assert_eq!(listed[0].runtime, "docker");
+        assert_eq!(listed[0].project.as_deref(), Some("fleetstage"));
+
+        // 別 server の snapshot は影響を受けない
+        db.replace_observed_containers("worker-02", &[mk("other", "docker")])
+            .await
+            .unwrap();
+        assert_eq!(
+            db.list_observed_containers("worker-01")
+                .await
+                .unwrap()
+                .len(),
+            1,
+            "別 server の置換は worker-01 に影響しない"
+        );
     }
 
     #[tokio::test]
