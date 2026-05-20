@@ -3,6 +3,7 @@ pub mod docker;
 pub mod engine;
 pub mod error;
 pub mod port;
+pub mod quadlet;
 pub mod runtime;
 pub mod waiter;
 
@@ -11,5 +12,6 @@ pub use docker::*;
 pub use engine::*;
 pub use error::*;
 pub use port::*;
+pub use quadlet::*;
 pub use runtime::*;
 pub use waiter::*;
