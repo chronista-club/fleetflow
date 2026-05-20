@@ -358,6 +358,39 @@ pub struct Container {
 }
 
 // ─────────────────────────────────────────────
+// CP-005b: ObservedContainer (#185 fleet-agent observability)
+// ─────────────────────────────────────────────
+
+/// fleet-agent monitor が観測した container の inventory snapshot 1 件。
+///
+/// 既存 `Container` (CP-005) と別系統:
+/// - `Container` は deploy が作る record で `service: RecordId` FK 必須 →
+///   Quadlet (rootless Podman) container は service 概念に紐付かず入らない。
+/// - `ObservedContainer` は monitor が全 runtime（root Docker + rootless
+///   Podman socket 群）から観測した実態を `inventory_report` 毎に上書き保存。
+///   project/stage/service は `fleetflow.*` label 由来の素の文字列（FK なし）。
+#[derive(Debug, Clone, Serialize, Deserialize, SurrealValue)]
+pub struct ObservedContainer {
+    pub id: Option<RecordId>,
+    pub server_slug: String,
+    /// 観測元 runtime（"docker" | "podman-rootless-<uid>"）
+    pub runtime: String,
+    pub container_id: String,
+    pub container_name: String,
+    pub status: String,
+    pub health: Option<String>,
+    pub image: Option<String>,
+    /// `fleetflow.project` label 由来（attribution）
+    pub project: Option<String>,
+    /// `fleetflow.stage` label 由来
+    pub stage: Option<String>,
+    /// `fleetflow.service` label 由来
+    pub service: Option<String>,
+    pub started_at: Option<DateTime<Utc>>,
+    pub last_seen_at: Option<DateTime<Utc>>,
+}
+
+// ─────────────────────────────────────────────
 // CP-006: Server
 // ─────────────────────────────────────────────
 

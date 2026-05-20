@@ -6,8 +6,9 @@ use std::time::{Duration, Instant};
 
 use bollard::Docker;
 use bollard::query_parameters::{InspectContainerOptions, ListContainersOptions};
+use serde::Serialize;
 use serde_json::json;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 use unison::network::client::ProtocolClient;
 
 /// モニター設定
@@ -83,16 +84,169 @@ impl Severity {
 /// クールダウンキー: (container_name, alert_type)
 type CooldownKey = (String, String);
 
+/// 観測対象の container runtime endpoint。
+struct RuntimeEndpoint {
+    /// runtime 識別子（"docker" | "podman-rootless-<uid>"）
+    id: String,
+    docker: Docker,
+}
+
+/// rootless Podman socket path から runtime_id を導出する（純粋関数）。
+///
+/// `/run/user/1000/podman/podman.sock` → `podman-rootless-1000`
+fn podman_runtime_id(socket_path: &str) -> String {
+    let uid = socket_path
+        .strip_prefix("/run/user/")
+        .and_then(|rest| rest.split('/').next())
+        .filter(|s| !s.is_empty())
+        .unwrap_or("unknown");
+    format!("podman-rootless-{uid}")
+}
+
+/// `/run/user/*/podman/podman.sock` を列挙する（rootless Podman socket）。
+fn discover_podman_sockets() -> Vec<String> {
+    let mut sockets = Vec::new();
+    let Ok(entries) = std::fs::read_dir("/run/user") else {
+        return sockets;
+    };
+    for entry in entries.flatten() {
+        let sock = entry.path().join("podman/podman.sock");
+        if sock.exists()
+            && let Some(s) = sock.to_str()
+        {
+            sockets.push(s.to_string());
+        }
+    }
+    sockets
+}
+
+/// container runtime を auto-discovery する。
+///
+/// - root Docker: `connect_with_local_defaults`（常に試行、socket 無ければ除外）
+/// - rootless Podman: `/run/user/*/podman/podman.sock` を glob、存在分のみ
+///
+/// socket の存在 = opt-in。接続失敗は warn してスキップ（fail-soft）。
+fn discover_runtimes() -> Vec<RuntimeEndpoint> {
+    let mut runtimes = Vec::new();
+
+    match Docker::connect_with_local_defaults() {
+        Ok(docker) => runtimes.push(RuntimeEndpoint {
+            id: "docker".to_string(),
+            docker,
+        }),
+        Err(e) => debug!(error = %e, "root Docker 未接続 — スキップ"),
+    }
+
+    for path in discover_podman_sockets() {
+        let unix_url = format!("unix://{path}");
+        match Docker::connect_with_unix(&unix_url, 120, bollard::API_DEFAULT_VERSION) {
+            Ok(docker) => runtimes.push(RuntimeEndpoint {
+                id: podman_runtime_id(&path),
+                docker,
+            }),
+            Err(e) => warn!(socket = %path, error = %e, "Podman socket 接続失敗 — スキップ"),
+        }
+    }
+
+    runtimes
+}
+
+/// container の labels から fleetflow attribution（project/stage/service）を
+/// 抽出する（純粋関数）。Quadlet `.container` units にも同 label を付与する。
+fn extract_attribution(
+    labels: &HashMap<String, String>,
+) -> (Option<String>, Option<String>, Option<String>) {
+    (
+        labels.get("fleetflow.project").cloned(),
+        labels.get("fleetflow.stage").cloned(),
+        labels.get("fleetflow.service").cloned(),
+    )
+}
+
+/// inventory entry — `inventory_report` の wire 形式に対応。
+#[derive(Debug, Clone, Serialize)]
+struct ContainerInventoryEntry {
+    runtime: String,
+    container_id: String,
+    container_name: String,
+    status: String,
+    health: Option<String>,
+    image: Option<String>,
+    project: Option<String>,
+    stage: Option<String>,
+    service: Option<String>,
+}
+
+/// 1 runtime の全 container を inventory entry に変換する。
+async fn collect_runtime_inventory(
+    rt: &RuntimeEndpoint,
+) -> anyhow::Result<Vec<ContainerInventoryEntry>> {
+    let containers = rt
+        .docker
+        .list_containers(Some(ListContainersOptions {
+            all: true,
+            ..Default::default()
+        }))
+        .await?;
+
+    let mut entries = Vec::new();
+    for c in &containers {
+        let Some(container_id) = c.id.clone() else {
+            continue;
+        };
+        let container_name = c
+            .names
+            .as_ref()
+            .and_then(|n| n.first())
+            .map(|n| n.trim_start_matches('/').to_string())
+            .unwrap_or_default();
+        let labels = c.labels.clone().unwrap_or_default();
+        let (project, stage, service) = extract_attribution(&labels);
+        let status = c.state.as_ref().map(|s| s.to_string()).unwrap_or_default();
+        let health = c
+            .health
+            .as_ref()
+            .and_then(|h| h.status.as_ref())
+            .map(|s| s.to_string());
+
+        entries.push(ContainerInventoryEntry {
+            runtime: rt.id.clone(),
+            container_id,
+            container_name,
+            status,
+            health,
+            image: c.image.clone(),
+            project,
+            stage,
+            service,
+        });
+    }
+    Ok(entries)
+}
+
+/// CP に inventory snapshot を送信する（#185）。`server` チャネルの
+/// `inventory_report` method。
+async fn send_inventory_report(
+    client: &ProtocolClient,
+    server_slug: &str,
+    entries: &[ContainerInventoryEntry],
+) -> anyhow::Result<()> {
+    let channel = client.open_channel("server").await?;
+    let _: serde_json::Value = channel
+        .request(
+            "inventory_report",
+            &json!({
+                "server_slug": server_slug,
+                "containers": entries,
+            }),
+        )
+        .await?;
+    channel.close().await.ok();
+    Ok(())
+}
+
 /// モニターループを実行
 pub async fn run_loop(client: &Arc<ProtocolClient>, server_slug: &str, config: &MonitorConfig) {
-    let docker = match Docker::connect_with_local_defaults() {
-        Ok(d) => d,
-        Err(e) => {
-            error!(error = %e, "Docker 接続失敗 — モニター停止");
-            return;
-        }
-    };
-
     info!(
         interval = config.interval_secs,
         threshold = config.restart_threshold,
@@ -105,53 +259,86 @@ pub async fn run_loop(client: &Arc<ProtocolClient>, server_slug: &str, config: &
     loop {
         tokio::time::sleep(Duration::from_secs(config.interval_secs)).await;
 
-        match check_containers(&docker, &prev_states, config).await {
-            Ok(result) => {
-                for alert in &result.alerts {
-                    let key = (
-                        alert.container_name.clone(),
-                        alert.alert_type.as_str().to_string(),
-                    );
+        // runtime を毎 interval 再 discovery（rootless socket は agent 起動後に
+        // 現れうるため）。
+        let runtimes = discover_runtimes();
+        if runtimes.is_empty() {
+            warn!("観測可能な container runtime が無い — このサイクルをスキップ");
+            continue;
+        }
 
-                    // クールダウンチェック
-                    if let Some(last_sent) = cooldowns.get(&key)
-                        && last_sent.elapsed() < Duration::from_secs(config.alert_cooldown_secs)
-                    {
-                        debug!(
-                            container = %alert.container_name,
-                            alert_type = alert.alert_type.as_str(),
-                            "クールダウン中 — アラートスキップ"
+        // ── 異常検知: root Docker のみ（既存挙動を維持）──
+        // Quadlet (rootless Podman) は healthcheck 未定義 + systemd 管理で
+        // restart_count が死角のため anomaly alert の対象外（#185 既知の限界）。
+        if let Some(docker_rt) = runtimes.iter().find(|r| r.id == "docker") {
+            match check_containers(&docker_rt.docker, &prev_states, config).await {
+                Ok(result) => {
+                    for alert in &result.alerts {
+                        let key = (
+                            alert.container_name.clone(),
+                            alert.alert_type.as_str().to_string(),
                         );
-                        continue;
+
+                        // クールダウンチェック
+                        if let Some(last_sent) = cooldowns.get(&key)
+                            && last_sent.elapsed() < Duration::from_secs(config.alert_cooldown_secs)
+                        {
+                            debug!(
+                                container = %alert.container_name,
+                                alert_type = alert.alert_type.as_str(),
+                                "クールダウン中 — アラートスキップ"
+                            );
+                            continue;
+                        }
+
+                        // CP にアラート送信
+                        if let Err(e) = send_alert(client, server_slug, alert).await {
+                            warn!(error = %e, "アラート送信失敗");
+                        } else {
+                            cooldowns.insert(key, Instant::now());
+                            info!(
+                                container = %alert.container_name,
+                                alert_type = alert.alert_type.as_str(),
+                                severity = alert.severity.as_str(),
+                                "アラート送信完了"
+                            );
+                        }
                     }
 
-                    // CP にアラート送信
-                    if let Err(e) = send_alert(client, server_slug, alert).await {
-                        warn!(error = %e, "アラート送信失敗");
-                    } else {
-                        cooldowns.insert(key, Instant::now());
-                        info!(
-                            container = %alert.container_name,
-                            alert_type = alert.alert_type.as_str(),
-                            severity = alert.severity.as_str(),
-                            "アラート送信完了"
-                        );
+                    // 正常復帰 → CP に resolve 送信
+                    for container_name in &result.recovered {
+                        if let Err(e) = send_resolve(client, server_slug, container_name).await {
+                            warn!(error = %e, container = %container_name, "resolve 送信失敗");
+                        } else {
+                            info!(container = %container_name, "コンテナ正常復帰 — アラート解決送信");
+                        }
                     }
+
+                    prev_states = result.new_states;
                 }
-
-                // 正常復帰 → CP に resolve 送信
-                for container_name in &result.recovered {
-                    if let Err(e) = send_resolve(client, server_slug, container_name).await {
-                        warn!(error = %e, container = %container_name, "resolve 送信失敗");
-                    } else {
-                        info!(container = %container_name, "コンテナ正常復帰 — アラート解決送信");
-                    }
+                Err(e) => {
+                    warn!(error = %e, "コンテナチェック失敗");
                 }
-
-                prev_states = result.new_states;
             }
+        }
+
+        // ── inventory: 全 runtime（#185）──
+        // dead socket 対策で各 runtime 列挙を timeout で囲む（fail-soft）。
+        let mut inventory = Vec::new();
+        for rt in &runtimes {
+            match tokio::time::timeout(Duration::from_secs(10), collect_runtime_inventory(rt)).await
+            {
+                Ok(Ok(entries)) => inventory.extend(entries),
+                Ok(Err(e)) => {
+                    warn!(runtime = %rt.id, error = %e, "inventory 収集失敗 — スキップ")
+                }
+                Err(_) => warn!(runtime = %rt.id, "inventory 収集 timeout — スキップ"),
+            }
+        }
+        match send_inventory_report(client, server_slug, &inventory).await {
+            Ok(()) => debug!(count = inventory.len(), "inventory_report 送信完了"),
             Err(e) => {
-                warn!(error = %e, "コンテナチェック失敗");
+                warn!(error = %e, count = inventory.len(), "inventory_report 送信失敗")
             }
         }
     }
@@ -360,6 +547,53 @@ async fn send_alert(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ── #185 multi-runtime observability ──
+
+    #[test]
+    fn podman_runtime_id_extracts_uid() {
+        assert_eq!(
+            podman_runtime_id("/run/user/1000/podman/podman.sock"),
+            "podman-rootless-1000"
+        );
+        assert_eq!(
+            podman_runtime_id("/run/user/0/podman/podman.sock"),
+            "podman-rootless-0"
+        );
+    }
+
+    #[test]
+    fn podman_runtime_id_handles_unexpected_path() {
+        // 想定外 path でも panic せず "unknown" にフォールバック
+        assert_eq!(
+            podman_runtime_id("/tmp/podman.sock"),
+            "podman-rootless-unknown"
+        );
+    }
+
+    #[test]
+    fn extract_attribution_reads_fleetflow_labels() {
+        let mut labels = HashMap::new();
+        labels.insert("fleetflow.project".to_string(), "fleetstage".to_string());
+        labels.insert("fleetflow.stage".to_string(), "live".to_string());
+        labels.insert("fleetflow.service".to_string(), "hq-api".to_string());
+        labels.insert("other.label".to_string(), "ignored".to_string());
+
+        let (project, stage, service) = extract_attribution(&labels);
+        assert_eq!(project.as_deref(), Some("fleetstage"));
+        assert_eq!(stage.as_deref(), Some("live"));
+        assert_eq!(service.as_deref(), Some("hq-api"));
+    }
+
+    #[test]
+    fn extract_attribution_missing_labels_are_none() {
+        // fleetflow.* label を持たない container（attribution 不明）
+        let labels = HashMap::new();
+        let (project, stage, service) = extract_attribution(&labels);
+        assert!(project.is_none());
+        assert!(stage.is_none());
+        assert!(service.is_none());
+    }
 
     fn default_config() -> MonitorConfig {
         MonitorConfig {

@@ -6,8 +6,51 @@ use tracing::{error, info};
 use unison::network::channel::UnisonChannel;
 use unison::network::server::ProtocolServer;
 
-use crate::model::{Alert, Server, ServerStatusUpdate};
+use crate::model::{Alert, ObservedContainer, Server, ServerStatusUpdate};
 use crate::server::AppState;
+
+/// `inventory_report` payload の `containers` 配列を `Vec<ObservedContainer>` に
+/// 変換する（純粋関数 — テスト可能）。
+///
+/// agent (fleet-agent monitor) が送る wire 形式:
+/// `{ server_slug, containers: [{ runtime, container_id, container_name,
+///    status, health?, image?, project?, stage?, service?, started_at? }] }`
+fn parse_inventory_payload(payload: &serde_json::Value) -> Vec<ObservedContainer> {
+    let server_slug = payload["server_slug"].as_str().unwrap_or_default();
+    let now = Utc::now();
+    payload["containers"]
+        .as_array()
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|c| {
+                    // container_id / container_name は必須。欠落要素はスキップ。
+                    let container_id = c["container_id"].as_str()?.to_string();
+                    let container_name = c["container_name"].as_str()?.to_string();
+                    let opt_str =
+                        |key: &str| -> Option<String> { c[key].as_str().map(str::to_string) };
+                    Some(ObservedContainer {
+                        id: None,
+                        server_slug: server_slug.to_string(),
+                        runtime: c["runtime"].as_str().unwrap_or("unknown").to_string(),
+                        container_id,
+                        container_name,
+                        status: c["status"].as_str().unwrap_or("unknown").to_string(),
+                        health: opt_str("health"),
+                        image: opt_str("image"),
+                        project: opt_str("project"),
+                        stage: opt_str("stage"),
+                        service: opt_str("service"),
+                        started_at: c["started_at"]
+                            .as_str()
+                            .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+                            .map(|dt| dt.with_timezone(&Utc)),
+                        last_seen_at: Some(now),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
 
 pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
     server
@@ -702,6 +745,44 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                 }
                             }
                         }
+                        "inventory_report" => {
+                            // #185: agent monitor が全 runtime から観測した
+                            // container snapshot を server 単位で全置換する。
+                            let server_slug =
+                                payload["server_slug"].as_str().unwrap_or_default();
+                            let containers = parse_inventory_payload(&payload);
+
+                            match state
+                                .db
+                                .replace_observed_containers(server_slug, &containers)
+                                .await
+                            {
+                                Ok(()) => {
+                                    info!(
+                                        server = server_slug,
+                                        count = containers.len(),
+                                        "inventory_report 記録完了"
+                                    );
+                                    channel
+                                        .send_response(
+                                            msg.id,
+                                            "inventory_report",
+                                            &json!({ "ack": true, "count": containers.len() }),
+                                        )
+                                        .await?;
+                                }
+                                Err(e) => {
+                                    error!(error = %e, "inventory_report 記録失敗");
+                                    channel
+                                        .send_response(
+                                            msg.id,
+                                            "inventory_report",
+                                            &json!({ "error": e.to_string() }),
+                                        )
+                                        .await?;
+                                }
+                            }
+                        }
                         "ping" => {
                             let hostname = payload["hostname"].as_str().unwrap_or_default();
 
@@ -747,4 +828,70 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
             })
         })
         .await;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_inventory_payload;
+    use serde_json::json;
+
+    /// agent の wire 形式を ObservedContainer に変換できる。
+    #[test]
+    fn parse_inventory_payload_well_formed() {
+        let payload = json!({
+            "server_slug": "worker-01",
+            "containers": [
+                {
+                    "runtime": "podman-rootless-1000",
+                    "container_id": "abc123",
+                    "container_name": "fleetstage-hq-api",
+                    "status": "running",
+                    "image": "ghcr.io/x/hq-api:latest",
+                    "project": "fleetstage",
+                    "stage": "live",
+                    "service": "hq-api",
+                },
+            ],
+        });
+        let containers = parse_inventory_payload(&payload);
+        assert_eq!(containers.len(), 1);
+        let c = &containers[0];
+        assert_eq!(c.server_slug, "worker-01");
+        assert_eq!(c.runtime, "podman-rootless-1000");
+        assert_eq!(c.container_name, "fleetstage-hq-api");
+        assert_eq!(c.project.as_deref(), Some("fleetstage"));
+        assert_eq!(c.stage.as_deref(), Some("live"));
+        assert!(c.last_seen_at.is_some(), "last_seen_at は CP 側で付与");
+        assert!(c.id.is_none());
+    }
+
+    /// container_id / container_name 欠落要素はスキップ、optional 欠落は None。
+    #[test]
+    fn parse_inventory_payload_skips_invalid_and_defaults_optionals() {
+        let payload = json!({
+            "server_slug": "worker-01",
+            "containers": [
+                { "container_id": "ok", "container_name": "valid" },
+                { "container_id": "no-name" },          // container_name 欠落 → skip
+                { "container_name": "no-id" },          // container_id 欠落 → skip
+            ],
+        });
+        let containers = parse_inventory_payload(&payload);
+        assert_eq!(containers.len(), 1, "必須欠落要素はスキップされる");
+        let c = &containers[0];
+        assert_eq!(c.container_name, "valid");
+        assert_eq!(c.runtime, "unknown", "runtime 欠落時は unknown");
+        assert_eq!(c.status, "unknown", "status 欠落時は unknown");
+        assert!(c.project.is_none());
+        assert!(c.image.is_none());
+    }
+
+    /// containers キー欠落・空でも panic せず空 Vec。
+    #[test]
+    fn parse_inventory_payload_empty() {
+        assert!(parse_inventory_payload(&json!({ "server_slug": "w" })).is_empty());
+        assert!(
+            parse_inventory_payload(&json!({ "server_slug": "w", "containers": [] })).is_empty()
+        );
+    }
 }
