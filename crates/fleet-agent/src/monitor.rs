@@ -325,21 +325,32 @@ pub async fn run_loop(client: &Arc<ProtocolClient>, server_slug: &str, config: &
         // ── inventory: 全 runtime（#185）──
         // dead socket 対策で各 runtime 列挙を timeout で囲む（fail-soft）。
         let mut inventory = Vec::new();
+        let mut any_runtime_ok = false;
         for rt in &runtimes {
             match tokio::time::timeout(Duration::from_secs(10), collect_runtime_inventory(rt)).await
             {
-                Ok(Ok(entries)) => inventory.extend(entries),
+                Ok(Ok(entries)) => {
+                    any_runtime_ok = true;
+                    inventory.extend(entries);
+                }
                 Ok(Err(e)) => {
                     warn!(runtime = %rt.id, error = %e, "inventory 収集失敗 — スキップ")
                 }
                 Err(_) => warn!(runtime = %rt.id, "inventory 収集 timeout — スキップ"),
             }
         }
-        match send_inventory_report(client, server_slug, &inventory).await {
-            Ok(()) => debug!(count = inventory.len(), "inventory_report 送信完了"),
-            Err(e) => {
-                warn!(error = %e, count = inventory.len(), "inventory_report 送信失敗")
+        // 全 runtime の列挙が失敗したら空 snapshot を送らない。送ると CP 側で
+        // observed_container が false-clear される（次 interval で復元）。
+        // runtime が成功して container 0 件のケースは正当な空なので送信する。
+        if any_runtime_ok {
+            match send_inventory_report(client, server_slug, &inventory).await {
+                Ok(()) => debug!(count = inventory.len(), "inventory_report 送信完了"),
+                Err(e) => {
+                    warn!(error = %e, count = inventory.len(), "inventory_report 送信失敗")
+                }
             }
+        } else {
+            warn!("全 runtime の inventory 収集に失敗 — inventory_report 送信スキップ");
         }
     }
 }
