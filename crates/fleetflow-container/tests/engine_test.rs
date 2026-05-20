@@ -21,6 +21,7 @@ fn make_flow(services: Vec<(&str, Service)>, stage_services: Vec<&str>) -> Flow 
             servers: vec![],
             variables: HashMap::new(),
             registry: None,
+            ..Default::default()
         },
     );
     Flow {

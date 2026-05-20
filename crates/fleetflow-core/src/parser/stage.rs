@@ -1,7 +1,7 @@
 //! ステージノードのパース
 
 use crate::error::{FlowError, Result};
-use crate::model::{Service, Stage};
+use crate::model::{Runtime, Service, Stage};
 use crate::parser::service::parse_service;
 use kdl::KdlNode;
 use std::collections::HashMap;
@@ -66,6 +66,23 @@ pub fn parse_stage(node: &KdlNode) -> Result<(String, Stage, HashMap<String, Ser
                         .first()
                         .and_then(|e| e.value().as_string())
                         .map(|s| s.to_string());
+                }
+                // 実行 backend（WS2: docker | quadlet | compose、未宣言時 docker）
+                "runtime" => {
+                    let raw = child
+                        .entries()
+                        .first()
+                        .and_then(|e| e.value().as_string())
+                        .ok_or_else(|| {
+                            FlowError::InvalidConfig(
+                                "runtime requires a value (docker|quadlet|compose)".to_string(),
+                            )
+                        })?;
+                    stage.runtime = Runtime::parse(raw).ok_or_else(|| {
+                        FlowError::InvalidConfig(format!(
+                            "unknown runtime '{raw}' (expected docker|quadlet|compose)"
+                        ))
+                    })?;
                 }
                 _ => {}
             }

@@ -76,6 +76,7 @@ fn make_test_flow() -> Flow {
             servers: vec![],
             variables: HashMap::new(),
             registry: None,
+            ..Default::default()
         },
     );
 
