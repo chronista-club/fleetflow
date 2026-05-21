@@ -43,6 +43,8 @@ fleetflow-build.workspace = true
 # kdl-based deploy (DeployEngine + DeployRequest)
 # CP の deploy.execute が server 宣言を読んで agent にリレーする path で必要 (FSC-34)
 fleetflow-container.workspace = true
+# stage.backend (Backend enum) の参照 — WS3 で deploy 経路を backend で分岐
+fleetflow-core.workspace = true
 
 # CLI
 clap.workspace = true
