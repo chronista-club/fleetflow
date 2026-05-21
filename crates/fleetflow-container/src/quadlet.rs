@@ -268,6 +268,11 @@ pub fn systemctl_user_start(unit: &str) -> io::Result<()> {
     run_systemctl_user(&["start", unit])
 }
 
+/// `systemctl --user stop <unit>`。
+pub fn systemctl_user_stop(unit: &str) -> io::Result<()> {
+    run_systemctl_user(&["stop", unit])
+}
+
 fn run_systemctl_user(args: &[&str]) -> io::Result<()> {
     let status = std::process::Command::new("systemctl")
         .arg("--user")
