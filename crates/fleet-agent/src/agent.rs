@@ -327,6 +327,50 @@ async fn handle_deploy_kdl(
         }
     };
 
+    // WS3: stage の backend が Quadlet なら bollard を使わず Quadlet 適用に分岐。
+    // agent は CLI (commands/quadlet.rs) と同じ apply_stage を呼ぶ。
+    if let Some(stage) = deploy_request.flow.stages.get(&deploy_request.stage_name) {
+        match stage.backend {
+            fleetflow_core::Backend::Quadlet => {
+                let response = match fleetflow_container::quadlet::apply_stage(
+                    &deploy_request.flow,
+                    &deploy_request.stage_name,
+                    stage,
+                ) {
+                    Ok(outcome) => json!({
+                        "status": "success",
+                        "log": format!(
+                            "quadlet: {} units 反映, {} services 起動",
+                            outcome.units_written,
+                            outcome.services_started.len()
+                        ),
+                        "services_deployed": outcome.services_started,
+                    }),
+                    Err(e) => json!({
+                        "status": "failed",
+                        "error": format!("quadlet 適用失敗: {}", e),
+                    }),
+                };
+                send_command_result(channel, request_id, response).await?;
+                return Ok(());
+            }
+            fleetflow_core::Backend::Compose => {
+                send_command_result(
+                    channel,
+                    request_id,
+                    json!({
+                        "status": "failed",
+                        "error": "backend \"compose\" は未実装です（epic WS4）",
+                    }),
+                )
+                .await?;
+                return Ok(());
+            }
+            // Docker は以下の従来 bollard 経路へ
+            fleetflow_core::Backend::Docker => {}
+        }
+    }
+
     // local docker daemon (= worker の dockerd) に bollard 接続
     let docker = match bollard::Docker::connect_with_local_defaults() {
         Ok(d) => d,

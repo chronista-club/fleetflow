@@ -19,7 +19,7 @@
 use std::io;
 use std::path::{Path, PathBuf};
 
-use fleetflow_core::{Protocol, RestartPolicy, Service};
+use fleetflow_core::{Flow, Protocol, RestartPolicy, Service, Stage};
 
 /// `{project}-{stage}-{service}` 形式の正準名を組み立てる。
 ///
@@ -289,6 +289,112 @@ fn run_systemctl_user(args: &[&str]) -> io::Result<()> {
     }
 }
 
+// ─────────────────────────────────────────────
+// ステージ適用（WS2 Stage 2c / WS3）— CLI・agent 共用の orchestration
+// ─────────────────────────────────────────────
+
+/// stage の全 container サービスから Quadlet ユニット束を組み立てる（純粋関数）。
+///
+/// `.network` 1 つ + container サービスごとの `.container`。静的サイト
+/// （`type "static"`）は Quadlet 対象外なのでスキップする。
+pub fn build_stage_units(
+    config: &Flow,
+    stage_name: &str,
+    stage: &Stage,
+) -> anyhow::Result<Vec<QuadletUnit>> {
+    let project = &config.name;
+    let mut units = vec![QuadletUnit {
+        file_name: network_file_name(project, stage_name),
+        content: generate_network_unit(project, stage_name),
+    }];
+
+    for service_name in &stage.services {
+        let service = config
+            .services
+            .get(service_name)
+            .ok_or_else(|| anyhow::anyhow!("サービス '{}' の定義が見つかりません", service_name))?;
+
+        // 静的サイトはコンテナではないため Quadlet 対象外
+        if service.is_static() {
+            continue;
+        }
+        if service.image.is_none() {
+            anyhow::bail!("サービス '{}' に image が指定されていません", service_name);
+        }
+
+        units.push(QuadletUnit {
+            file_name: container_file_name(project, stage_name, service_name),
+            content: generate_container_unit(
+                project,
+                stage_name,
+                service_name,
+                service,
+                &service.depends_on,
+            ),
+        });
+    }
+
+    Ok(units)
+}
+
+/// container サービスの systemd unit 名（`{project}-{stage}-{service}.service`）。
+pub fn service_units(config: &Flow, stage_name: &str, stage: &Stage) -> Vec<String> {
+    stage
+        .services
+        .iter()
+        .filter(|name| {
+            config
+                .services
+                .get(name.as_str())
+                .is_some_and(|s| !s.is_static())
+        })
+        .map(|name| format!("{}.service", unit_base_name(&config.name, stage_name, name)))
+        .collect()
+}
+
+/// `apply_stage` の結果。
+#[derive(Debug, Clone)]
+pub struct QuadletApplyOutcome {
+    /// disk に書き出したユニットファイル数。
+    pub units_written: usize,
+    /// `systemctl --user start` した service unit 名。
+    pub services_started: Vec<String>,
+}
+
+/// stage を Quadlet で実体化する — CLI（`fleet up`）と agent（WS3）の共用経路。
+///
+/// 1. KDL からユニット束を生成（`build_stage_units`）
+/// 2. `~/.config/containers/systemd/` に snapshot 反映（`sync_quadlet_dir`）
+/// 3. `systemctl --user daemon-reload` で `.service` を再生成
+/// 4. 各 container サービスを `systemctl --user start`
+///
+/// 注: `systemctl --user` は呼び出しプロセスのユーザーセッションに作用する。
+/// rootless Quadlet のため、呼び出し元（CLI なら実行ユーザー、agent なら
+/// agent プロセス）が対象の rootless ユーザーである必要がある（provisioning は WS5）。
+pub fn apply_stage(
+    config: &Flow,
+    stage_name: &str,
+    stage: &Stage,
+) -> anyhow::Result<QuadletApplyOutcome> {
+    let units = build_stage_units(config, stage_name, stage)?;
+    let dir = default_quadlet_dir()
+        .ok_or_else(|| anyhow::anyhow!("Quadlet ディレクトリを解決できません（HOME 未設定）"))?;
+
+    sync_quadlet_dir(&dir, &config.name, stage_name, &units)?;
+    systemctl_user_daemon_reload()?;
+
+    let mut services_started = Vec::new();
+    for unit in service_units(config, stage_name, stage) {
+        systemctl_user_start(&unit)?;
+        services_started.push(unit);
+    }
+
+    Ok(QuadletApplyOutcome {
+        units_written: units.len(),
+        services_started,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -545,5 +651,86 @@ mod tests {
         assert!(!nested.exists());
         sync_quadlet_dir(&nested, "myapp", "live", &[]).unwrap();
         assert!(nested.exists());
+    }
+
+    // ── ステージ適用（WS2 Stage 2c / WS3）──
+
+    fn flow_with(
+        services: Vec<(&str, Service)>,
+        stage_services: Vec<&str>,
+    ) -> (fleetflow_core::Flow, fleetflow_core::Stage) {
+        let mut svc_map = std::collections::HashMap::new();
+        for (name, svc) in services {
+            svc_map.insert(name.to_string(), svc);
+        }
+        let stage = fleetflow_core::Stage {
+            services: stage_services.iter().map(|s| s.to_string()).collect(),
+            ..Default::default()
+        };
+        let mut stages = std::collections::HashMap::new();
+        stages.insert("live".to_string(), stage.clone());
+        let flow = fleetflow_core::Flow {
+            name: "myapp".to_string(),
+            services: svc_map,
+            stages,
+            providers: std::collections::HashMap::new(),
+            servers: std::collections::HashMap::new(),
+            registry: None,
+            variables: std::collections::HashMap::new(),
+            tenant: None,
+        };
+        (flow, stage)
+    }
+
+    fn container_service() -> Service {
+        Service {
+            image: Some("postgres:16".to_string()),
+            ..Service::default()
+        }
+    }
+
+    #[test]
+    fn build_stage_units_emits_network_plus_containers() {
+        let (flow, stage) = flow_with(
+            vec![("db", container_service()), ("web", container_service())],
+            vec!["db", "web"],
+        );
+        let units = build_stage_units(&flow, "live", &stage).unwrap();
+        assert_eq!(units.len(), 3); // network 1 + container 2
+        let names: Vec<&str> = units.iter().map(|u| u.file_name.as_str()).collect();
+        assert!(names.contains(&"myapp-live.network"));
+        assert!(names.contains(&"myapp-live-db.container"));
+        assert!(names.contains(&"myapp-live-web.container"));
+    }
+
+    #[test]
+    fn build_stage_units_skips_static_services() {
+        let static_svc = Service {
+            service_type: Some(fleetflow_core::ServiceType::Static),
+            ..Service::default()
+        };
+        let (flow, stage) = flow_with(
+            vec![("db", container_service()), ("site", static_svc)],
+            vec!["db", "site"],
+        );
+        let units = build_stage_units(&flow, "live", &stage).unwrap();
+        assert_eq!(units.len(), 2); // network 1 + container 1（static 除外）
+        let names: Vec<&str> = units.iter().map(|u| u.file_name.as_str()).collect();
+        assert!(!names.contains(&"myapp-live-site.container"));
+    }
+
+    #[test]
+    fn build_stage_units_errors_on_missing_image() {
+        let (flow, stage) = flow_with(vec![("db", Service::default())], vec!["db"]);
+        assert!(build_stage_units(&flow, "live", &stage).is_err());
+    }
+
+    #[test]
+    fn service_units_returns_systemd_service_names() {
+        let (flow, stage) = flow_with(vec![("db", container_service())], vec!["db"]);
+        assert_eq!(
+            service_units(&flow, "live", &stage),
+            vec!["myapp-live-db.service"]
+        );
     }
 }
