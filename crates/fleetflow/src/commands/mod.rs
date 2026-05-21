@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod compose;
 pub mod cp;
 pub mod cp_client;
 pub mod daemon;

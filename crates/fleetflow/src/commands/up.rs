@@ -223,7 +223,14 @@ pub async fn handle(
             return crate::commands::quadlet::up(config, &stage_name, stage_config, dry_run).await;
         }
         fleetflow_core::Backend::Compose => {
-            anyhow::bail!("backend \"compose\" は未実装です（epic WS4）");
+            return crate::commands::compose::up(
+                config,
+                project_root,
+                &stage_name,
+                stage_config,
+                dry_run,
+            )
+            .await;
         }
     }
 

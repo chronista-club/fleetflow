@@ -1,3 +1,4 @@
+pub mod compose;
 pub mod converter;
 pub mod docker;
 pub mod engine;
@@ -7,6 +8,7 @@ pub mod quadlet;
 pub mod runtime;
 pub mod waiter;
 
+pub use compose::*;
 pub use converter::*;
 pub use docker::*;
 pub use engine::*;
