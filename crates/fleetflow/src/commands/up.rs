@@ -216,6 +216,17 @@ pub async fn handle(
         )
     })?;
 
+    // WS2: backend が Quadlet/Compose なら専用経路へ分岐
+    match stage_config.backend {
+        fleetflow_core::Backend::Docker => {}
+        fleetflow_core::Backend::Quadlet => {
+            return crate::commands::quadlet::up(config, &stage_name, stage_config, dry_run).await;
+        }
+        fleetflow_core::Backend::Compose => {
+            anyhow::bail!("backend \"compose\" は未実装です（epic WS4）");
+        }
+    }
+
     // dry-run モードの場合は実行計画を表示して終了
     if dry_run {
         return print_dry_run_plan(config, &stage_name, stage_config);

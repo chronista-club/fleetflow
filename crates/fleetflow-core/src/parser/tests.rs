@@ -496,24 +496,24 @@ fn test_parse_stage_with_servers() {
 }
 
 #[test]
-fn test_parse_stage_runtime_quadlet() {
-    // WS2: stage に runtime を明示宣言できる
+fn test_parse_stage_backend_quadlet() {
+    // WS2: stage に backend を明示宣言できる
     let kdl = r#"
         service "api" { image "node:20" }
 
         stage "live" {
-            runtime "quadlet"
+            backend "quadlet"
             service "api"
         }
     "#;
 
     let flow = parse_kdl_string(kdl, "test".to_string()).unwrap();
-    assert_eq!(flow.stages["live"].runtime, crate::model::Runtime::Quadlet);
+    assert_eq!(flow.stages["live"].backend, crate::model::Backend::Quadlet);
 }
 
 #[test]
-fn test_parse_stage_runtime_defaults_to_docker() {
-    // runtime 未宣言の stage は Docker（後方互換）
+fn test_parse_stage_backend_defaults_to_docker() {
+    // backend 未宣言の stage は Docker（後方互換）
     let kdl = r#"
         service "api" { image "node:20" }
 
@@ -523,17 +523,17 @@ fn test_parse_stage_runtime_defaults_to_docker() {
     "#;
 
     let flow = parse_kdl_string(kdl, "test".to_string()).unwrap();
-    assert_eq!(flow.stages["local"].runtime, crate::model::Runtime::Docker);
+    assert_eq!(flow.stages["local"].backend, crate::model::Backend::Docker);
 }
 
 #[test]
-fn test_parse_stage_runtime_invalid_is_error() {
-    // 未知の runtime 値はパースエラー
+fn test_parse_stage_backend_invalid_is_error() {
+    // 未知の backend 値はパースエラー
     let kdl = r#"
         service "api" { image "node:20" }
 
         stage "live" {
-            runtime "k8s"
+            backend "k8s"
             service "api"
         }
     "#;

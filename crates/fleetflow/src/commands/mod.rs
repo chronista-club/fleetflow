@@ -7,6 +7,7 @@ pub mod down;
 pub mod exec;
 pub mod logs;
 pub mod ps;
+pub mod quadlet;
 pub mod registry;
 pub mod restart;
 pub mod up;

@@ -21,6 +21,17 @@ pub async fn handle(
         .get(&stage_name)
         .ok_or_else(|| anyhow::anyhow!("ステージ '{}' が見つかりません", stage_name))?;
 
+    // WS2: backend が Quadlet/Compose なら専用経路へ分岐
+    match stage_config.backend {
+        fleetflow_core::Backend::Docker => {}
+        fleetflow_core::Backend::Quadlet => {
+            return crate::commands::quadlet::down(config, &stage_name, stage_config, remove).await;
+        }
+        fleetflow_core::Backend::Compose => {
+            anyhow::bail!("backend \"compose\" は未実装です（epic WS4）");
+        }
+    }
+
     println!();
     println!(
         "{}",
