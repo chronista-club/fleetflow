@@ -29,6 +29,9 @@ spec.old/
 *.tar.gz
 *.zip
 
+# surreal sql の REPL 履歴（CWD に自動生成される。queries が累積するため追跡しない）
+/history.txt
+
 # Local data (not to be tracked)
 data/
 
