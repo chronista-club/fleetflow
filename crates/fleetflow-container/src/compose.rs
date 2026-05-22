@@ -32,8 +32,24 @@ fn container_name(project: &str, stage: &str, service: &str) -> String {
 }
 
 /// YAML 二重引用符スカラーにエスケープする（純粋関数）。
+///
+/// `\` `"` に加えて制御文字（LF/CR/TAB 等）もエスケープする。YAML の
+/// double-quoted スカラー中の生 LF は空白に folde されるため、エスケープ
+/// しないと複数行の値（PEM 証明書・JWT 等）が silent に壊れる。
 fn yaml_quote(s: &str) -> String {
-    let escaped = s.replace('\\', "\\\\").replace('"', "\\\"");
+    let mut escaped = String::with_capacity(s.len() + 2);
+    for c in s.chars() {
+        match c {
+            '\\' => escaped.push_str("\\\\"),
+            '"' => escaped.push_str("\\\""),
+            '\n' => escaped.push_str("\\n"),
+            '\r' => escaped.push_str("\\r"),
+            '\t' => escaped.push_str("\\t"),
+            // その他の C0 制御文字は \uXXXX で明示エスケープ
+            c if (c as u32) < 0x20 => escaped.push_str(&format!("\\u{:04X}", c as u32)),
+            c => escaped.push(c),
+        }
+    }
     format!("\"{escaped}\"")
 }
 
@@ -310,6 +326,20 @@ mod tests {
         assert_eq!(yaml_quote("simple"), "\"simple\"");
         assert_eq!(yaml_quote(r#"a"b"#), r#""a\"b""#);
         assert_eq!(yaml_quote(r"a\b"), r#""a\\b""#);
+    }
+
+    #[test]
+    fn yaml_quote_escapes_control_chars() {
+        // 生 LF は YAML double-quoted で空白に folde される → \n にエスケープ必須
+        assert_eq!(yaml_quote("line1\nline2"), r#""line1\nline2""#);
+        assert_eq!(yaml_quote("a\tb"), r#""a\tb""#);
+        assert_eq!(yaml_quote("a\rb"), r#""a\rb""#);
+        // PEM のような複数行値が壊れないこと
+        let pem = "-----BEGIN-----\nMIIB\n-----END-----";
+        assert_eq!(yaml_quote(pem), r#""-----BEGIN-----\nMIIB\n-----END-----""#);
+        // その他 C0 制御文字（NUL 等）は \uXXXX
+        let nul = format!("a{}b", char::from_u32(0).unwrap());
+        assert_eq!(yaml_quote(&nul), r#""a\u0000b""#);
     }
 
     #[test]

@@ -217,14 +217,29 @@ pub fn default_quadlet_dir() -> Option<PathBuf> {
     Some(base.join("containers/systemd"))
 }
 
-/// 指定 project/stage の fleetflow 生成 Quadlet ファイルか判定する（純粋関数）。
+/// ユニット内容が指定 project/stage の fleetflow 生成 Quadlet ユニットか判定する（純粋関数）。
 ///
-/// `{project}-{stage}-*.container` または `{project}-{stage}.network` に一致。
-/// 他 project/stage・ユーザー手書きファイルは false。
-pub fn is_fleetflow_unit(file_name: &str, project: &str, stage: &str) -> bool {
-    let container_prefix = format!("{project}-{stage}-");
-    (file_name.starts_with(&container_prefix) && file_name.ends_with(".container"))
-        || file_name == network_file_name(project, stage)
+/// ファイル名のプレフィックス照合は project/stage 名のハイフンで別ペアと
+/// 衝突しうる（例: `(project="myapp-live", stage="db")` と
+/// `(project="myapp", stage="live-db")` は同じ `myapp-live-db-` を生成）。
+/// `~/.config/containers/systemd/` は同一ユーザの全 project で共有されるため、
+/// 衝突は他 project ユニットの誤削除＝データ損失に直結する。
+/// 生成ユニットが必ず持つ `Label=fleetflow.{project,stage}` 行は値が分離・
+/// 厳密一致するため曖昧さが無い。`.container`/`.network` 双方が両ラベルを持つ。
+pub fn is_fleetflow_unit(content: &str, project: &str, stage: &str) -> bool {
+    let project_label = format!("Label=fleetflow.project={project}");
+    let stage_label = format!("Label=fleetflow.stage={stage}");
+    let mut has_project = false;
+    let mut has_stage = false;
+    for line in content.lines() {
+        let line = line.trim();
+        if line == project_label {
+            has_project = true;
+        } else if line == stage_label {
+            has_stage = true;
+        }
+    }
+    has_project && has_stage
 }
 
 /// project/stage の Quadlet ユニット束を systemd quadlet ディレクトリに反映する。
@@ -240,13 +255,24 @@ pub fn sync_quadlet_dir(
 ) -> io::Result<()> {
     std::fs::create_dir_all(systemd_dir)?;
 
-    // 旧 fleetflow ファイルを削除（snapshot 置換）
+    // 旧 fleetflow ファイルを削除（snapshot 置換）。
+    // 所有判定はファイル名でなくユニット内容の Label 行で行う
+    // （`{project}-{stage}` 連結のプレフィックス衝突によるデータ損失を回避）。
     for entry in std::fs::read_dir(systemd_dir)? {
         let entry = entry?;
-        if let Some(name) = entry.file_name().to_str()
-            && is_fleetflow_unit(name, project, stage)
+        let path = entry.path();
+        let is_unit_file = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|e| e == "container" || e == "network");
+        if !is_unit_file {
+            continue;
+        }
+        // UTF-8 で読めないファイルは fleetflow 生成ユニットでない → スキップ
+        if let Ok(content) = std::fs::read_to_string(&path)
+            && is_fleetflow_unit(&content, project, stage)
         {
-            std::fs::remove_file(entry.path())?;
+            std::fs::remove_file(&path)?;
         }
     }
 
@@ -539,38 +565,48 @@ mod tests {
 
     // ── 適用層（WS2 Stage 2b）──
 
+    /// テスト用の最小ユニット内容（project/stage label 付き）。
+    fn unit_content(project: &str, stage: &str, body: &str) -> String {
+        format!(
+            "[Container]\n{body}\nLabel=fleetflow.project={project}\nLabel=fleetflow.stage={stage}\n"
+        )
+    }
+
     #[test]
     fn is_fleetflow_unit_matches_own_project_stage_only() {
-        // 自 project/stage の .container / .network は true
+        // 自 project/stage の label を持つユニットは true
         assert!(is_fleetflow_unit(
-            "myapp-live-db.container",
+            &unit_content("myapp", "live", "Image=db"),
             "myapp",
             "live"
         ));
-        assert!(is_fleetflow_unit(
-            "myapp-live-web.container",
-            "myapp",
-            "live"
-        ));
-        assert!(is_fleetflow_unit("myapp-live.network", "myapp", "live"));
         // 別 stage / 別 project は false
         assert!(!is_fleetflow_unit(
-            "myapp-dev-db.container",
+            &unit_content("myapp", "dev", "Image=db"),
             "myapp",
             "live"
         ));
         assert!(!is_fleetflow_unit(
-            "other-live-db.container",
+            &unit_content("other", "live", "Image=db"),
             "myapp",
             "live"
         ));
-        assert!(!is_fleetflow_unit("myapp-dev.network", "myapp", "live"));
-        // ユーザー手書きファイルは false
+        // ラベルの無いユーザー手書きファイルは false
         assert!(!is_fleetflow_unit(
-            "my-hand-written.container",
+            "[Container]\nImage=nginx\n",
             "myapp",
             "live"
         ));
+    }
+
+    #[test]
+    fn is_fleetflow_unit_distinguishes_prefix_colliding_pairs() {
+        // (project="myapp-live", stage="db") と (project="myapp", stage="live-db")
+        // はファイル名プレフィックス `myapp-live-db-` が衝突する。
+        // Label 行は値が分離・厳密一致するため、内容ベース判定なら区別できる。
+        let colliding = unit_content("myapp", "live-db", "Image=x");
+        assert!(is_fleetflow_unit(&colliding, "myapp", "live-db"));
+        assert!(!is_fleetflow_unit(&colliding, "myapp-live", "db"));
     }
 
     #[test]
@@ -607,19 +643,27 @@ mod tests {
             &[
                 QuadletUnit {
                     file_name: "myapp-live-db.container".into(),
-                    content: "db".into(),
+                    content: unit_content("myapp", "live", "Image=db"),
                 },
                 QuadletUnit {
                     file_name: "myapp-live-web.container".into(),
-                    content: "web".into(),
+                    content: unit_content("myapp", "live", "Image=web"),
                 },
             ],
         )
         .unwrap();
 
         // 別 project/stage のファイルとユーザー手書きファイルを同ディレクトリに置く
-        std::fs::write(dir.path().join("other-dev-x.container"), "other").unwrap();
-        std::fs::write(dir.path().join("hand-written.container"), "manual").unwrap();
+        std::fs::write(
+            dir.path().join("other-dev-x.container"),
+            unit_content("other", "dev", "Image=x"),
+        )
+        .unwrap();
+        std::fs::write(
+            dir.path().join("hand-written.container"),
+            "[Container]\nImage=manual\n",
+        )
+        .unwrap();
 
         // 2 回目: web を削除（db のみ）→ snapshot 置換
         sync_quadlet_dir(
@@ -628,20 +672,44 @@ mod tests {
             "live",
             &[QuadletUnit {
                 file_name: "myapp-live-db.container".into(),
-                content: "db-v2".into(),
+                content: unit_content("myapp", "live", "Image=db-v2"),
             }],
         )
         .unwrap();
 
         // db は更新、web は削除される（KDL から消えた service）
-        assert_eq!(
-            std::fs::read_to_string(dir.path().join("myapp-live-db.container")).unwrap(),
-            "db-v2"
+        assert!(
+            std::fs::read_to_string(dir.path().join("myapp-live-db.container"))
+                .unwrap()
+                .contains("Image=db-v2")
         );
         assert!(!dir.path().join("myapp-live-web.container").exists());
         // 別 project/stage・手書きファイルは touch されない
         assert!(dir.path().join("other-dev-x.container").exists());
         assert!(dir.path().join("hand-written.container").exists());
+    }
+
+    #[test]
+    fn sync_quadlet_dir_does_not_delete_name_colliding_other_project() {
+        // 回帰テスト: project="myapp-live"/stage="db" の sync が、ファイル名
+        // プレフィックスが衝突する別 project="myapp"/stage="live-db" の
+        // ユニットを誤削除しないこと（旧プレフィックス照合実装のデータ損失バグ）。
+        let dir = tempfile::tempdir().unwrap();
+        let other = dir.path().join("myapp-live-db-svc.container");
+        std::fs::write(&other, unit_content("myapp", "live-db", "Image=x")).unwrap();
+
+        sync_quadlet_dir(
+            dir.path(),
+            "myapp-live",
+            "db",
+            &[QuadletUnit {
+                file_name: "myapp-live-db-own.container".into(),
+                content: unit_content("myapp-live", "db", "Image=own"),
+            }],
+        )
+        .unwrap();
+
+        assert!(other.exists(), "別 project のユニットが誤削除された");
     }
 
     #[test]
