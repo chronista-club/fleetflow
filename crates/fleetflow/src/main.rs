@@ -365,6 +365,11 @@ enum ServerCommands {
         #[arg(long)]
         deploy_path: Option<String>,
     },
+    /// サーバーを CP から登録解除（DB レコードの soft-delete。クラウド実体は削除しない）
+    Delete {
+        /// サーバーのスラッグ
+        slug: String,
+    },
     /// サーバー状態
     Status {
         /// サーバーのスラッグ

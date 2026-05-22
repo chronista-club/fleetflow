@@ -264,6 +264,21 @@ pub async fn handle_server(cmd: &ServerCommands) -> Result<()> {
                 println!("{} {}", "登録完了:".green(), slug.cyan());
             }
         }
+        ServerCommands::Delete { slug } => {
+            println!("{}", "サーバー登録解除".bold());
+
+            let resp = cp_client::request(
+                &client,
+                "server",
+                "delete",
+                json!({ "tenant_slug": tenant_slug, "slug": slug }),
+            )
+            .await?;
+
+            if resp.get("deleted").is_some() {
+                println!("{} {}", "登録解除完了:".green(), slug.cyan());
+            }
+        }
         ServerCommands::Status { slug } => {
             println!("{} {}", "サーバー状態:".bold(), slug.cyan());
             println!();
