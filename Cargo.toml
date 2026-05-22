@@ -73,9 +73,12 @@ kdl = "6"
 # crates.io 公開命名規則 (club- prefix) — 2026-05-15 移行、 git dep → crates.io dep
 # 旧名 `unison` は RobertWHurst/unison (2018-) と衝突、 旧名 `unison-kdl` も同様に
 # 衝突回避で club- prefix を採用 (chronista-club ecosystem 標準)。
-# v1.0.0-rc.1: 1.0 リリース候補。 fleetflow は higher-level ProtocolClient/ProtocolServer 利用。
+# v1.0.0-rc.3: 1.0 リリース候補。 fleetflow は higher-level ProtocolClient/ProtocolServer +
+# MeshCa private-CA primitive を利用。
 club-kdl = "0.8"
-club-unison = "1.0.0-rc.1"
+club-unison = "1.0.0-rc.3"
+# CA cert PEM のパース（client が TrustAnchors::Custom を構成するため）。unison と同版。
+rustls-pemfile = "2.2"
 
 # Template engine
 tera = "1"

@@ -1,6 +1,7 @@
 //! Agent コアループ — CP 接続 + コマンド受信 + ハートビート
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
@@ -9,6 +10,8 @@ use tokio::sync::mpsc;
 use tracing::{error, info, warn};
 use unison::network::channel::UnisonChannel;
 use unison::network::client::ProtocolClient;
+use unison::network::quic::QuicClient;
+use unison::network::trust::TrustAnchors;
 
 use crate::deploy;
 use crate::heartbeat;
@@ -41,9 +44,48 @@ pub async fn run(config: AgentConfig) -> Result<()> {
     }
 }
 
+/// CP の CA 証明書ファイルのパス。
+///
+/// `FLEETFLOW_CP_CA_CERT` env が優先、無ければ
+/// `~/.config/fleetflow/cp-ca-cert.pem`（OS 依存）。provisioning script で配置する。
+fn ca_cert_path() -> Result<PathBuf> {
+    if let Ok(p) = std::env::var("FLEETFLOW_CP_CA_CERT") {
+        return Ok(PathBuf::from(p));
+    }
+    Ok(dirs::config_dir()
+        .context("設定ディレクトリが見つかりません")?
+        .join("fleetflow/cp-ca-cert.pem"))
+}
+
+/// CP の MeshCa CA cert を pin した `ProtocolClient` を構築する。
+///
+/// CP が配布する公開 CA cert を `TrustAnchors::Custom` に入れる。rustls が
+/// CP の server cert を CA 署名 chain として検証する（MITM 耐性）。
+fn build_cp_client() -> Result<ProtocolClient> {
+    let ca_path = ca_cert_path()?;
+    let ca_pem = std::fs::read(&ca_path).with_context(|| {
+        format!(
+            "CP の CA 証明書が見つかりません: {}\n  \
+             provisioning で cp-ca-cert.pem を配置してください \
+             (または FLEETFLOW_CP_CA_CERT で指定)。",
+            ca_path.display()
+        )
+    })?;
+    let mut rd: &[u8] = &ca_pem;
+    let certs = rustls_pemfile::certs(&mut rd)
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .context("CA 証明書 PEM のパース失敗")?;
+    anyhow::ensure!(!certs.is_empty(), "CA 証明書 PEM に証明書がありません");
+    let transport = QuicClient::builder()
+        .trust_anchors(TrustAnchors::Custom(certs))
+        .build()
+        .context("QuicClient の構築失敗")?;
+    Ok(ProtocolClient::new(transport))
+}
+
 /// 1回の CP 接続セッション
 async fn run_session(config: &AgentConfig) -> Result<()> {
-    let client = Arc::new(ProtocolClient::new_default().context("ProtocolClient 作成失敗")?);
+    let client = Arc::new(build_cp_client().context("ProtocolClient 作成失敗")?);
 
     client
         .connect(&config.cp_endpoint)
