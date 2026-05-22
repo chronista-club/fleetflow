@@ -47,6 +47,7 @@ tracing.workspace = true
 
 # Utils
 chrono.workspace = true
+dirs.workspace = true
 aes-gcm.workspace = true
 base64.workspace = true
 rand = "0.8"

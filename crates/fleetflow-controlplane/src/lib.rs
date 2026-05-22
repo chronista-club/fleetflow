@@ -1,5 +1,6 @@
 pub mod agent_registry;
 pub mod auth;
+pub mod cert;
 pub mod crypto;
 pub mod db;
 pub mod handlers;

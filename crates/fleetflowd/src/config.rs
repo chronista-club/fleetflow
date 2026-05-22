@@ -102,6 +102,19 @@ pub fn load_config(path: &Path) -> Result<DaemonConfig> {
         config.server.listen_addr = val.to_string();
     }
 
+    // CP server cert（MeshCa 発行）の SAN — env で追加。
+    // FLEETFLOW_CP_CERT_SANS にカンマ区切りで、クライアントが QUIC 接続に使う
+    // ホスト名・IP（cp.fleetstage.cloud / Tailscale IP 等）を列挙する。
+    // rustls の SAN 検証に一致しない接続先は拒否される。
+    if let Ok(sans) = std::env::var("FLEETFLOW_CP_CERT_SANS") {
+        for san in sans.split(',').map(str::trim).filter(|s| !s.is_empty()) {
+            let san = san.to_string();
+            if !config.server.cert_sans.contains(&san) {
+                config.server.cert_sans.push(san);
+            }
+        }
+    }
+
     // database ノード
     if let Some(database) = doc.get("database")
         && let Some(children) = database.children()
