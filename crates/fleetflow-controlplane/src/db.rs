@@ -818,15 +818,29 @@ impl Database {
         Ok(server)
     }
 
-    /// サーバーを DB から削除
-    pub async fn delete_server(&self, slug: &str) -> Result<()> {
+    /// サーバーを DB から削除（soft-delete、tenant スコープ）
+    ///
+    /// slug は tenant 内ユニークなので `tenant_slug` でスコープする。tenant 非スコープの
+    /// `WHERE slug = $slug` だと同名サーバーが複数 tenant にある場合に巻き添え削除する。
+    /// 対象が存在し soft-delete したら `true`、tenant 不在・該当サーバー無しは `false`。
+    pub async fn delete_server(&self, tenant_slug: &str, slug: &str) -> Result<bool> {
+        // record-link 越しの `tenant.slug` は UPDATE の WHERE では当てにならないため、
+        // tenant の RecordId を解決して `tenant = $id` の直接比較でスコープする。
+        let Some(tenant) = self.get_tenant_by_slug(tenant_slug).await? else {
+            return Ok(false);
+        };
+        let tenant_id = tenant.id.context("tenant レコードに id がない")?;
+
         // D#4 soft-delete: hard DELETE → UPDATE deleted_at で復旧可能 + feedback_no_data_deletion.md 整合
-        self.db
-            .query("UPDATE server SET deleted_at = time::now() WHERE slug = $slug AND deleted_at IS NONE")
+        let mut result = self
+            .db
+            .query("UPDATE server SET deleted_at = time::now() WHERE slug = $slug AND tenant = $tenant AND deleted_at IS NONE RETURN BEFORE")
             .bind(("slug", slug.to_string()))
+            .bind(("tenant", tenant_id))
             .await
             .context("サーバー削除失敗")?;
-        Ok(())
+        let deleted: Vec<Server> = result.take(0)?;
+        Ok(!deleted.is_empty())
     }
 
     // ─────────────────────────────────────────
@@ -1992,6 +2006,85 @@ mod tests {
         let servers = db.list_servers_by_tenant("anycreative").await.unwrap();
         assert_eq!(servers.len(), 1);
         assert_eq!(servers[0].slug, "vps-01");
+    }
+
+    /// delete_server は tenant スコープ — 同名 slug が複数 tenant にあっても
+    /// 対象 tenant の 1 件だけを soft-delete し、他 tenant を巻き添えにしない。
+    #[tokio::test]
+    async fn test_delete_server_is_tenant_scoped() {
+        let db = Database::connect_memory().await.unwrap();
+
+        let mk_tenant = |slug: &str| Tenant {
+            id: None,
+            slug: slug.into(),
+            name: slug.into(),
+            auth0_org_id: None,
+            plan: "self-hosted".into(),
+            dns_provider: None,
+            dns_domain: None,
+            dns_zone_id: None,
+            dns_api_token_encrypted: None,
+            placement_policy: None,
+            created_at: None,
+            updated_at: None,
+        };
+        let ta = db.create_tenant(&mk_tenant("tenant-a")).await.unwrap();
+        let tb = db.create_tenant(&mk_tenant("tenant-b")).await.unwrap();
+
+        let mk_server = |tenant: RecordId| Server {
+            id: None,
+            tenant,
+            slug: "shared-slug".into(),
+            provider: "manual".into(),
+            plan: None,
+            ssh_host: "10.0.0.1".into(),
+            ssh_user: "root".into(),
+            deploy_path: "/opt/apps".into(),
+            status: "offline".into(),
+            provision_version: None,
+            tool_versions: None,
+            last_heartbeat_at: None,
+            labels: None,
+            capacity: None,
+            allocated: None,
+            scheduling: None,
+            pool_id: None,
+            desired_state: None,
+            purpose: None,
+            owner: None,
+            sakura: None,
+            tailscale: None,
+            dns: None,
+            lifecycle: None,
+            created_at: None,
+            updated_at: None,
+            deleted_at: None,
+        };
+        db.register_server(&mk_server(ta.id.clone().unwrap()))
+            .await
+            .unwrap();
+        db.register_server(&mk_server(tb.id.clone().unwrap()))
+            .await
+            .unwrap();
+
+        // tenant-a の shared-slug を削除 → true
+        assert!(db.delete_server("tenant-a", "shared-slug").await.unwrap());
+
+        // tenant-a からは消え、tenant-b には残る（巻き添えなし）
+        assert!(
+            db.list_servers_by_tenant("tenant-a")
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        assert_eq!(
+            db.list_servers_by_tenant("tenant-b").await.unwrap().len(),
+            1
+        );
+
+        // 再削除は false（既に deleted）、存在しない slug も false
+        assert!(!db.delete_server("tenant-a", "shared-slug").await.unwrap());
+        assert!(!db.delete_server("tenant-b", "no-such").await.unwrap());
     }
 
     // FSC-26 Phase B-1: Server に labels / capacity / allocated / scheduling を

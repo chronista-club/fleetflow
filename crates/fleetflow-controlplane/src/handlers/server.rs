@@ -9,6 +9,13 @@ use unison::network::server::ProtocolServer;
 use crate::model::{Alert, ObservedContainer, Server, ServerStatusUpdate};
 use crate::server::AppState;
 
+/// `server.provider` に許可される正規の値。
+///
+/// register 時に検証し、`sakura`（`sakura-cloud` の typo）等の非正規値が DB に
+/// 入るのを防ぐ。cloud server provider 名は `SakuraProvider::name`（`"sakura-cloud"`）と
+/// 一致させ、クラウド連携のないサーバーは `"manual"` とする。
+const VALID_SERVER_PROVIDERS: &[&str] = &["sakura-cloud", "manual"];
+
 /// `inventory_report` payload の `containers` 配列を `Vec<ObservedContainer>` に
 /// 変換する（純粋関数 — テスト可能）。
 ///
@@ -91,6 +98,24 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                         "register" => {
                             let tenant_slug = payload["tenant_slug"].as_str().unwrap_or_default();
 
+                            // provider を既知値で検証（typo で非正規値が DB に入るのを防ぐ）
+                            let provider =
+                                payload["provider"].as_str().unwrap_or_default();
+                            if !VALID_SERVER_PROVIDERS.contains(&provider) {
+                                channel
+                                    .send_response(
+                                        msg.id,
+                                        "register",
+                                        &json!({ "error": format!(
+                                            "未知の provider '{}'。有効な値: {}",
+                                            provider,
+                                            VALID_SERVER_PROVIDERS.join(", ")
+                                        ) }),
+                                    )
+                                    .await?;
+                                continue;
+                            }
+
                             // Resolve tenant
                             let tenant = match state.db.get_tenant_by_slug(tenant_slug).await {
                                 Ok(Some(t)) => t,
@@ -121,7 +146,7 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                 id: None,
                                 tenant: tenant.id.unwrap(),
                                 slug: payload["slug"].as_str().unwrap_or_default().into(),
-                                provider: payload["provider"].as_str().unwrap_or_default().into(),
+                                provider: provider.into(),
                                 plan: payload["plan"].as_str().map(String::from),
                                 ssh_host: payload["ssh_host"].as_str().unwrap_or_default().into(),
                                 ssh_user: payload["ssh_user"].as_str().unwrap_or("root").into(),
@@ -496,6 +521,8 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                             }
                         }
                         "delete" => {
+                            let tenant_slug =
+                                payload["tenant_slug"].as_str().unwrap_or_default();
                             let slug = payload["slug"].as_str().unwrap_or_default();
                             // C1: disk 削除は明示的 opt-in (`feedback_disk_deletion_confirm.md`)。
                             // field omit / typo で disk silent destroy を回避するため default false。
@@ -534,14 +561,23 @@ pub async fn register(server: &ProtocolServer, state: Arc<AppState>) {
                                 }
                             }
 
-                            // DB から削除
-                            match state.db.delete_server(slug).await {
-                                Ok(()) => {
+                            // DB から削除（tenant スコープの soft-delete）
+                            match state.db.delete_server(tenant_slug, slug).await {
+                                Ok(true) => {
                                     channel
                                         .send_response(
                                             msg.id,
                                             "delete",
                                             &json!({ "deleted": slug }),
+                                        )
+                                        .await?;
+                                }
+                                Ok(false) => {
+                                    channel
+                                        .send_response(
+                                            msg.id,
+                                            "delete",
+                                            &json!({ "error": "server not found" }),
                                         )
                                         .await?;
                                 }
