@@ -75,7 +75,7 @@ kdl = "6"
 # 衝突回避で club- prefix を採用 (chronista-club ecosystem 標準)。
 # v1.0.0-rc.3: 1.0 リリース候補。 fleetflow は higher-level ProtocolClient/ProtocolServer +
 # MeshCa private-CA primitive を利用。
-club-kdl = "0.8"
+club-kdl = "0.9"
 club-unison = "1.0.0-rc.3"
 # CA cert PEM のパース（client が TrustAnchors::Custom を構成するため）。unison と同版。
 rustls-pemfile = "2.2"
