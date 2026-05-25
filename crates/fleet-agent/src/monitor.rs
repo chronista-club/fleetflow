@@ -91,10 +91,14 @@ struct RuntimeEndpoint {
     docker: Docker,
 }
 
-/// rootless Podman socket path から runtime_id を導出する（純粋関数）。
+/// Podman socket path から runtime_id を導出する（純粋関数）。
 ///
-/// `/run/user/1000/podman/podman.sock` → `podman-rootless-1000`
+/// - `/run/podman/podman.sock` → `podman-rootful`
+/// - `/run/user/1000/podman/podman.sock` → `podman-rootless-1000`
 fn podman_runtime_id(socket_path: &str) -> String {
+    if socket_path == "/run/podman/podman.sock" {
+        return "podman-rootful".to_string();
+    }
     let uid = socket_path
         .strip_prefix("/run/user/")
         .and_then(|rest| rest.split('/').next())
@@ -103,26 +107,36 @@ fn podman_runtime_id(socket_path: &str) -> String {
     format!("podman-rootless-{uid}")
 }
 
-/// `/run/user/*/podman/podman.sock` を列挙する（rootless Podman socket）。
+/// Podman socket を列挙する。
+///
+/// - rootful: `/run/podman/podman.sock`（uid 0、system service）
+/// - rootless: `/run/user/*/podman/podman.sock`（per-user）
 fn discover_podman_sockets() -> Vec<String> {
     let mut sockets = Vec::new();
-    let Ok(entries) = std::fs::read_dir("/run/user") else {
-        return sockets;
-    };
-    for entry in entries.flatten() {
-        let sock = entry.path().join("podman/podman.sock");
-        if sock.exists()
-            && let Some(s) = sock.to_str()
-        {
-            sockets.push(s.to_string());
+
+    let rootful = "/run/podman/podman.sock";
+    if std::path::Path::new(rootful).exists() {
+        sockets.push(rootful.to_string());
+    }
+
+    if let Ok(entries) = std::fs::read_dir("/run/user") {
+        for entry in entries.flatten() {
+            let sock = entry.path().join("podman/podman.sock");
+            if sock.exists()
+                && let Some(s) = sock.to_str()
+            {
+                sockets.push(s.to_string());
+            }
         }
     }
+
     sockets
 }
 
 /// container runtime を auto-discovery する。
 ///
 /// - root Docker: `connect_with_local_defaults`（常に試行、socket 無ければ除外）
+/// - rootful Podman: `/run/podman/podman.sock`、存在すれば adopt
 /// - rootless Podman: `/run/user/*/podman/podman.sock` を glob、存在分のみ
 ///
 /// socket の存在 = opt-in。接続失敗は warn してスキップ（fail-soft）。
@@ -579,6 +593,16 @@ mod tests {
         assert_eq!(
             podman_runtime_id("/tmp/podman.sock"),
             "podman-rootless-unknown"
+        );
+    }
+
+    #[test]
+    fn podman_runtime_id_recognizes_rootful() {
+        // rootful Podman は system service として 1 つしか存在し得ない
+        // → uid suffix なしの "podman-rootful"
+        assert_eq!(
+            podman_runtime_id("/run/podman/podman.sock"),
+            "podman-rootful"
         );
     }
 
