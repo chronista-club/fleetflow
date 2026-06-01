@@ -38,11 +38,26 @@ echo ""
 write_noninteractive_path() {
   local target="$1"
   [ -f "$target" ] || return 0
+  # CWE-59 (symlink-following): user-controlled home 配下 target が symlink だと
+  # root の write が任意 file に到達する。 symlink は明示拒否。
+  if [ -L "$target" ]; then
+    echo "  skip: $target is a symlink (refusing to follow)" >&2
+    return 0
+  fi
   local begin="# FLEETFLOW: non-interactive PATH (auto-managed, do not edit)"
   local end="# FLEETFLOW: end non-interactive PATH"
   if grep -qF "$begin" "$target"; then
     return 0
   fi
+  # 元 ownership / mode を保全 (= /home/<user>/.bashrc を root 所有化しない)
+  local owner_uid owner_gid mode
+  owner_uid=$(stat -c '%u' "$target")
+  owner_gid=$(stat -c '%g' "$target")
+  mode=$(stat -c '%a' "$target")
+  # stage は root-only directory (= /root, mode 700)。 unprivileged user が
+  # 干渉できる場所 (user home / /tmp) には作らない。
+  local tmp
+  tmp=$(mktemp -p /root fleetflow-bashrc.XXXXXX) || return 1
   local block="${begin}
 if [ -x /home/linuxbrew/.linuxbrew/bin/brew ]; then
   eval \"\$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)\"
@@ -58,21 +73,30 @@ ${end}
     awk -v block="$block" '
       !done && /^case \$- in/ { printf "%s", block; done=1 }
       { print }
-    ' "$target" > "${target}.tmp" && mv "${target}.tmp" "$target"
+    ' "$target" > "$tmp"
   else
-    { printf '%s\n' "$block"; cat "$target"; } > "${target}.tmp" && mv "${target}.tmp" "$target"
+    { printf '%s\n' "$block"; cat "$target"; } > "$tmp"
   fi
+  # install -m/-o/-g で mode + owner + group を atomic に復元
+  install -m "$mode" -o "$owner_uid" -g "$owner_gid" "$tmp" "$target"
+  rm -f "$tmp"
 }
 
 # login shell 経路 (/etc/profile.d/*.sh は login shell で必ず source される)
 write_login_path() {
-  cat > /etc/profile.d/fleetflow-path.sh << 'PROFILE_PATH'
+  local target=/etc/profile.d/fleetflow-path.sh
+  # /etc 配下なので攻撃 path は狭いが、 一貫性のため symlink check は入れる
+  if [ -L "$target" ]; then
+    echo "  warning: $target is a symlink, refusing to overwrite" >&2
+    return 1
+  fi
+  cat > "$target" << 'PROFILE_PATH'
 # FLEETFLOW: login shell PATH (auto-managed, do not edit)
 # /etc/environment は PAM 経由のみ。 login shell 用に別途配置して二重に保険。
 [ -x /home/linuxbrew/.linuxbrew/bin/brew ] && eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
 [ -x /usr/local/bin/mise ] && eval "$(/usr/local/bin/mise activate bash)"
 PROFILE_PATH
-  chmod 644 /etc/profile.d/fleetflow-path.sh
+  chmod 644 "$target"
 }
 
 # ─────────────────────────────────────────

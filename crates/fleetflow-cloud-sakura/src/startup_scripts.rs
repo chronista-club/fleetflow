@@ -25,11 +25,26 @@ echo "=== FleetFlow: mise セットアップ ==="
 write_noninteractive_path() {
     local target="$1"
     [ -f "$target" ] || return 0
+    # CWE-59 (symlink-following): user-controlled home 配下 target が symlink だと
+    # root の write が任意 file に到達する。 symlink は明示拒否。
+    if [ -L "$target" ]; then
+        echo "  skip: $target is a symlink (refusing to follow)" >&2
+        return 0
+    fi
     local begin="# FLEETFLOW: non-interactive PATH (auto-managed, do not edit)"
     local end="# FLEETFLOW: end non-interactive PATH"
     if grep -qF "$begin" "$target"; then
         return 0
     fi
+    # 元 ownership / mode を保全 (= /home/<user>/.bashrc を root 所有化しない)
+    local owner_uid owner_gid mode
+    owner_uid=$(stat -c '%u' "$target")
+    owner_gid=$(stat -c '%g' "$target")
+    mode=$(stat -c '%a' "$target")
+    # stage は root-only directory (= /root, mode 700)。 unprivileged user が
+    # 干渉できる場所 (user home / /tmp) には作らない。
+    local tmp
+    tmp=$(mktemp -p /root fleetflow-bashrc.XXXXXX) || return 1
     local block="${begin}
 if [ -x /usr/local/bin/mise ]; then
   eval \"\$(/usr/local/bin/mise activate bash)\"
@@ -42,10 +57,13 @@ ${end}
         awk -v block="$block" '
           !done && /^case \$- in/ { printf "%s", block; done=1 }
           { print }
-        ' "$target" > "${target}.tmp" && mv "${target}.tmp" "$target"
+        ' "$target" > "$tmp"
     else
-        { printf '%s\n' "$block"; cat "$target"; } > "${target}.tmp" && mv "${target}.tmp" "$target"
+        { printf '%s\n' "$block"; cat "$target"; } > "$tmp"
     fi
+    # install -m/-o/-g で mode + owner + group を atomic に復元
+    install -m "$mode" -o "$owner_uid" -g "$owner_gid" "$tmp" "$target"
+    rm -f "$tmp"
 }
 
 # Install mise
@@ -65,11 +83,16 @@ write_noninteractive_path /root/.bashrc
 [ -d /home/ubuntu ] && write_noninteractive_path /home/ubuntu/.bashrc
 
 # login shell 経路の二重保険 (/etc/environment は PAM 経由のみで不十分)
-cat > /etc/profile.d/fleetflow-path.sh << 'PROFILE_PATH'
+PROFILE_TARGET=/etc/profile.d/fleetflow-path.sh
+if [ -L "$PROFILE_TARGET" ]; then
+    echo "  warning: $PROFILE_TARGET is a symlink, refusing to overwrite" >&2
+else
+    cat > "$PROFILE_TARGET" << 'PROFILE_PATH'
 # FLEETFLOW: login shell PATH (auto-managed, do not edit)
 [ -x /usr/local/bin/mise ] && eval "$(/usr/local/bin/mise activate bash)"
 PROFILE_PATH
-chmod 644 /etc/profile.d/fleetflow-path.sh
+    chmod 644 "$PROFILE_TARGET"
+fi
 
 echo "✅ mise インストール完了"
 "##;
