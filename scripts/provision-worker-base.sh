@@ -19,12 +19,61 @@
 
 set -euo pipefail
 
-PROVISION_VERSION="v4"
+PROVISION_VERSION="v5"
 
 echo "=== FleetFlow Worker Base Image Provisioning (${PROVISION_VERSION}) ==="
 echo "  Date: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo "  OS:   $(cat /etc/os-release | grep PRETTY_NAME | cut -d= -f2)"
 echo ""
+
+# ─────────────────────────────────────────
+# 共通: 非対話 ssh / login shell で PATH を通すブロックを idempotent 挿入
+# ─────────────────────────────────────────
+# Debian/Ubuntu の .bashrc は冒頭に「非対話なら return」 ガード
+# (`case $- in *i*) ;; *) return;; esac`) を持つ。 brew/mise 公式 install は
+# bashrc 末尾に eval を append するが、 末尾は return ガードより後ろなので
+# `ssh host 'cmd'` (= 非対話・非ログイン) では実行されない = PATH が通らない。
+# /etc/environment も PAM 経由でしか読まれないため非対話 ssh では無効。
+# 解: return ガードの **直前** に marker 付きブロックを idempotent 挿入する。
+write_noninteractive_path() {
+  local target="$1"
+  [ -f "$target" ] || return 0
+  local begin="# FLEETFLOW: non-interactive PATH (auto-managed, do not edit)"
+  local end="# FLEETFLOW: end non-interactive PATH"
+  if grep -qF "$begin" "$target"; then
+    return 0
+  fi
+  local block="${begin}
+if [ -x /home/linuxbrew/.linuxbrew/bin/brew ]; then
+  eval \"\$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)\"
+fi
+if [ -x /usr/local/bin/mise ]; then
+  eval \"\$(/usr/local/bin/mise activate bash)\"
+elif [ -x \"\$HOME/.local/bin/mise\" ]; then
+  eval \"\$(\$HOME/.local/bin/mise activate bash)\"
+fi
+${end}
+"
+  if grep -q '^case \$- in' "$target"; then
+    awk -v block="$block" '
+      !done && /^case \$- in/ { printf "%s", block; done=1 }
+      { print }
+    ' "$target" > "${target}.tmp" && mv "${target}.tmp" "$target"
+  else
+    { printf '%s\n' "$block"; cat "$target"; } > "${target}.tmp" && mv "${target}.tmp" "$target"
+  fi
+}
+
+# login shell 経路 (/etc/profile.d/*.sh は login shell で必ず source される)
+write_login_path() {
+  cat > /etc/profile.d/fleetflow-path.sh << 'PROFILE_PATH'
+# FLEETFLOW: login shell PATH (auto-managed, do not edit)
+# /etc/environment は PAM 経由のみ。 login shell 用に別途配置して二重に保険。
+[ -x /home/linuxbrew/.linuxbrew/bin/brew ] && eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+[ -x /usr/local/bin/mise ] && eval "$(/usr/local/bin/mise activate bash)"
+PROFILE_PATH
+  chmod 644 /etc/profile.d/fleetflow-path.sh
+}
 
 # ─────────────────────────────────────────
 # 1. 基本パッケージ
@@ -84,13 +133,11 @@ else
   if [ -f /root/.local/bin/mise ] && [ ! -f /usr/local/bin/mise ]; then
     ln -s /root/.local/bin/mise /usr/local/bin/mise
   fi
-  # bashrc に activate 追加
-  grep -q 'mise activate' /etc/skel/.bashrc 2>/dev/null || \
-    echo 'eval "$(mise activate bash)"' >> /etc/skel/.bashrc
-  grep -q 'mise activate' /root/.bashrc 2>/dev/null || \
-    echo 'eval "$(mise activate bash)"' >> /root/.bashrc
   echo "  installed: $(mise --version 2>/dev/null || echo 'done')"
 fi
+# /etc/skel を先に更新 (= 直後の linuxbrew useradd で skel が cp される前に)
+write_noninteractive_path /etc/skel/.bashrc
+write_noninteractive_path /root/.bashrc
 
 # ─────────────────────────────────────────
 # 5. Homebrew (Linuxbrew)
@@ -106,17 +153,20 @@ else
   fi
   # non-interactive インストール
   NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" > /dev/null 2>&1 || true
-  # パスを通す
   if [ -f /home/linuxbrew/.linuxbrew/bin/brew ]; then
-    grep -q 'linuxbrew' /etc/environment 2>/dev/null || \
-      echo 'PATH="/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:$PATH"' >> /etc/environment
-    grep -q 'linuxbrew' /root/.bashrc 2>/dev/null || \
-      echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"' >> /root/.bashrc
     echo "  installed: $(/home/linuxbrew/.linuxbrew/bin/brew --version | head -1)"
   else
     echo "  warning: Homebrew インストールに失敗（続行）"
   fi
 fi
+# PATH 配線 (= mise + brew、 非対話 ssh / login shell 両経路で素のワンライナーが通る状態)
+# /etc/skel + 既存全ユーザーに idempotent 注入。 /etc/environment への append は
+# 非対話 ssh で読まれず誤誘導の元なので v5 から廃止 (= 二重保険は profile.d 側で取る)。
+write_noninteractive_path /etc/skel/.bashrc
+write_noninteractive_path /root/.bashrc
+write_noninteractive_path /home/linuxbrew/.bashrc
+[ -d /home/ubuntu ] && write_noninteractive_path /home/ubuntu/.bashrc
+write_login_path
 
 # ─────────────────────────────────────────
 # 6. Firewall (ufw)

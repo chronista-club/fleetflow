@@ -5,7 +5,11 @@
 
 /// mise installer script
 /// Installs mise (task runner + tool version manager)
-pub const MISE_SETUP: &str = r#"#!/bin/bash
+//
+// raw string delimiter は `r##"..."##` を使用。
+// 内部 bash の `"# FLEETFLOW: ..."` (= double-quote 内に # を持つ comment string) が
+// `r#"..."#` の終端 `"#` と衝突するため delimiter を 1 段増やしている。
+pub const MISE_SETUP: &str = r##"#!/bin/bash
 # @sacloud-name "fleetflow-mise-setup"
 # @sacloud-once
 # @sacloud-desc FleetFlow: mise (タスクランナー + ツールバージョン管理) をインストール
@@ -14,25 +18,61 @@ set -e
 
 echo "=== FleetFlow: mise セットアップ ==="
 
+# 非対話 ssh / login shell の両経路で PATH を通すヘルパ。
+# Debian/Ubuntu の .bashrc は冒頭に `case $- in *i*) ;; *) return;; esac` を持つため、
+# 末尾 append された eval は `ssh host 'cmd'` 経由で実行されない (PATH が通らない)。
+# return ガードの直前に marker 付きブロックを idempotent 挿入する。
+write_noninteractive_path() {
+    local target="$1"
+    [ -f "$target" ] || return 0
+    local begin="# FLEETFLOW: non-interactive PATH (auto-managed, do not edit)"
+    local end="# FLEETFLOW: end non-interactive PATH"
+    if grep -qF "$begin" "$target"; then
+        return 0
+    fi
+    local block="${begin}
+if [ -x /usr/local/bin/mise ]; then
+  eval \"\$(/usr/local/bin/mise activate bash)\"
+elif [ -x \"\$HOME/.local/bin/mise\" ]; then
+  eval \"\$(\$HOME/.local/bin/mise activate bash)\"
+fi
+${end}
+"
+    if grep -q '^case \$- in' "$target"; then
+        awk -v block="$block" '
+          !done && /^case \$- in/ { printf "%s", block; done=1 }
+          { print }
+        ' "$target" > "${target}.tmp" && mv "${target}.tmp" "$target"
+    else
+        { printf '%s\n' "$block"; cat "$target"; } > "${target}.tmp" && mv "${target}.tmp" "$target"
+    fi
+}
+
 # Install mise
 if ! command -v mise &> /dev/null; then
     echo ">>> mise をインストール中..."
     curl -fsSL https://mise.run | sh
 
-    # Add to bashrc for all users
-    echo 'eval "$($HOME/.local/bin/mise activate bash)"' >> /etc/skel/.bashrc
-
-    # Add for root
-    echo 'eval "$($HOME/.local/bin/mise activate bash)"' >> /root/.bashrc
-
-    # Add for ubuntu user if exists
-    if id "ubuntu" &>/dev/null; then
-        sudo -u ubuntu bash -c 'echo "eval \"\$(\$HOME/.local/bin/mise activate bash)\"" >> ~/.bashrc'
+    # /usr/local/bin にシンボリックリンク (全ユーザー共通参照、 helper の前提)
+    if [ -f /root/.local/bin/mise ] && [ ! -f /usr/local/bin/mise ]; then
+        ln -s /root/.local/bin/mise /usr/local/bin/mise
     fi
 fi
 
+# 非対話 ssh で素のワンライナーが通るよう /etc/skel + 既存ユーザーに注入
+write_noninteractive_path /etc/skel/.bashrc
+write_noninteractive_path /root/.bashrc
+[ -d /home/ubuntu ] && write_noninteractive_path /home/ubuntu/.bashrc
+
+# login shell 経路の二重保険 (/etc/environment は PAM 経由のみで不十分)
+cat > /etc/profile.d/fleetflow-path.sh << 'PROFILE_PATH'
+# FLEETFLOW: login shell PATH (auto-managed, do not edit)
+[ -x /usr/local/bin/mise ] && eval "$(/usr/local/bin/mise activate bash)"
+PROFILE_PATH
+chmod 644 /etc/profile.d/fleetflow-path.sh
+
 echo "✅ mise インストール完了"
-"#;
+"##;
 
 /// Docker installer script
 /// Installs Docker and Docker Compose
