@@ -164,7 +164,7 @@ jobs:
         run: cargo llvm-cov --lib --workspace --all-features --lcov --output-path lcov.info
 
       - name: カバレッジレポートアップロード
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@v7
         with:
           files: lcov.info
           fail_ci_if_error: false
